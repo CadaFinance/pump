@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
         const claimEndSec = onChain?.claimEnd ?? 0;
         const remainingBnb = onChain ? formatEther(onChain.remainingWei) : "0";
         const canSweep =
-          Boolean(onChain) &&
+          onChain !== null &&
           !onChain.remainderSwept &&
           onChain.remainingWei > 0n &&
           nowSec > claimEndSec &&
