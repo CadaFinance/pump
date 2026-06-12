@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { TradePanel, type TradeConfirmedPayload } from "@/components/token/TradePanel";
 import type { TradePrefillConfig } from "@/lib/token-trade-prefill";
 
@@ -25,6 +26,12 @@ export function TradeSheet({
   prefill = null,
   onTradeConfirmed,
 }: TradeSheetProps) {
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   useEffect(() => {
     if (!open) return;
     const previousOverflow = document.body.style.overflow;
@@ -43,48 +50,51 @@ export function TradeSheet({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [open, onClose]);
 
-  if (!open) return null;
+  if (!open || !mounted) return null;
 
-  return (
-    <div
-      className="fixed inset-0 z-[60] flex items-end justify-center bg-black/75 xl:hidden"
-      role="dialog"
-      aria-modal="true"
-      aria-label={`Trade ${symbol}`}
-    >
+  return createPortal(
+    <>
       <button
         type="button"
-        className="absolute inset-0 cursor-default"
+        className="fixed inset-0 z-[100] cursor-default bg-pump-bg/55 backdrop-blur-[3px] xl:hidden"
         aria-label="Close trade panel"
         onClick={onClose}
       />
-      <div className="relative w-full max-h-[92dvh] overflow-hidden rounded-t-2xl border-t border-pump-border/25 bg-pump-bg shadow-panelDark">
-        <div className="flex justify-center pt-3">
-          <div className="h-1 w-10 rounded-full bg-pump-border/50" aria-hidden />
-        </div>
-        <div className="flex items-center justify-between gap-3 px-4 pb-2 pt-1">
-          <h2 className="text-body font-semibold text-pump-text">Trade ${symbol}</h2>
-          <button
-            type="button"
-            onClick={onClose}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-md text-pump-muted transition hover:bg-pump-surface/80 hover:text-pump-text"
-            aria-label="Close"
-          >
-            <span className="text-xl leading-none">×</span>
-          </button>
-        </div>
-        <div className="max-h-[calc(92dvh-4.5rem)] overflow-y-auto overscroll-contain pb-[max(1rem,env(safe-area-inset-bottom))]">
-          <TradePanel
-            embedded
-            tokenAddress={tokenAddress}
-            symbol={symbol}
-            status={status}
-            reserveBnb={reserveBnb}
-            prefill={prefill}
-            onTradeConfirmed={onTradeConfirmed}
-          />
+      <div
+        className="fixed inset-0 z-[101] flex items-end justify-center pointer-events-none xl:hidden"
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Trade ${symbol}`}
+      >
+        <div className="panel-surface pointer-events-auto relative w-full max-h-[min(82dvh,720px)] overflow-hidden rounded-t-2xl shadow-panel">
+          <div className="flex justify-center pt-2.5">
+            <div className="h-1 w-10 rounded-full bg-pump-border/50" aria-hidden />
+          </div>
+          <div className="flex items-center justify-between gap-3 px-4 pb-1.5 pt-0.5">
+            <h2 className="text-body font-semibold text-pump-text">Trade ${symbol}</h2>
+            <button
+              type="button"
+              onClick={onClose}
+              className="inline-flex h-9 w-9 items-center justify-center rounded-md text-pump-muted transition hover:bg-pump-surface/80 hover:text-pump-text"
+              aria-label="Close"
+            >
+              <span className="text-xl leading-none">×</span>
+            </button>
+          </div>
+          <div className="max-h-[calc(82dvh-4rem)] overflow-y-auto overscroll-contain pb-[max(1rem,env(safe-area-inset-bottom))]">
+            <TradePanel
+              embedded
+              tokenAddress={tokenAddress}
+              symbol={symbol}
+              status={status}
+              reserveBnb={reserveBnb}
+              prefill={prefill}
+              onTradeConfirmed={onTradeConfirmed}
+            />
+          </div>
         </div>
       </div>
-    </div>
+    </>,
+    document.body
   );
 }

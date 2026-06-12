@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import type {
   CreatorProfile,
   CreatorProfileHolding,
@@ -168,6 +169,11 @@ export function CreatorProfileModal({ open, onClose, creatorAddress }: CreatorPr
   const [profile, setProfile] = useState<CreatorProfileData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -226,7 +232,7 @@ export function CreatorProfileModal({ open, onClose, creatorAddress }: CreatorPr
     [profile]
   );
 
-  if (!open) return null;
+  if (!open || !mounted) return null;
 
   const bnbBalance = profile ? Number(profile.bnbBalance) : 0;
   const walletBnbLabel =
@@ -239,66 +245,67 @@ export function CreatorProfileModal({ open, onClose, creatorAddress }: CreatorPr
   const isSelf = address?.toLowerCase() === creatorAddress.toLowerCase();
   const following = isFollowing(creatorAddress);
 
-  return (
-    <div
-      className="fixed inset-0 z-[60] flex items-end justify-center bg-black/75 sm:items-center sm:p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="creator-profile-title"
-    >
+  return createPortal(
+    <>
       <button
         type="button"
-        className="absolute inset-0 cursor-default"
+        className="fixed inset-0 z-[100] cursor-default bg-pump-bg/55 backdrop-blur-[3px] transition-opacity"
         aria-label="Close"
         onClick={onClose}
       />
-      <div className="panel-surface relative flex w-full max-w-2xl max-h-[92dvh] flex-col overflow-hidden rounded-t-2xl shadow-panel sm:max-h-[min(85vh,820px)] sm:rounded-xl">
-        <div className="shrink-0 border-b border-pump-border/10 px-4 pb-4 pt-3 sm:px-5 sm:pt-5">
-          <div className="mb-3 flex justify-center sm:hidden">
-            <div className="h-1 w-10 rounded-full bg-pump-border/50" aria-hidden />
-          </div>
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div className="flex min-w-0 items-start gap-3">
-              <UserAvatarForAddress address={creatorAddress} size={48} />
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <h2
-                    id="creator-profile-title"
-                    className="financial-value text-h2 font-semibold text-pump-text"
-                  >
-                    {shortAddress(creatorAddress)}
-                  </h2>
-                  <span className="rounded-full bg-pump-accent/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-pump-accent">
-                    Creator
-                  </span>
-                </div>
-                <a
-                  href={explorerAddressUrl(creatorAddress)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="mt-1 text-caption text-pump-muted hover:text-pump-accent hover:underline"
-                >
-                  View on BscScan
-                </a>
-              </div>
+      <div
+        className="fixed inset-0 z-[101] flex items-end justify-center p-0 sm:items-center sm:p-4 pointer-events-none"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="creator-profile-title"
+      >
+        <div className="panel-surface pointer-events-auto relative flex w-full max-w-2xl max-h-[min(78dvh,680px)] flex-col overflow-hidden rounded-t-2xl shadow-panel sm:max-h-[min(72vh,640px)] sm:rounded-xl">
+          <div className="shrink-0 border-b border-pump-border/10 px-4 pb-3 pt-3 sm:px-5 sm:pb-4 sm:pt-4">
+            <div className="mb-2 flex justify-center sm:hidden">
+              <div className="h-1 w-10 rounded-full bg-pump-border/50" aria-hidden />
             </div>
-            {!isSelf ? (
-              <button
-                type="button"
-                onClick={() => toggleFollow(creatorAddress)}
-                className={
-                  following
-                    ? "secondary-button shrink-0 px-4 py-2 text-body-sm font-semibold"
-                    : "shrink-0 rounded-md bg-pump-accent px-4 py-2 text-body-sm font-semibold text-pump-accent-foreground transition hover:opacity-95"
-                }
-              >
-                {following ? "Following" : "Follow"}
-              </button>
-            ) : null}
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="flex min-w-0 items-start gap-3">
+                <UserAvatarForAddress address={creatorAddress} size={44} />
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h2
+                      id="creator-profile-title"
+                      className="financial-value text-h2 font-semibold text-pump-text"
+                    >
+                      {shortAddress(creatorAddress)}
+                    </h2>
+                    <span className="rounded-full bg-pump-accent/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-pump-accent">
+                      Creator
+                    </span>
+                  </div>
+                  <a
+                    href={explorerAddressUrl(creatorAddress)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-1 text-caption text-pump-muted hover:text-pump-accent hover:underline"
+                  >
+                    View on BscScan
+                  </a>
+                </div>
+              </div>
+              {!isSelf ? (
+                <button
+                  type="button"
+                  onClick={() => toggleFollow(creatorAddress)}
+                  className={
+                    following
+                      ? "secondary-button shrink-0 px-4 py-2 text-body-sm font-semibold"
+                      : "shrink-0 rounded-md bg-pump-accent px-4 py-2 text-body-sm font-semibold text-pump-accent-foreground transition hover:opacity-95"
+                  }
+                >
+                  {following ? "Following" : "Follow"}
+                </button>
+              ) : null}
+            </div>
           </div>
-        </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-5 sm:py-5 [touch-action:pan-y]">
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-3 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-5 sm:py-4 [touch-action:pan-y]">
           {loading ? (
             <div className="space-y-3">
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -311,8 +318,8 @@ export function CreatorProfileModal({ open, onClose, creatorAddress }: CreatorPr
           ) : error ? (
             <p className="notice-error p-4 text-body-sm">{error}</p>
           ) : profile ? (
-            <div className="space-y-5">
-              <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div className="space-y-4">
+              <section className="grid grid-cols-2 gap-2.5 sm:grid-cols-4 sm:gap-3">
                 <StatCard
                   label="Wallet BNB"
                   value={`${walletBnbLabel} BNB`}
@@ -354,7 +361,7 @@ export function CreatorProfileModal({ open, onClose, creatorAddress }: CreatorPr
                 {allHoldings.length === 0 ? (
                   <p className="mt-2 text-body-sm text-pump-muted">No token holdings yet.</p>
                 ) : (
-                  <div className="-mx-1 mt-3 overflow-x-auto rounded-lg border border-pump-border/15 [touch-action:pan-x_pan-y]">
+                  <div className="mt-2 max-h-[min(28dvh,220px)] overflow-y-auto overscroll-contain rounded-lg border border-pump-border/15 -mx-1 [touch-action:pan-x_pan-y]">
                     <table className="min-w-[400px] w-full text-body-sm">
                       <thead className="border-b border-pump-border/15 bg-pump-surface/55 text-left">
                         <tr>
@@ -382,7 +389,7 @@ export function CreatorProfileModal({ open, onClose, creatorAddress }: CreatorPr
                 {profile.createdTokens.length === 0 ? (
                   <p className="mt-2 text-body-sm text-pump-muted">No launched tokens yet.</p>
                 ) : (
-                  <div className="-mx-1 mt-3 overflow-x-auto rounded-lg border border-pump-border/15 [touch-action:pan-x_pan-y]">
+                  <div className="mt-2 max-h-[min(28dvh,220px)] overflow-y-auto overscroll-contain rounded-lg border border-pump-border/15 -mx-1 [touch-action:pan-x_pan-y]">
                     <table className="min-w-[520px] w-full text-body-sm">
                       <thead className="border-b border-pump-border/15 bg-pump-surface/55 text-left">
                         <tr>
@@ -404,8 +411,10 @@ export function CreatorProfileModal({ open, onClose, creatorAddress }: CreatorPr
               </section>
             </div>
           ) : null}
+          </div>
         </div>
       </div>
-    </div>
+    </>,
+    document.body
   );
 }
