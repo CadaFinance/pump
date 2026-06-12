@@ -1,0 +1,153 @@
+import { createPublicClient, formatEther, http, type Address } from "viem";
+import { pumpAirdropManagerAbi } from "@/lib/abis/pump-airdrop-manager";
+import { memeFactoryAbi } from "@/lib/abis/meme-factory";
+import { bondingCurveManagerAbi } from "@/lib/bonding-curve";
+import { contracts, pumpChain, rpcUrl } from "@/config/chain";
+
+const publicClient = createPublicClient({
+  chain: pumpChain,
+  transport: http(rpcUrl, { timeout: 20_000 }),
+});
+
+export type OnChainAirdropState = {
+  remainderSwept: boolean;
+  remainingWei: bigint;
+  totalFundedWei: bigint;
+  totalClaimedWei: bigint;
+  claimEnd: number;
+  status: number;
+};
+
+export async function readAirdropOnChain(onChainId: string): Promise<OnChainAirdropState | null> {
+  if (!contracts.airdropManager) return null;
+
+  const [state, remainingWei] = await Promise.all([
+    publicClient.readContract({
+      address: contracts.airdropManager,
+      abi: pumpAirdropManagerAbi,
+      functionName: "airdrops",
+      args: [BigInt(onChainId)],
+    }),
+    publicClient.readContract({
+      address: contracts.airdropManager,
+      abi: pumpAirdropManagerAbi,
+      functionName: "remainingBalance",
+      args: [BigInt(onChainId)],
+    }),
+  ]);
+
+  return {
+    remainderSwept: state[13],
+    remainingWei,
+    totalFundedWei: state[3],
+    totalClaimedWei: state[5],
+    claimEnd: Number(state[11]),
+    status: state[12],
+  };
+}
+
+export async function getAdminProtocolSnapshot() {
+  const manager = contracts.airdropManager;
+  const factory = contracts.memeFactory;
+  const bonding = contracts.bondingCurveManager;
+
+  const [
+    memeTreasury,
+    memeOwner,
+    memeCreateFee,
+    curveTreasury,
+    curveOwner,
+    curveProtocolFeeBps,
+    airdropAdmin,
+    airdropTreasury,
+    airdropCreateFee,
+    managerBalance,
+    curveBalance,
+  ] = await Promise.all([
+    publicClient.readContract({
+      address: factory,
+      abi: memeFactoryAbi,
+      functionName: "treasury",
+    }),
+    publicClient.readContract({
+      address: factory,
+      abi: memeFactoryAbi,
+      functionName: "owner",
+    }),
+    publicClient.readContract({
+      address: factory,
+      abi: memeFactoryAbi,
+      functionName: "createFee",
+    }),
+    publicClient.readContract({
+      address: bonding,
+      abi: bondingCurveManagerAbi,
+      functionName: "treasury",
+    }),
+    publicClient.readContract({
+      address: bonding,
+      abi: bondingCurveManagerAbi,
+      functionName: "owner",
+    }),
+    publicClient.readContract({
+      address: bonding,
+      abi: bondingCurveManagerAbi,
+      functionName: "protocolFeeBps",
+    }),
+    manager
+      ? publicClient.readContract({
+          address: manager,
+          abi: pumpAirdropManagerAbi,
+          functionName: "admin",
+        })
+      : Promise.resolve(null),
+    manager
+      ? publicClient.readContract({
+          address: manager,
+          abi: pumpAirdropManagerAbi,
+          functionName: "treasury",
+        })
+      : Promise.resolve(null),
+    manager
+      ? publicClient.readContract({
+          address: manager,
+          abi: pumpAirdropManagerAbi,
+          functionName: "createFee",
+        })
+      : Promise.resolve(0n),
+    manager ? publicClient.getBalance({ address: manager }) : Promise.resolve(0n),
+    publicClient.getBalance({ address: bonding }),
+  ]);
+
+  const treasuryAddress = (memeTreasury as Address).toLowerCase();
+  const treasuryBalance = await publicClient.getBalance({ address: memeTreasury as Address });
+
+  return {
+    memeFactory: {
+      address: factory,
+      owner: memeOwner as Address,
+      treasury: memeTreasury as Address,
+      createFeeBnb: formatEther(memeCreateFee),
+    },
+    bondingCurveManager: {
+      address: bonding,
+      owner: curveOwner as Address,
+      treasury: curveTreasury as Address,
+      protocolFeeBps: Number(curveProtocolFeeBps),
+      contractBalanceBnb: formatEther(curveBalance),
+    },
+    airdropManager: manager
+      ? {
+          address: manager,
+          admin: airdropAdmin as Address,
+          treasury: airdropTreasury as Address,
+          createFeeBnb: formatEther(airdropCreateFee),
+          contractBalanceBnb: formatEther(managerBalance),
+        }
+      : null,
+    treasury: {
+      address: treasuryAddress,
+      balanceBnb: formatEther(treasuryBalance),
+    },
+  };
+}

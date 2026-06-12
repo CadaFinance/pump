@@ -1,0 +1,12 @@
+{
+  "abiVersion": "pump-airdrop-v1",
+  "chainId": 97,
+  "deployer": "0x11Ea71d1BEb04Aece4d06a585D9dbc6F58836880",
+  "deploymentBlock": 112753660,
+  "keeper": "0x11Ea71d1BEb04Aece4d06a585D9dbc6F58836880",
+  "launchpadTreasury": "0x9EFE93b528800aF08d0EA3033135B3D5964cc7b7",
+  "memeFactory": "0x2Fa07dFd25f1C2F3E2C0b6084bc5e0b87c9997A2",
+  "owner": "0x11Ea71d1BEb04Aece4d06a585D9dbc6F58836880",
+  "pumpAirdropManager": "0xA943566a158355504f089e37062145c0f67D1d2a",
+  "rpcUrl": "https://data-seed-prebsc-1-s1.bnbchain.org:8545"
+}

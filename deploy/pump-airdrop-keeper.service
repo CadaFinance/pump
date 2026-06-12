@@ -1,0 +1,15 @@
+[Unit]
+Description=BSC Pump Airdrop Finalize Keeper
+After=network-online.target postgresql.service pump-indexer.service
+
+[Service]
+Type=simple
+WorkingDirectory=/var/www/pump/Indexer
+EnvironmentFile=/var/www/pump/Indexer/.env
+ExecStart=/usr/bin/npm run airdrop-keeper
+Restart=always
+RestartSec=10
+User=root
+
+[Install]
+WantedBy=multi-user.target

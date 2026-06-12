@@ -1,0 +1,29 @@
+{
+  "name": "zugchain-tma-launchpad",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "indexer": "node dist/indexer.js",
+    "indexer:dev": "tsx src/indexer.ts",
+    "graduation-keeper": "node dist/graduation-keeper.js",
+    "graduation-keeper:dev": "tsx src/graduation-keeper.ts",
+    "airdrop-keeper": "node dist/airdrop-keeper.js",
+    "airdrop-keeper:dev": "tsx src/airdrop-keeper.ts",
+    "sync-king": "tsx src/sync-king.ts",
+    "sync-missions": "tsx src/sync-missions.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "dotenv": "^17.2.3",
+    "pg": "^8.16.3",
+    "viem": "^2.43.1"
+  },
+  "devDependencies": {
+    "@types/node": "^25.0.3",
+    "@types/pg": "^8.16.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
+  }
+}

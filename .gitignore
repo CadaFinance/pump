@@ -1,0 +1,50 @@
+# Dependencies
+node_modules/
+indexer/node_modules/
+
+# Next.js
+.next/
+out/
+
+# Environment (secrets)
+.env
+.env.*
+!.env.example
+!**/.env.example
+indexer/.env
+contracts/.env
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# TypeScript
+*.tsbuildinfo
+
+# Foundry (build artifacts — regenerate with forge build)
+contracts/out/
+contracts/cache/
+contracts/broadcast/
+contracts/lib/
+
+# Indexer build output
+indexer/dist/
+
+# IDE / editor
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Test / coverage
+coverage/
+.nyc_output/
+
+# Misc
+.vercel/
+.turbo/

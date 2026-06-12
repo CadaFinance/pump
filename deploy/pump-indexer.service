@@ -1,0 +1,15 @@
+[Unit]
+Description=BSC Pump Indexer
+After=network-online.target postgresql.service
+
+[Service]
+Type=simple
+WorkingDirectory=/var/www/pump/Indexer
+EnvironmentFile=/var/www/pump/Indexer/.env
+ExecStart=/usr/bin/npm run indexer
+Restart=always
+RestartSec=5
+User=root
+
+[Install]
+WantedBy=multi-user.target

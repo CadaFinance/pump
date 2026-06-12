@@ -1,0 +1,65 @@
+import type { NextRequest } from "next/server";
+import { NextResponse } from "next/server";
+import { isAdminWallet } from "@/config/admin";
+import { getAdminProtocolSnapshot, readAirdropOnChain } from "@/lib/admin-onchain";
+import { listAdminAirdrops } from "@/lib/db/admin";
+import { formatEther } from "viem";
+
+export async function GET(request: NextRequest) {
+  const wallet = request.nextUrl.searchParams.get("address");
+  if (!isAdminWallet(wallet ?? undefined)) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+
+  try {
+    const [protocol, rows] = await Promise.all([getAdminProtocolSnapshot(), listAdminAirdrops()]);
+
+    const nowSec = Math.floor(Date.now() / 1000);
+    const airdrops = await Promise.all(
+      rows.map(async (row) => {
+        const onChain = await readAirdropOnChain(row.onChainId);
+        const claimEndSec = onChain?.claimEnd ?? 0;
+        const remainingBnb = onChain ? formatEther(onChain.remainingWei) : "0";
+        const canSweep =
+          Boolean(onChain) &&
+          !onChain.remainderSwept &&
+          onChain.remainingWei > 0n &&
+          nowSec > claimEndSec &&
+          Boolean(row.merkleRoot);
+
+        const sweepStatus = !row.merkleRoot
+          ? "not_finalized"
+          : onChain?.remainderSwept
+            ? "swept"
+            : nowSec <= claimEndSec
+              ? "claim_window_open"
+              : onChain && onChain.remainingWei > 0n
+                ? "ready"
+                : "nothing_to_sweep";
+
+        return {
+          ...row,
+          remainingBnb,
+          totalClaimedBnb: onChain ? formatEther(onChain.totalClaimedWei) : "0",
+          claimEndUnix: claimEndSec,
+          canSweep,
+          sweepStatus,
+          sweepRecipient: protocol.airdropManager?.admin ?? null,
+        };
+      })
+    );
+
+    return NextResponse.json(
+      {
+        data: {
+          protocol,
+          airdrops,
+        },
+      },
+      { headers: { "Cache-Control": "no-store" } }
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}

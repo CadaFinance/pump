@@ -1,0 +1,57 @@
+import { createPublicClient, formatEther, http } from "viem";
+import type { NextRequest } from "next/server";
+import { NextResponse } from "next/server";
+import { normalizeAddressParam } from "@/lib/address";
+import { contracts, pumpChain } from "@/config/chain";
+import { bondingCurveManagerAbi } from "@/lib/bonding-curve";
+import { getCreatorProfile } from "@/lib/db/launchpad";
+
+const publicClient = createPublicClient({
+  chain: pumpChain,
+  transport: http(pumpChain.rpcUrls.default.http[0]),
+});
+
+type RouteContext = { params: Promise<{ address: string }> };
+
+export async function GET(_request: NextRequest, context: RouteContext) {
+  const { address: addressParam } = await context.params;
+  const creatorAddress = normalizeAddressParam(addressParam);
+  if (!creatorAddress) {
+    return NextResponse.json({ error: "Valid creator address is required" }, { status: 400 });
+  }
+
+  try {
+    const profile = await getCreatorProfile(creatorAddress);
+    let bnbBalance = "0";
+    let creatorFeesPendingBnb = 0;
+    try {
+      const [balanceWei, pendingWei] = await Promise.all([
+        publicClient.getBalance({ address: creatorAddress as `0x${string}` }),
+        publicClient.readContract({
+          address: contracts.bondingCurveManager,
+          abi: bondingCurveManagerAbi,
+          functionName: "pendingCreatorFees",
+          args: [creatorAddress as `0x${string}`],
+        }),
+      ]);
+      bnbBalance = formatEther(balanceWei);
+      creatorFeesPendingBnb = Number(formatEther(pendingWei));
+    } catch {
+      // RPC unavailable — profile still useful without live balance / pending fees
+    }
+
+    const creatorFeesTotalBnb = profile.creatorFeesClaimedBnb + creatorFeesPendingBnb;
+
+    return NextResponse.json({
+      data: {
+        ...profile,
+        bnbBalance,
+        creatorFeesPendingBnb,
+        creatorFeesTotalBnb,
+      },
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
