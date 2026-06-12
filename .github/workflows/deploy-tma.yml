@@ -1,0 +1,39 @@
+name: Deploy TMA to VM
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "public/**"
+      - "package.json"
+      - "package-lock.json"
+      - "next.config.ts"
+      - "tsconfig.json"
+      - "tailwind.config.ts"
+      - "postcss.config.mjs"
+      - "ecosystem.config.cjs"
+      - "deploy/tma-deploy.sh"
+      - ".github/workflows/deploy-tma.yml"
+
+concurrency:
+  group: deploy-tma-production
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          port: ${{ secrets.VM_SSH_PORT }}
+          script_stop: true
+          command_timeout: 20m
+          script: |
+            cd /var/www/pump/tma
+            chmod +x deploy/tma-deploy.sh
+            ./deploy/tma-deploy.sh

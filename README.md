@@ -292,7 +292,64 @@ Invoke-WebRequest http://localhost:3012/api/tokens -UseBasicParsing
 
 ---
 
-## 8. GitHub
+## 8. Otomatik TMA deploy (push → VM)
+
+`main` branch'e push edilince GitHub Actions VM'ye SSH ile bağlanır, `deploy/tma-deploy.sh` çalıştırır:
+
+`git pull` → `npm ci` → `npm run build` → static kopyala → `pm2 restart pump-tma`
+
+Sadece UI dosyaları değişince tetiklenir (`src/`, `package.json`, `next.config.ts`, …). Indexer/kontrat push'ları TMA'yı deploy etmez.
+
+### 8.1 Tek seferlik kurulum
+
+**1) Deploy SSH key (local PowerShell)**
+
+```powershell
+ssh-keygen -t ed25519 -C "github-actions-pump-tma" -f $env:USERPROFILE\.ssh\pump_tma_deploy -N '""'
+Get-Content $env:USERPROFILE\.ssh\pump_tma_deploy.pub
+```
+
+**2) Public key'i VM'ye ekle**
+
+```bash
+# VM'de — çıktıyı yapıştır
+echo "ssh-ed25519 AAAA... github-actions-pump-tma" >> /root/.ssh/authorized_keys
+chmod 600 /root/.ssh/authorized_keys
+```
+
+**3) GitHub repo secrets** ([Settings → Secrets → Actions](https://github.com/CadaFinance/pump/settings/secrets/actions))
+
+| Secret | Değer |
+|--------|--------|
+| `VM_HOST` | `104.207.64.115` |
+| `VM_USER` | `root` |
+| `VM_SSH_PORT` | `22022` |
+| `VM_SSH_KEY` | `pump_tma_deploy` dosyasının **private** içeriği |
+
+**4) İlk kez script'i VM'ye al**
+
+```bash
+cd /var/www/pump/tma
+git pull
+chmod +x deploy/tma-deploy.sh
+```
+
+Sonraki deploy'lar tamamen otomatik.
+
+### 8.2 Manuel deploy (VM)
+
+```bash
+cd /var/www/pump/tma
+./deploy/tma-deploy.sh
+```
+
+### 8.3 Kontrol
+
+GitHub → **Actions** sekmesi → `Deploy TMA to VM` workflow run.
+
+---
+
+## 9. GitHub
 
 Repo: [github.com/CadaFinance/pump](https://github.com/CadaFinance/pump.git)
 
