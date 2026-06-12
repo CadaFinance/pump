@@ -8,14 +8,14 @@ module.exports = {
   apps: [
     {
       name: "pump-tma",
-      cwd: "/var/www/zugchain-pump-tma/.next/standalone",
+      cwd: "/var/www/pump/tma/.next/standalone",
       script: "server.js",
       env: {
         NODE_ENV: "production",
         PORT: "3012",
         HOSTNAME: "0.0.0.0",
       },
-      env_file: "/var/www/zugchain-pump-tma/.env",
+      env_file: "/var/www/pump/tma/.env",
       autorestart: true,
       max_memory_restart: "512M",
     },
