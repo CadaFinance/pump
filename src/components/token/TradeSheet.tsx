@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { TradePanel, type TradeConfirmedPayload } from "@/components/token/TradePanel";
 import type { TradePrefillConfig } from "@/lib/token-trade-prefill";
+import type { BondingCurveSnapshot } from "@/lib/bonding-curve";
 
 type TradeSheetProps = {
   open: boolean;
@@ -14,6 +15,7 @@ type TradeSheetProps = {
   reserveBnb?: string;
   prefill?: TradePrefillConfig | null;
   onTradeConfirmed?: (payload: TradeConfirmedPayload) => void;
+  chainCurveSnapshot?: BondingCurveSnapshot;
 };
 
 export function TradeSheet({
@@ -25,6 +27,7 @@ export function TradeSheet({
   reserveBnb,
   prefill = null,
   onTradeConfirmed,
+  chainCurveSnapshot,
 }: TradeSheetProps) {
   const [mounted, setMounted] = useState(false);
 
@@ -88,9 +91,10 @@ export function TradeSheet({
               symbol={symbol}
               status={status}
               reserveBnb={reserveBnb}
-              prefill={prefill}
-              onTradeConfirmed={onTradeConfirmed}
-            />
+            prefill={prefill}
+            onTradeConfirmed={onTradeConfirmed}
+            chainCurveSnapshot={chainCurveSnapshot}
+          />
           </div>
         </div>
       </div>

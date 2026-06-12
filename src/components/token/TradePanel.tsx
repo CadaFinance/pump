@@ -7,7 +7,7 @@ import { useConnectModal } from "@rainbow-me/rainbowkit";
 import {
   useAccount,
   useBalance,
-  usePublicClient,
+  useGasPrice,
   useReadContract,
   useWaitForTransactionReceipt,
   useWriteContract,
@@ -16,24 +16,31 @@ import { contracts, pumpChain } from "@/config/chain";
 import { erc20Abi, maxUint256 } from "@/lib/abis/erc20";
 import {
   bondingCurveManagerAbi,
+  bondingCurveFromSnapshot,
   bondingCurveStateFromTuple,
   minOutWithSlippage,
   quoteBuyFromCurveState,
+  quoteSellFromCurveState,
   resolveBnbInForTokenOut,
+  resolveTokenInForBnbOut,
   SLIPPAGE_BPS,
+  type BondingCurveSnapshot,
 } from "@/lib/bonding-curve";
 import { formatTradeError } from "@/lib/trade-errors";
 import { bnbToUsd, formatUsdReadable } from "@/lib/format-usd";
 import { useBnbUsdPrice } from "@/hooks/useBnbUsdPrice";
-import { BUY_GAS_FALLBACK, useTradeGasEstimate } from "@/hooks/useTradeGasEstimate";
+import {
+  useTradeGasEstimate,
+  BUY_GAS_FALLBACK,
+  SELL_GAS_FALLBACK,
+  APPROVE_GAS_FALLBACK,
+} from "@/hooks/useTradeGasEstimate";
 import type { TradePrefillConfig } from "@/lib/token-trade-prefill";
 
 type Side = "buy" | "sell";
-type BuyInputMode = "usd" | "bnb" | "token";
+type TradeInputMode = "usd" | "bnb" | "token";
 
-const QUICK_USD_AMOUNTS = [25, 100, 250] as const;
-const QUICK_BNB_AMOUNTS = [0.01, 0.1, 0.5] as const;
-const QUICK_SELL_PERCENTAGES = [25, 50, 100] as const;
+const CURVE_POLL_MS = 4_000;
 
 export type TradeConfirmedPayload = {
   txHash: string;
@@ -49,6 +56,8 @@ type TradePanelProps = {
   embedded?: boolean;
   prefill?: TradePrefillConfig | null;
   onTradeConfirmed?: (payload: TradeConfirmedPayload) => void;
+  /** Live curve snapshot from token page — keeps quotes in sync with chart polling. */
+  chainCurveSnapshot?: BondingCurveSnapshot;
 };
 
 function parseBnbAmount(value: string): bigint {
@@ -85,9 +94,19 @@ function formatGasCostLabel(gasCostWei: bigint, bnbUsd: number | null): string {
   return usdLabel ? `≈ ${bnbStr} BNB (${usdLabel})` : `≈ ${bnbStr} BNB`;
 }
 
-const GAS_RESERVE_BUFFER_BPS = 12_000n;
-const TOKEN_MAX_SAFETY_BPS = 9_995n;
-const FALLBACK_GAS_RESERVE_WEI = parseEther("0.0005");
+const GAS_EXTRA_WEI = parseEther("0.00015");
+const GAS_PROBE_BNB_WEI = parseEther("0.001");
+const GAS_PROBE_TOKEN_WEI = parseUnits("0.000001", 18);
+
+function capSpendToBalance(
+  spendWei: bigint,
+  balance: bigint | undefined,
+  gasReserve: bigint
+): bigint {
+  if (spendWei <= 0n || balance === undefined) return spendWei;
+  const maxSpend = balance > gasReserve ? balance - gasReserve : 0n;
+  return spendWei > maxSpend ? maxSpend : spendWei;
+}
 
 function formatAmountFromWei(wei: bigint): string {
   const raw = formatEther(wei);
@@ -143,19 +162,25 @@ export function TradePanel({
   embedded = false,
   prefill = null,
   onTradeConfirmed,
+  chainCurveSnapshot,
 }: TradePanelProps) {
   const { address, isConnected, chain } = useAccount();
-  const publicClient = usePublicClient({ chainId: pumpChain.id });
+  const { data: gasPrice } = useGasPrice({ chainId: pumpChain.id });
   const { openConnectModal } = useConnectModal();
   const { bnbUsd } = useBnbUsdPrice();
   const [side, setSide] = useState<Side>("buy");
-  const [buyInputMode, setBuyInputMode] = useState<BuyInputMode>("usd");
+  const [buyInputMode, setBuyInputMode] = useState<TradeInputMode>("usd");
+  const [sellInputMode, setSellInputMode] = useState<TradeInputMode>("usd");
   const [amount, setAmount] = useState("");
   const prefillAppliedRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const [receiveExpanded, setReceiveExpanded] = useState(true);
   const [pendingAction, setPendingAction] = useState<"buy" | "sell" | "approve" | null>(null);
   const pendingSellRef = useRef<{ amountWei: bigint; minBnbOut: bigint } | null>(null);
+  /** Set when buy amount comes from slider/max — keeps token mode aligned with BNB/USD spend. */
+  const [linkedBuySpendWei, setLinkedBuySpendWei] = useState<bigint | null>(null);
+  /** Set when sell amount comes from slider/max — keeps USD/BNB modes aligned with token balance. */
+  const [linkedSellTokenWei, setLinkedSellTokenWei] = useState<bigint | null>(null);
 
   useEffect(() => {
     if (!prefill || prefillAppliedRef.current) return;
@@ -164,27 +189,38 @@ export function TradePanel({
     if (prefill.side === "buy" && prefill.buyMode) {
       setBuyInputMode(prefill.buyMode);
     }
+    if (prefill.side === "sell" && prefill.buyMode) {
+      setSellInputMode(prefill.buyMode);
+    }
     if (prefill.amount) {
       setAmount(prefill.amount);
     }
   }, [prefill]);
 
-  const targetTokenWei = useMemo(() => {
-    if (side === "sell" || (side === "buy" && buyInputMode === "token")) {
-      return parseTokenAmount(amount);
-    }
-    return 0n;
+  const buyTargetTokenWei = useMemo(() => {
+    if (side !== "buy" || buyInputMode !== "token") return 0n;
+    return parseTokenAmount(amount);
   }, [amount, side, buyInputMode]);
 
   const wrongChain = isConnected && chain?.id !== pumpChain.id;
 
-  const { data: curveState } = useReadContract({
+  const { data: localCurveState } = useReadContract({
     address: contracts.bondingCurveManager,
     abi: bondingCurveManagerAbi,
     functionName: "curves",
     args: [tokenAddress],
     chainId: pumpChain.id,
+    query: {
+      enabled: chainCurveSnapshot == null,
+      refetchInterval: CURVE_POLL_MS,
+    },
   });
+
+  const bondingCurve = useMemo(() => {
+    if (chainCurveSnapshot) return bondingCurveFromSnapshot(chainCurveSnapshot);
+    if (localCurveState) return bondingCurveStateFromTuple(localCurveState);
+    return null;
+  }, [chainCurveSnapshot, localCurveState]);
 
   const { data: protocolFeeBps } = useReadContract({
     address: contracts.bondingCurveManager,
@@ -193,21 +229,60 @@ export function TradePanel({
     chainId: pumpChain.id,
   });
 
+  const sellTokenWei = useMemo(() => {
+    if (side !== "sell") return 0n;
+    if (linkedSellTokenWei != null) return linkedSellTokenWei;
+    if (sellInputMode === "token") return parseTokenAmount(amount);
+    const targetBnbOut = parseBnbAmount(amount);
+    if (targetBnbOut === 0n || !bondingCurve || protocolFeeBps === undefined) return 0n;
+    return resolveTokenInForBnbOut(bondingCurve, protocolFeeBps, targetBnbOut) ?? 0n;
+  }, [side, linkedSellTokenWei, sellInputMode, amount, bondingCurve, protocolFeeBps]);
+
+  const targetTokenWei = side === "sell" ? sellTokenWei : buyTargetTokenWei;
+
   const resolvedBuyBnbWei = useMemo(() => {
-    if (side !== "buy" || buyInputMode !== "token" || targetTokenWei === 0n) return null;
-    if (!curveState || protocolFeeBps === undefined) return null;
-    return resolveBnbInForTokenOut(
-      bondingCurveStateFromTuple(curveState),
-      protocolFeeBps,
-      targetTokenWei
-    );
-  }, [side, buyInputMode, targetTokenWei, curveState, protocolFeeBps]);
+    if (side !== "buy" || buyInputMode !== "token" || buyTargetTokenWei === 0n) return null;
+    if (!bondingCurve || protocolFeeBps === undefined) return null;
+    return resolveBnbInForTokenOut(bondingCurve, protocolFeeBps, buyTargetTokenWei);
+  }, [side, buyInputMode, buyTargetTokenWei, bondingCurve, protocolFeeBps]);
 
   const buySpendWei = useMemo(() => {
     if (side !== "buy") return 0n;
     if (buyInputMode === "token") return resolvedBuyBnbWei ?? 0n;
     return parseBnbAmount(amount);
   }, [side, buyInputMode, amount, resolvedBuyBnbWei]);
+
+  const buyCostWei = useMemo(() => {
+    if (side !== "buy") return 0n;
+    if (linkedBuySpendWei != null && linkedBuySpendWei > 0n) return linkedBuySpendWei;
+    if (buyInputMode === "token") return resolvedBuyBnbWei ?? 0n;
+    return buySpendWei;
+  }, [side, buyInputMode, linkedBuySpendWei, resolvedBuyBnbWei, buySpendWei]);
+
+  const effectiveBuyTokenWei = useMemo(() => {
+    if (side !== "buy" || buyInputMode !== "token") return 0n;
+    if (
+      linkedBuySpendWei != null &&
+      linkedBuySpendWei > 0n &&
+      bondingCurve &&
+      protocolFeeBps !== undefined
+    ) {
+      const { tokenOut } = quoteBuyFromCurveState(
+        bondingCurve,
+        protocolFeeBps,
+        linkedBuySpendWei
+      );
+      if (tokenOut > 0n) return tokenOut;
+    }
+    return buyTargetTokenWei;
+  }, [
+    side,
+    buyInputMode,
+    linkedBuySpendWei,
+    bondingCurve,
+    protocolFeeBps,
+    buyTargetTokenWei,
+  ]);
 
   const { data: bnbBalance, refetch: refetchBnbBalance } = useBalance({
     address,
@@ -233,25 +308,33 @@ export function TradePanel({
     query: { enabled: Boolean(address) },
   });
 
-  const { data: buyQuote } = useReadContract({
-    address: contracts.bondingCurveManager,
-    abi: bondingCurveManagerAbi,
-    functionName: "quoteBuy",
-    args: [tokenAddress, buySpendWei],
-    chainId: pumpChain.id,
-    query: {
-      enabled: side === "buy" && buyInputMode !== "token" && buySpendWei > 0n,
-    },
-  });
+  const localBuyQuoteOut = useMemo(() => {
+    if (
+      side !== "buy" ||
+      buyInputMode === "token" ||
+      buySpendWei === 0n ||
+      !bondingCurve ||
+      protocolFeeBps === undefined
+    ) {
+      return null;
+    }
+    return quoteBuyFromCurveState(bondingCurve, protocolFeeBps, buySpendWei).tokenOut;
+  }, [side, buyInputMode, buySpendWei, bondingCurve, protocolFeeBps]);
 
-  const { data: sellQuote } = useReadContract({
-    address: contracts.bondingCurveManager,
-    abi: bondingCurveManagerAbi,
-    functionName: "quoteSell",
-    args: [tokenAddress, targetTokenWei],
-    chainId: pumpChain.id,
-    query: { enabled: side === "sell" && targetTokenWei > 0n },
-  });
+  const localSellQuoteOut = useMemo(() => {
+    if (
+      side !== "sell" ||
+      targetTokenWei === 0n ||
+      !bondingCurve ||
+      protocolFeeBps === undefined
+    ) {
+      return null;
+    }
+    return quoteSellFromCurveState(bondingCurve, protocolFeeBps, targetTokenWei).zugOut;
+  }, [side, targetTokenWei, bondingCurve, protocolFeeBps]);
+
+  const buyQuoteOut = localBuyQuoteOut;
+  const sellQuoteOut = localSellQuoteOut;
 
   const { writeContract, data: txHash, isPending, reset, error: writeError } = useWriteContract();
   const { data: receipt, isLoading: isConfirming } = useWaitForTransactionReceipt({ hash: txHash });
@@ -263,17 +346,18 @@ export function TradePanel({
     setError(formatTradeError(writeError));
   }, [writeError]);
 
-  const paused = curveState?.[9] ?? status === "PAUSED";
+  const paused =
+    chainCurveSnapshot?.paused ?? localCurveState?.[9] ?? status === "PAUSED";
 
   const estimatedOut =
     side === "sell"
-      ? sellQuote?.[0] ?? 0n
+      ? sellQuoteOut ?? 0n
       : buyInputMode === "token"
-        ? targetTokenWei
-        : buyQuote?.[0] ?? 0n;
+        ? effectiveBuyTokenWei
+        : buyQuoteOut ?? 0n;
 
   const spendBnbNumber =
-    side === "buy" ? Number(formatEther(buySpendWei)) : Number(formatEther(estimatedOut));
+    side === "buy" ? Number(formatEther(buyCostWei)) : Number(formatEther(estimatedOut));
   const amountUsdValue =
     side === "buy" && spendBnbNumber > 0
       ? bnbToUsd(spendBnbNumber, bnbUsd)
@@ -285,12 +369,14 @@ export function TradePanel({
 
   const needsApproval =
     side === "sell" &&
-    targetTokenWei > 0n &&
+    sellTokenWei > 0n &&
     allowance !== undefined &&
-    allowance < targetTokenWei;
+    allowance < sellTokenWei;
+
+  const activeInputMode = side === "buy" ? buyInputMode : sellInputMode;
 
   const displayInputValue =
-    side === "buy" && buyInputMode === "usd" && bnbUsd != null
+    activeInputMode === "usd" && bnbUsd != null
       ? amount && Number(amount) > 0
         ? (Number(amount) * bnbUsd).toFixed(2).replace(/\.?0+$/, "")
         : amount
@@ -299,29 +385,138 @@ export function TradePanel({
   const hasTradeAmount =
     side === "buy"
       ? buyInputMode === "token"
-        ? targetTokenWei > 0n
+        ? effectiveBuyTokenWei > 0n
         : buySpendWei > 0n
-      : targetTokenWei > 0n;
+      : sellTokenWei > 0n;
 
-  const buyCostWei = useMemo(() => {
+  const gasProbeSellTokenWei = useMemo(() => {
+    if (side !== "sell") return 0n;
+    if (sellTokenWei > 0n) return sellTokenWei;
+    if (tokenBalance != null && tokenBalance > 0n) {
+      return tokenBalance < GAS_PROBE_TOKEN_WEI ? tokenBalance : GAS_PROBE_TOKEN_WEI;
+    }
+    return GAS_PROBE_TOKEN_WEI;
+  }, [side, sellTokenWei, tokenBalance]);
+
+  const gasProbeSellQuoteOut = useMemo(() => {
+    if (side !== "sell" || !bondingCurve || protocolFeeBps === undefined) return undefined;
+    if (sellQuoteOut != null && sellQuoteOut > 0n) return sellQuoteOut;
+    const quoted = quoteSellFromCurveState(
+      bondingCurve,
+      protocolFeeBps,
+      gasProbeSellTokenWei
+    ).zugOut;
+    return quoted > 0n ? quoted : undefined;
+  }, [side, bondingCurve, protocolFeeBps, sellQuoteOut, gasProbeSellTokenWei]);
+
+  const gasProbeBuySpendWei = useMemo(() => {
     if (side !== "buy") return 0n;
-    if (buyInputMode === "token") return resolvedBuyBnbWei ?? 0n;
-    return buySpendWei;
-  }, [side, buyInputMode, resolvedBuyBnbWei, buySpendWei]);
+    if (buyCostWei > 0n) return buyCostWei;
+    if (bnbBalance != null && bnbBalance.value > GAS_EXTRA_WEI) {
+      return bnbBalance.value - GAS_EXTRA_WEI;
+    }
+    return GAS_PROBE_BNB_WEI;
+  }, [side, buyCostWei, bnbBalance]);
 
-  const insufficientSellBalance =
+  const gasProbeTokenOut = useMemo(() => {
+    if (side !== "buy" || !bondingCurve || protocolFeeBps === undefined) return 1n;
+    if (buyInputMode === "token" && effectiveBuyTokenWei > 0n) return effectiveBuyTokenWei;
+    if (buyQuoteOut != null && buyQuoteOut > 0n) return buyQuoteOut;
+    const quoted = quoteBuyFromCurveState(
+      bondingCurve,
+      protocolFeeBps,
+      gasProbeBuySpendWei
+    ).tokenOut;
+    return quoted > 0n ? quoted : 1n;
+  }, [
+    side,
+    bondingCurve,
+    protocolFeeBps,
+    buyInputMode,
+    effectiveBuyTokenWei,
+    buyQuoteOut,
+    gasProbeBuySpendWei,
+  ]);
+
+  const { gasCostWei, isLoading: gasLoading } = useTradeGasEstimate({
+    enabled: !paused && !wrongChain && Boolean(address),
+    address,
+    side,
+    buyInputMode,
+    tokenAddress,
+    targetTokenWei:
+      side === "buy" && buyInputMode === "token" && buyTargetTokenWei === 0n
+        ? GAS_PROBE_TOKEN_WEI
+        : side === "sell" && sellTokenWei === 0n
+          ? gasProbeSellTokenWei
+          : targetTokenWei,
+    buySpendWei: side === "buy" ? gasProbeBuySpendWei : buySpendWei,
+    resolvedBuyBnbWei:
+      side === "buy" && buyInputMode === "token"
+        ? linkedBuySpendWei ?? resolvedBuyBnbWei ?? gasProbeBuySpendWei
+        : resolvedBuyBnbWei,
+    buyQuoteOut: side === "buy" ? gasProbeTokenOut : buyQuoteOut ?? undefined,
+    sellQuoteOut: side === "sell" ? gasProbeSellQuoteOut : sellQuoteOut ?? undefined,
+    needsApproval,
+  });
+
+  const estimatedGasWei = useMemo(() => {
+    if (gasCostWei != null && gasCostWei > 0n) return gasCostWei;
+    if (gasPrice != null && gasPrice > 0n) {
+      const gasUnits =
+        side === "buy"
+          ? BUY_GAS_FALLBACK
+          : SELL_GAS_FALLBACK + (needsApproval ? APPROVE_GAS_FALLBACK : 0n);
+      return gasUnits * gasPrice;
+    }
+    return 0n;
+  }, [gasCostWei, gasPrice, side, needsApproval]);
+
+  /** On-chain estimate + hidden buffer for Max / balance checks (not shown in UI). */
+  const gasReserveWei = useMemo(
+    () => estimatedGasWei + GAS_EXTRA_WEI,
+    [estimatedGasWei]
+  );
+
+  const buyGasReserveWei = side === "buy" ? gasReserveWei : 0n;
+  const sellGasReserveWei = side === "sell" ? gasReserveWei : 0n;
+
+  const maxBuySpendWei = useMemo(() => {
+    if (!isConnected || bnbBalance === undefined || bnbBalance.value <= buyGasReserveWei) {
+      return 0n;
+    }
+    return bnbBalance.value - buyGasReserveWei;
+  }, [isConnected, bnbBalance, buyGasReserveWei]);
+
+  const maxSellTokenWei = useMemo(() => {
+    if (!isConnected || tokenBalance === undefined || tokenBalance === 0n) {
+      return 0n;
+    }
+    return tokenBalance;
+  }, [isConnected, tokenBalance]);
+
+  const insufficientSellTokenBalance =
     side === "sell" &&
     isConnected &&
     tokenBalance !== undefined &&
-    targetTokenWei > 0n &&
-    targetTokenWei > tokenBalance;
+    sellTokenWei > 0n &&
+    sellTokenWei > tokenBalance;
+
+  const insufficientSellGas =
+    side === "sell" &&
+    isConnected &&
+    sellTokenWei > 0n &&
+    bnbBalance !== undefined &&
+    bnbBalance.value < sellGasReserveWei;
+
+  const insufficientSellBalance = insufficientSellTokenBalance || insufficientSellGas;
 
   const insufficientBuyBalance =
     side === "buy" &&
     isConnected &&
     bnbBalance !== undefined &&
     buyCostWei > 0n &&
-    buyCostWei > bnbBalance.value;
+    (buyCostWei > maxBuySpendWei || buyCostWei + buyGasReserveWei > bnbBalance.value);
 
   const insufficientBalance =
     side === "buy" ? insufficientBuyBalance : insufficientSellBalance;
@@ -329,23 +524,21 @@ export function TradePanel({
   const balancePending =
     side === "buy"
       ? isConnected && bnbBalance === undefined && buyCostWei > 0n
-      : isConnected && tokenBalance === undefined && targetTokenWei > 0n;
+      : isConnected && tokenBalance === undefined && sellTokenWei > 0n;
 
   const currencyLabel =
-    side === "buy"
-      ? buyInputMode === "usd"
-        ? "USD"
-        : buyInputMode === "bnb"
-          ? "BNB"
-          : symbol
-      : symbol;
+    activeInputMode === "usd"
+      ? "USD"
+      : activeInputMode === "bnb"
+        ? "BNB"
+        : symbol;
 
   const conversionParts: string[] = [];
   if (side === "buy") {
     if (buyInputMode === "token") {
-      if (buySpendWei > 0n) {
+      if (buyCostWei > 0n) {
         conversionParts.push(
-          `≈ ${formatBnbReadable(Number(formatEther(buySpendWei)))} BNB`
+          `≈ ${formatBnbReadable(Number(formatEther(buyCostWei)))} BNB`
         );
       }
       if (amountUsdLabel) {
@@ -365,12 +558,27 @@ export function TradePanel({
         );
       }
     }
-  } else if (targetTokenWei > 0n && estimatedOut > 0n) {
-    const bnbOut = Number(formatEther(estimatedOut));
-    conversionParts.push(`≈ ${formatBnbReadable(bnbOut)} BNB`);
-    const usdOut = bnbToUsd(bnbOut, bnbUsd);
-    if (usdOut != null) {
-      conversionParts.push(`≈ ${formatUsdReadable(usdOut)}`);
+  } else if (sellTokenWei > 0n) {
+    if (sellInputMode === "token") {
+      if (estimatedOut > 0n) {
+        conversionParts.push(
+          `≈ ${formatBnbReadable(Number(formatEther(estimatedOut)))} BNB`
+        );
+      }
+      if (amountUsdLabel) {
+        conversionParts.push(`≈ ${amountUsdLabel}`);
+      }
+    } else {
+      if (Number(amount) > 0) {
+        if (sellInputMode === "usd") {
+          conversionParts.push(`≈ ${formatBnbReadable(Number(amount))} BNB`);
+        } else if (amountUsdLabel) {
+          conversionParts.push(`≈ ${amountUsdLabel}`);
+        }
+      }
+      conversionParts.push(
+        `≈ ${formatReceiveAmount(formatUnits(sellTokenWei, 18))} ${symbol}`
+      );
     }
   }
 
@@ -384,45 +592,86 @@ export function TradePanel({
 
   const minReceivedWei = useMemo(() => {
     if (side === "buy") {
-      if (buyInputMode === "token" && targetTokenWei > 0n) {
-        return minOutWithSlippage(targetTokenWei);
+      if (buyInputMode === "token" && effectiveBuyTokenWei > 0n) {
+        return minOutWithSlippage(effectiveBuyTokenWei);
       }
       if (estimatedOut > 0n) return minOutWithSlippage(estimatedOut);
     } else if (estimatedOut > 0n) {
       return minOutWithSlippage(estimatedOut);
     }
     return 0n;
-  }, [side, buyInputMode, targetTokenWei, estimatedOut]);
+  }, [side, buyInputMode, effectiveBuyTokenWei, estimatedOut]);
 
   const minReceivedLabel =
     side === "buy"
       ? `${formatReceiveAmount(formatUnits(minReceivedWei, 18))} ${symbol}`
       : `${formatBnbReadable(Number(formatEther(minReceivedWei)))} BNB`;
 
-  const slippagePct = Number(SLIPPAGE_BPS) / 100;
+  const buySliderPct = useMemo(() => {
+    if (side !== "buy" || maxBuySpendWei === 0n) return 0;
+    const spendWei = buyCostWei;
+    if (spendWei <= 0n) return 0;
+    const scaled = Number((spendWei * 10000n) / maxBuySpendWei) / 100;
+    return Math.max(0, Math.min(100, Math.round(scaled)));
+  }, [side, maxBuySpendWei, buyCostWei]);
 
-  const gasEstimateEnabled =
-    !paused &&
-    hasTradeAmount &&
-    (side === "buy" ? buyCostWei > 0n : targetTokenWei > 0n) &&
-    (!isConnected || Boolean(address) && !wrongChain);
+  const buySliderFillPct = buySliderPct;
 
-  const { gasCostWei, isLoading: gasLoading } = useTradeGasEstimate({
-    enabled: gasEstimateEnabled,
-    address,
-    side,
-    buyInputMode,
-    tokenAddress,
-    targetTokenWei,
-    buySpendWei,
-    resolvedBuyBnbWei,
-    buyQuoteOut: buyQuote?.[0],
-    sellQuoteOut: sellQuote?.[0],
-    needsApproval,
-  });
+  const sellSliderPct = useMemo(() => {
+    if (side !== "sell" || maxSellTokenWei === 0n) return 0;
+    if (sellTokenWei <= 0n) return 0;
+    const scaled = Number((sellTokenWei * 10000n) / maxSellTokenWei) / 100;
+    return Math.max(0, Math.min(100, Math.round(scaled)));
+  }, [side, maxSellTokenWei, sellTokenWei]);
+
+  const sellSliderFillPct = sellSliderPct;
 
   const gasCostLabel =
-    gasCostWei !== null ? formatGasCostLabel(gasCostWei, bnbUsd) : null;
+    gasLoading && gasCostWei == null
+      ? "…"
+      : estimatedGasWei > 0n
+        ? formatGasCostLabel(estimatedGasWei, bnbUsd)
+        : "—";
+
+  const slippagePct = Number(SLIPPAGE_BPS) / 100;
+
+  useEffect(() => {
+    if (side !== "buy" || linkedBuySpendWei == null || maxBuySpendWei === 0n) return;
+    if (linkedBuySpendWei <= maxBuySpendWei) return;
+    if (!bondingCurve || protocolFeeBps === undefined) return;
+
+    setLinkedBuySpendWei(maxBuySpendWei);
+    if (buyInputMode === "token") {
+      const { tokenOut } = quoteBuyFromCurveState(
+        bondingCurve,
+        protocolFeeBps,
+        maxBuySpendWei
+      );
+      if (tokenOut > 0n) setAmount(formatTokenInputAmount(tokenOut));
+    } else {
+      setAmount(formatAmountFromWei(maxBuySpendWei));
+    }
+  }, [
+    side,
+    linkedBuySpendWei,
+    maxBuySpendWei,
+    buyInputMode,
+    bondingCurve,
+    protocolFeeBps,
+  ]);
+
+  useEffect(() => {
+    if (side !== "buy" || buyInputMode !== "token" || linkedBuySpendWei == null) return;
+    if (!bondingCurve || protocolFeeBps === undefined) return;
+    const { tokenOut } = quoteBuyFromCurveState(
+      bondingCurve,
+      protocolFeeBps,
+      linkedBuySpendWei
+    );
+    if (tokenOut === 0n) return;
+    const synced = formatTokenInputAmount(tokenOut);
+    if (amount !== synced) setAmount(synced);
+  }, [side, buyInputMode, linkedBuySpendWei, bondingCurve, protocolFeeBps, amount]);
 
   useEffect(() => {
     if (!receipt || !pendingAction) return;
@@ -459,6 +708,8 @@ export function TradePanel({
 
     setAmount("");
     setError(null);
+    setLinkedBuySpendWei(null);
+    setLinkedSellTokenWei(null);
     const confirmedSide = pendingAction;
     setPendingAction(null);
     pendingSellRef.current = null;
@@ -486,8 +737,10 @@ export function TradePanel({
   ]);
 
   function onDisplayInputChange(raw: string) {
+    setLinkedBuySpendWei(null);
+    setLinkedSellTokenWei(null);
     const cleaned = raw.replace(/,/g, ".").replace(/[^\d.]/g, "");
-    if (side === "buy" && buyInputMode === "usd" && bnbUsd != null && bnbUsd > 0) {
+    if (activeInputMode === "usd" && bnbUsd != null && bnbUsd > 0) {
       if (!cleaned) {
         setAmount("");
         return;
@@ -500,91 +753,125 @@ export function TradePanel({
     setAmount(cleaned);
   }
 
-  function setQuickUsd(usd: number) {
-    if (!bnbUsd || bnbUsd <= 0) return;
-    setAmount(String(usd / bnbUsd));
-    setError(null);
-  }
-
-  function setQuickBnb(bnb: number) {
-    setAmount(String(bnb));
-    setError(null);
-  }
-
-  function setQuickSellPercent(percent: number) {
-    if (tokenBalance === undefined || tokenBalance === 0n) return;
-    const amountWei = (tokenBalance * BigInt(percent)) / 100n;
-    if (amountWei === 0n) return;
-    setAmount(formatUnits(amountWei, 18));
-    setError(null);
-  }
-
-  async function resolveBuyGasReserveWei(): Promise<bigint> {
-    if (gasCostWei != null && gasCostWei > 0n) {
-      return (gasCostWei * GAS_RESERVE_BUFFER_BPS) / 10_000n;
-    }
-    if (!publicClient) return FALLBACK_GAS_RESERVE_WEI;
-    try {
-      const gasPrice = await publicClient.getGasPrice();
-      return (BUY_GAS_FALLBACK * gasPrice * GAS_RESERVE_BUFFER_BPS) / 10_000n;
-    } catch {
-      return FALLBACK_GAS_RESERVE_WEI;
-    }
-  }
-
-  async function onUseMaxBuy() {
-    if (!isConnected) {
-      openConnectModal?.();
-      return;
-    }
-    if (wrongChain || paused || bnbBalance === undefined || bnbBalance.value === 0n) return;
-
-    const gasReserve = await resolveBuyGasReserveWei();
-    const maxSpend =
-      bnbBalance.value > gasReserve ? bnbBalance.value - gasReserve : 0n;
-    if (maxSpend === 0n) {
-      setError("Not enough BNB left after gas.");
-      return;
-    }
-
-    if (buyInputMode === "token") {
-      if (!curveState || protocolFeeBps === undefined) {
-        setError("Curve quote unavailable — try again.");
-        return;
-      }
-      const curve = bondingCurveStateFromTuple(curveState);
-      const { tokenOut } = quoteBuyFromCurveState(curve, protocolFeeBps, maxSpend);
-      if (tokenOut === 0n) {
-        setError("Could not quote max buy for this token.");
-        return;
-      }
-      let safeTokens = (tokenOut * TOKEN_MAX_SAFETY_BPS) / 10_000n;
-      const required = resolveBnbInForTokenOut(curve, protocolFeeBps, safeTokens);
-      if (required != null && required > maxSpend && safeTokens > 0n) {
-        safeTokens = (safeTokens * TOKEN_MAX_SAFETY_BPS) / 10_000n;
-      }
-      if (safeTokens === 0n) {
-        setError("Amount too small after gas reserve.");
-        return;
-      }
-      setAmount(formatTokenInputAmount(safeTokens));
+  function applyBuySpendWei(spendWei: bigint) {
+    if (spendWei <= 0n) {
+      setAmount("");
+      setLinkedBuySpendWei(null);
       setError(null);
       return;
     }
 
-    setAmount(formatAmountFromWei(maxSpend));
+    if (buyInputMode === "token") {
+      if (!bondingCurve || protocolFeeBps === undefined) return;
+      const { tokenOut } = quoteBuyFromCurveState(bondingCurve, protocolFeeBps, spendWei);
+      if (tokenOut === 0n) return;
+      setAmount(formatTokenInputAmount(tokenOut));
+      setLinkedBuySpendWei(spendWei);
+      setError(null);
+      return;
+    }
+
+    setAmount(formatAmountFromWei(spendWei));
+    setLinkedBuySpendWei(spendWei);
     setError(null);
   }
 
-  function toggleBuyInputMode() {
-    if (side !== "buy") return;
-    setBuyInputMode((mode) => {
+  function applyBuySliderPercent(pct: number) {
+    if (!isConnected) {
+      openConnectModal?.();
+      return;
+    }
+    if (wrongChain || paused || maxBuySpendWei === 0n) {
+      if (isConnected && maxBuySpendWei === 0n) {
+        setError("Not enough BNB left after gas.");
+      }
+      return;
+    }
+
+    const clamped = Math.max(0, Math.min(100, pct));
+    if (clamped === 0) {
+      applyBuySpendWei(0n);
+      return;
+    }
+
+    const spendWei =
+      clamped >= 100
+        ? maxBuySpendWei
+        : (maxBuySpendWei * BigInt(clamped)) / 100n;
+    applyBuySpendWei(spendWei);
+  }
+
+  function applySellTokenWei(tokenWei: bigint) {
+    if (tokenWei <= 0n) {
+      setAmount("");
+      setLinkedSellTokenWei(null);
+      setError(null);
+      return;
+    }
+
+    if (!bondingCurve || protocolFeeBps === undefined) return;
+
+    setLinkedSellTokenWei(tokenWei);
+
+    if (sellInputMode === "token") {
+      setAmount(formatTokenInputAmount(tokenWei));
+      setError(null);
+      return;
+    }
+
+    const { zugOut } = quoteSellFromCurveState(bondingCurve, protocolFeeBps, tokenWei);
+    if (zugOut === 0n) return;
+    setAmount(formatAmountFromWei(zugOut));
+    setError(null);
+  }
+
+  function applySellSliderPercent(pct: number) {
+    if (!isConnected) {
+      openConnectModal?.();
+      return;
+    }
+    if (wrongChain || paused || maxSellTokenWei === 0n) {
+      if (isConnected && maxSellTokenWei === 0n) {
+        setError("No token balance to sell.");
+      }
+      return;
+    }
+    if (bnbBalance !== undefined && bnbBalance.value < sellGasReserveWei) {
+      setError("Not enough BNB for gas.");
+      return;
+    }
+
+    const clamped = Math.max(0, Math.min(100, pct));
+    if (clamped === 0) {
+      applySellTokenWei(0n);
+      return;
+    }
+
+    const tokenWei =
+      clamped >= 100
+        ? maxSellTokenWei
+        : (maxSellTokenWei * BigInt(clamped)) / 100n;
+    applySellTokenWei(tokenWei);
+  }
+
+  function toggleInputMode() {
+    setAmount("");
+    setLinkedBuySpendWei(null);
+    setLinkedSellTokenWei(null);
+    setError(null);
+    if (side === "buy") {
+      setBuyInputMode((mode) => {
+        if (mode === "usd") return "bnb";
+        if (mode === "bnb") return "token";
+        return "usd";
+      });
+      return;
+    }
+    setSellInputMode((mode) => {
       if (mode === "usd") return "bnb";
       if (mode === "bnb") return "token";
       return "usd";
     });
-    setAmount("");
-    setError(null);
   }
 
   async function onSubmit(e: React.FormEvent) {
@@ -604,43 +891,42 @@ export function TradePanel({
       return;
     }
     if (side === "buy") {
-      if (buyInputMode === "token" && targetTokenWei === 0n) {
+      if (buyCostWei === 0n) {
         setError("Enter a valid amount.");
         return;
       }
-      if (buyInputMode !== "token" && buySpendWei === 0n) {
-        setError("Enter a valid amount.");
-        return;
-      }
-    } else if (targetTokenWei === 0n) {
+    } else if (sellTokenWei === 0n) {
       setError("Enter a valid amount.");
       return;
     }
 
     try {
       if (side === "buy") {
-        if (bnbBalance !== undefined && buyCostWei > bnbBalance.value) {
+        const submitValue = capSpendToBalance(
+          buyCostWei,
+          bnbBalance?.value,
+          buyGasReserveWei
+        );
+        if (submitValue === 0n) {
+          setError("Insufficient BNB for trade and gas.");
+          return;
+        }
+        if (bnbBalance !== undefined && submitValue + buyGasReserveWei > bnbBalance.value) {
+          setError("Insufficient BNB for trade and gas.");
           return;
         }
 
-        if (buyInputMode === "token") {
-          if (!resolvedBuyBnbWei) {
-            setError("Could not quote buy for this token amount.");
-            return;
-          }
-          setPendingAction("buy");
-          writeContract({
-            address: contracts.bondingCurveManager,
-            abi: bondingCurveManagerAbi,
-            functionName: "buy",
-            args: [tokenAddress, minOutWithSlippage(targetTokenWei)],
-            value: resolvedBuyBnbWei,
-            chainId: pumpChain.id,
-          });
+        if (!bondingCurve || protocolFeeBps === undefined) {
+          setError("Could not quote buy.");
           return;
         }
 
-        if (!buyQuote?.[0]) {
+        const { tokenOut } = quoteBuyFromCurveState(
+          bondingCurve,
+          protocolFeeBps,
+          submitValue
+        );
+        if (tokenOut === 0n) {
           setError("Could not quote buy. Try a smaller amount.");
           return;
         }
@@ -650,25 +936,30 @@ export function TradePanel({
           address: contracts.bondingCurveManager,
           abi: bondingCurveManagerAbi,
           functionName: "buy",
-          args: [tokenAddress, minOutWithSlippage(buyQuote[0])],
-          value: buySpendWei,
+          args: [tokenAddress, minOutWithSlippage(tokenOut)],
+          value: submitValue,
           chainId: pumpChain.id,
         });
         return;
       }
 
-      if (!sellQuote?.[0]) {
+      if (!sellQuoteOut) {
         setError("Could not quote sell. Try a smaller amount.");
         return;
       }
-      if (tokenBalance !== undefined && targetTokenWei > tokenBalance) {
+      if (tokenBalance !== undefined && sellTokenWei > tokenBalance) {
+        setError("Insufficient token balance.");
+        return;
+      }
+      if (bnbBalance !== undefined && bnbBalance.value < sellGasReserveWei) {
+        setError("Insufficient BNB for gas.");
         return;
       }
 
       if (needsApproval) {
         pendingSellRef.current = {
-          amountWei: targetTokenWei,
-          minBnbOut: minOutWithSlippage(sellQuote[0]),
+          amountWei: sellTokenWei,
+          minBnbOut: minOutWithSlippage(sellQuoteOut),
         };
         setPendingAction("approve");
         writeContract({
@@ -687,7 +978,7 @@ export function TradePanel({
         address: contracts.bondingCurveManager,
         abi: bondingCurveManagerAbi,
         functionName: "sell",
-        args: [tokenAddress, targetTokenWei, minOutWithSlippage(sellQuote[0])],
+        args: [tokenAddress, sellTokenWei, minOutWithSlippage(sellQuoteOut)],
         chainId: pumpChain.id,
       });
     } catch (err) {
@@ -703,7 +994,9 @@ export function TradePanel({
     : wrongChain
       ? "Switch to BSC Testnet"
       : insufficientBalance
-        ? "Insufficient balance"
+        ? insufficientSellGas && !insufficientSellTokenBalance
+          ? "Insufficient BNB for gas"
+          : "Insufficient balance"
         : side === "buy"
           ? isBusy
             ? "Buying…"
@@ -729,14 +1022,17 @@ export function TradePanel({
   const canUseMaxBuy =
     side === "buy" &&
     !paused &&
-    (!isConnected || (!wrongChain && bnbBalance !== undefined && bnbBalance.value > 0n));
+    (!isConnected || (!wrongChain && maxBuySpendWei > 0n));
 
-  const maxRevealClass =
-    "overflow-hidden whitespace-nowrap transition-[opacity,transform,max-width,padding,margin] duration-200 ease-out " +
-    "max-w-0 scale-95 px-0 opacity-0 ml-0 pointer-events-none " +
-    "max-md:group-focus-within/trade:max-w-[3.75rem] max-md:group-focus-within/trade:scale-100 max-md:group-focus-within/trade:px-2.5 max-md:group-focus-within/trade:opacity-100 max-md:group-focus-within/trade:ml-1.5 max-md:group-focus-within/trade:pointer-events-auto " +
-    "md:group-focus-within/trade:max-w-[3.75rem] md:group-focus-within/trade:scale-100 md:group-focus-within/trade:px-2.5 md:group-focus-within/trade:opacity-100 md:group-focus-within/trade:ml-1.5 md:group-focus-within/trade:pointer-events-auto " +
-    "md:group-hover/trade:max-w-[3.75rem] md:group-hover/trade:scale-100 md:group-hover/trade:px-2.5 md:group-hover/trade:opacity-100 md:group-hover/trade:ml-1.5 md:group-hover/trade:pointer-events-auto";
+  const canUseMaxSell =
+    side === "sell" &&
+    !paused &&
+    (!isConnected || (!wrongChain && maxSellTokenWei > 0n));
+
+  const sliderPct = side === "buy" ? buySliderPct : sellSliderPct;
+  const sliderFillPct = side === "buy" ? buySliderFillPct : sellSliderFillPct;
+  const canUseSlider = side === "buy" ? canUseMaxBuy : canUseMaxSell;
+  const applySliderPercent = side === "buy" ? applyBuySliderPercent : applySellSliderPercent;
 
   return (
     <section
@@ -749,6 +1045,8 @@ export function TradePanel({
             onClick={() => {
               setSide("buy");
               setAmount("");
+              setLinkedBuySpendWei(null);
+              setLinkedSellTokenWei(null);
               setError(null);
             }}
             className={
@@ -764,6 +1062,8 @@ export function TradePanel({
             onClick={() => {
               setSide("sell");
               setAmount("");
+              setLinkedBuySpendWei(null);
+              setLinkedSellTokenWei(null);
               setError(null);
             }}
             className={
@@ -779,15 +1079,15 @@ export function TradePanel({
         {paused ? (
           <p className="notice-warning mx-4 mt-2 text-caption">Trading is paused on this curve.</p>
         ) : null}
-        <div className="group/trade px-4 pt-4 pb-0">
+        <div className="px-4 pt-4 pb-0">
           <div className="flex justify-center">
             <div className="inline-flex max-w-full items-baseline flex-nowrap gap-2">
               <div
                 className={
-                  side === "buy" && buyInputMode === "usd" ? "relative shrink-0 pl-3.5 md:pl-4" : "shrink-0"
+                  activeInputMode === "usd" ? "relative shrink-0 pl-3.5 md:pl-4" : "shrink-0"
                 }
               >
-                {side === "buy" && buyInputMode === "usd" ? (
+                {activeInputMode === "usd" ? (
                   <span
                     className="financial-value absolute bottom-[0.22em] left-0 text-body-sm font-medium leading-none text-pump-muted md:text-body"
                     aria-hidden
@@ -810,18 +1110,23 @@ export function TradePanel({
                     width: `${Math.min(Math.max(displayInputValue.length || 1, 1), 10)}ch`,
                   }}
                   className="financial-value min-w-[1ch] max-w-[10ch] bg-transparent p-0 text-[2.5rem] font-semibold leading-none text-pump-text outline-none placeholder:text-pump-muted/45 md:text-[2.75rem]"
-                  aria-label={side === "buy" ? "Trade amount" : `Amount in ${symbol}`}
+                  aria-label={
+                    side === "buy"
+                      ? "Trade amount"
+                      : sellInputMode === "token"
+                        ? `Amount in ${symbol}`
+                        : "Expected receive amount"
+                  }
                 />
               </div>
               <button
                 type="button"
-                onClick={toggleBuyInputMode}
-                disabled={side === "sell"}
-                className="inline-flex shrink-0 items-center gap-0.5 whitespace-nowrap text-caption leading-none text-pump-muted transition hover:text-pump-text disabled:opacity-40"
+                onClick={toggleInputMode}
+                className="inline-flex shrink-0 items-center gap-0.5 whitespace-nowrap text-caption leading-none text-pump-muted transition hover:text-pump-text"
                 aria-label="Toggle input currency"
               >
                 {currencyLabel}
-                {side === "buy" ? <SwapArrowsIcon /> : null}
+                <SwapArrowsIcon />
               </button>
             </div>
           </div>
@@ -832,64 +1137,51 @@ export function TradePanel({
             </p>
           ) : null}
 
-          {side === "buy" ? (
-            <div className="mt-3 flex justify-center pb-3">
-              <div className="inline-flex max-w-full items-center justify-center">
-                {buyInputMode !== "token" ? (
-                  <div className="inline-flex items-center gap-2 md:gap-3">
-                    {buyInputMode === "usd"
-                      ? QUICK_USD_AMOUNTS.map((usd) => (
-                          <button
-                            key={usd}
-                            type="button"
-                            onClick={() => setQuickUsd(usd)}
-                            disabled={!bnbUsd}
-                            className="chip-button-quick shrink-0 disabled:opacity-40"
-                          >
-                            ${usd}
-                          </button>
-                        ))
-                      : QUICK_BNB_AMOUNTS.map((bnb) => (
-                          <button
-                            key={bnb}
-                            type="button"
-                            onClick={() => setQuickBnb(bnb)}
-                            className="chip-button-quick shrink-0 whitespace-nowrap"
-                          >
-                            {bnb}&nbsp;BNB
-                          </button>
-                        ))}
-                  </div>
-                ) : null}
-                <button
-                  type="button"
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => void onUseMaxBuy()}
-                  disabled={!canUseMaxBuy}
-                  className={`chip-button-quick shrink-0 text-caption disabled:opacity-40 ${maxRevealClass}`}
-                >
-                  Max
-                </button>
-              </div>
+          <div className="mt-3 flex items-center gap-2.5 pb-3">
+            <div className="relative min-w-0 flex-1 pt-1">
+              <div
+                className="pointer-events-none absolute top-1/2 h-1 w-full -translate-y-1/2 rounded-full bg-pump-border/25"
+                aria-hidden
+              />
+              <div
+                className={`pointer-events-none absolute top-1/2 h-1 -translate-y-1/2 rounded-full transition-[width] duration-75 ${
+                  side === "buy" ? "bg-pump-accent/70" : "bg-pump-danger/70"
+                }`}
+                style={{ width: `${sliderFillPct}%` }}
+                aria-hidden
+              />
+              <input
+                type="range"
+                min={0}
+                max={100}
+                step={1}
+                value={sliderPct}
+                onChange={(e) => applySliderPercent(Number(e.target.value))}
+                disabled={!canUseSlider}
+                className={`trade-amount-slider relative z-[1] w-full disabled:opacity-40 ${
+                  side === "sell" ? "trade-amount-slider-danger" : ""
+                }`}
+                aria-label={side === "buy" ? "Buy amount slider" : "Sell amount slider"}
+                aria-valuetext={
+                  sliderPct >= 100
+                    ? "Max"
+                    : `${sliderPct}% of ${side === "buy" ? "wallet balance" : "token balance"}`
+                }
+              />
             </div>
-          ) : null}
-        </div>
-
-        {side === "sell" ? (
-          <div className="mt-3 flex items-center justify-center gap-10 px-4 pb-3">
-            {QUICK_SELL_PERCENTAGES.map((pct) => (
-              <button
-                key={pct}
-                type="button"
-                onClick={() => setQuickSellPercent(pct)}
-                disabled={tokenBalance === undefined || tokenBalance === 0n}
-                className="chip-button-quick chip-button-quick-danger disabled:opacity-40"
-              >
-                {pct}%
-              </button>
-            ))}
+            <button
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => applySliderPercent(100)}
+              disabled={!canUseSlider}
+              className={`shrink-0 text-caption font-semibold text-pump-muted transition disabled:opacity-40 ${
+                side === "buy" ? "hover:text-pump-accent" : "hover:text-pump-danger"
+              }`}
+            >
+              Max
+            </button>
           </div>
-        ) : null}
+        </div>
 
         {hasTradeAmount ? (
           <div className="px-4 pb-4 pt-1">
@@ -915,9 +1207,7 @@ export function TradePanel({
                 <div className="flex items-center justify-between gap-3 text-pump-muted">
                   <span>Est. gas</span>
                   <span className="financial-value text-pump-text">
-                    {gasLoading && gasCostWei === null
-                      ? "…"
-                      : gasCostLabel ?? (gasLoading ? "…" : "—")}
+                    {gasCostLabel}
                   </span>
                 </div>
               </div>

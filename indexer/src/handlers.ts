@@ -1,8 +1,10 @@
 import pg from "pg";
 import type { Hash, PublicClient } from "viem";
+import { withTransaction } from "./db.js";
 import { dbAddress, eventId, ratioWeiToDecimal, weiToDecimal } from "./utils.js";
 import { PointsBridge, TASK_KEYS } from "./points.js";
-import { recomputeKing } from "./king.js";
+import { recomputeKingAfterTrade } from "./king.js";
+import { publishTrade } from "./redis-publish.js";
 import { FIRST_SMART_BUY_MIN_WEI, VOLUME_MONSTER_MIN_BNB } from "./mission-thresholds.js";
 
 type ParsedLaunchpadLog = {
@@ -173,72 +175,136 @@ export class LaunchpadEventHandlers {
     const side = isBuy ? "BUY" : "SELL";
     const price = ratioWeiToDecimal(zugAmount, tokenAmount);
 
-    const inserted = await this.context.launchpadPool.query<{ id: string }>(
-      `
-        WITH inserted_trade AS (
-          INSERT INTO trades (
-            event_id,
-            token_address,
-            trader_address,
-            side,
-            zug_amount,
-            token_amount,
-            price_zug,
-            fee_zug,
-            creator_fee_zug,
-            treasury_fee_zug,
-            tx_hash,
-            log_index,
-            block_number,
-            block_time
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
-          ON CONFLICT (tx_hash, log_index) DO NOTHING
-          RETURNING id
-        )
-        SELECT id FROM inserted_trade
-      `,
-      [
-        tradeEventId,
-        token,
-        trader,
-        side,
-        weiToDecimal(zugAmount),
-        weiToDecimal(tokenAmount),
-        price,
-        weiToDecimal(feeZug),
-        weiToDecimal(feeSplit.creatorFee),
-        weiToDecimal(feeSplit.treasuryFee),
-        txHash.toLowerCase(),
-        logIndex,
-        log.blockNumber.toString(),
-        blockTime
-      ]
-    );
+    const tradeResult = await withTransaction(this.context.launchpadPool, async (client) => {
+      const inserted = await client.query<{ id: string }>(
+        `
+          WITH inserted_trade AS (
+            INSERT INTO trades (
+              event_id,
+              token_address,
+              trader_address,
+              side,
+              zug_amount,
+              token_amount,
+              price_zug,
+              fee_zug,
+              creator_fee_zug,
+              treasury_fee_zug,
+              tx_hash,
+              log_index,
+              block_number,
+              block_time
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+            ON CONFLICT (tx_hash, log_index) DO NOTHING
+            RETURNING id
+          )
+          SELECT id FROM inserted_trade
+        `,
+        [
+          tradeEventId,
+          token,
+          trader,
+          side,
+          weiToDecimal(zugAmount),
+          weiToDecimal(tokenAmount),
+          price,
+          weiToDecimal(feeZug),
+          weiToDecimal(feeSplit.creatorFee),
+          weiToDecimal(feeSplit.treasuryFee),
+          txHash.toLowerCase(),
+          logIndex,
+          log.blockNumber.toString(),
+          blockTime
+        ]
+      );
 
-    if (!inserted.rowCount) return;
+      if (!inserted.rowCount || !inserted.rows[0]) return null;
 
-    await this.context.launchpadPool.query(
-      `
-        UPDATE bonding_states
-        SET reserve_zug = $2,
-            token_sold = $3,
-            progress_bps = LEAST(
-              10000,
-              floor(($2::numeric / NULLIF(target_zug, 0)) * 10000)::integer
-            ),
-            last_price_zug = $4,
-            market_cap_zug = $4::numeric * 1000000000,
-            trade_count = trade_count + 1,
-            updated_at = now()
-        WHERE token_address = $1
-      `,
-      [token, weiToDecimal(reserveZug), weiToDecimal(soldTokens), price]
-    );
+      const prevBalance = await client.query<{ token_balance: string }>(
+        `
+          SELECT token_balance::text
+          FROM user_positions
+          WHERE token_address = $1 AND address = $2
+        `,
+        [token, trader]
+      );
+      const oldBalance = Number(prevBalance.rows[0]?.token_balance ?? 0);
 
-    await this.updateUserAggregates(token, trader, isBuy, zugAmount, tokenAmount);
-    await this.updateHolderCount(token);
+      await client.query(
+        `
+          UPDATE bonding_states
+          SET reserve_zug = $2,
+              token_sold = $3,
+              progress_bps = LEAST(
+                10000,
+                floor(($2::numeric / NULLIF(target_zug, 0)) * 10000)::integer
+              ),
+              last_price_zug = $4,
+              market_cap_zug = $4::numeric * 1000000000,
+              trade_count = trade_count + 1,
+              updated_at = now()
+          WHERE token_address = $1
+        `,
+        [token, weiToDecimal(reserveZug), weiToDecimal(soldTokens), price]
+      );
+
+      await this.updateUserAggregates(client, token, trader, isBuy, zugAmount, tokenAmount);
+      await this.updateHolderCountIncremental(client, token, trader, oldBalance);
+
+      const bonding = await client.query<{
+        reserve_zug: string;
+        market_cap_zug: string;
+        last_price_zug: string;
+        progress_bps: number;
+        trade_count: number;
+        holder_count: number;
+      }>(
+        `
+          SELECT reserve_zug::text, market_cap_zug::text, last_price_zug::text,
+                 progress_bps, trade_count, holder_count
+          FROM bonding_states
+          WHERE token_address = $1
+        `,
+        [token]
+      );
+
+      const b = bonding.rows[0];
+      if (!b) return null;
+
+      return {
+        tradeId: inserted.rows[0].id,
+        bonding: b,
+      };
+    });
+
+    if (!tradeResult) return;
+
     await this.awardTradeMissions(token, trader, isBuy, zugAmount, tradeEventId, txHash, blockTime);
-    await recomputeKing(this.context, blockTime, txHash);
+    await recomputeKingAfterTrade(this.context, blockTime, txHash, token);
+
+    await publishTrade({
+      type: "trade",
+      tokenAddress: token,
+      trade: {
+        id: tradeResult.tradeId,
+        side,
+        traderAddress: trader,
+        zugAmount: weiToDecimal(zugAmount),
+        tokenAmount: weiToDecimal(tokenAmount),
+        priceZug: price,
+        txHash: txHash.toLowerCase(),
+        logIndex,
+        blockTime: blockTime.toISOString(),
+      },
+      bonding: {
+        reserveZug: tradeResult.bonding.reserve_zug,
+        marketCapZug: tradeResult.bonding.market_cap_zug,
+        lastPriceZug: tradeResult.bonding.last_price_zug,
+        progressBps: tradeResult.bonding.progress_bps,
+        tradeCount: tradeResult.bonding.trade_count,
+        holderCount: tradeResult.bonding.holder_count,
+      },
+    });
   }
 
   private handleFeeSplit(log: ParsedLaunchpadLog): void {
@@ -531,13 +597,14 @@ export class LaunchpadEventHandlers {
   }
 
   private async updateUserAggregates(
+    client: pg.Pool | pg.PoolClient,
     token: string,
     trader: string,
     isBuy: boolean,
     zugAmount: bigint,
     tokenAmount: bigint
   ): Promise<void> {
-    await this.context.launchpadPool.query(
+    await client.query(
       `
         INSERT INTO user_positions (
           token_address,
@@ -566,7 +633,7 @@ export class LaunchpadEventHandlers {
       [token, trader, isBuy, weiToDecimal(tokenAmount), weiToDecimal(zugAmount)]
     );
 
-    await this.context.launchpadPool.query(
+    await client.query(
       `
         INSERT INTO user_volumes (
           address,
@@ -594,6 +661,49 @@ export class LaunchpadEventHandlers {
     );
   }
 
+  private async updateHolderCountIncremental(
+    client: pg.PoolClient,
+    token: string,
+    trader: string,
+    oldBalance: number
+  ): Promise<void> {
+    const nextBalance = await client.query<{ token_balance: string }>(
+      `
+        SELECT token_balance::text
+        FROM user_positions
+        WHERE token_address = $1 AND address = $2
+      `,
+      [token, trader]
+    );
+    const newBalance = Number(nextBalance.rows[0]?.token_balance ?? 0);
+
+    if (oldBalance <= 0 && newBalance > 0) {
+      await client.query(
+        `
+          UPDATE bonding_states
+          SET holder_count = holder_count + 1,
+              updated_at = now()
+          WHERE token_address = $1
+        `,
+        [token]
+      );
+      return;
+    }
+
+    if (oldBalance > 0 && newBalance <= 0) {
+      await client.query(
+        `
+          UPDATE bonding_states
+          SET holder_count = GREATEST(holder_count - 1, 0),
+              updated_at = now()
+          WHERE token_address = $1
+        `,
+        [token]
+      );
+    }
+  }
+
+  /** @deprecated full scan — use updateHolderCountIncremental in trade path */
   private async updateHolderCount(token: string): Promise<void> {
     await this.context.launchpadPool.query(
       `

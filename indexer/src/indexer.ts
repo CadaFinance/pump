@@ -15,6 +15,8 @@ import {
 } from "./abi.js";
 import { LaunchpadEventHandlers } from "./handlers.js";
 import { PointsBridge } from "./points.js";
+import { scheduleMvRefresh } from "./mv-refresh.js";
+import { closeRedis } from "./redis-publish.js";
 
 type IndexedContract = {
   address: Address;
@@ -82,6 +84,7 @@ async function main(): Promise<void> {
     const toBlock = minBigInt(safeBlock, fromBlock + config.chunkSize - 1n);
     await processRangeAdaptive(contracts, handlers, fromBlock, toBlock);
     await updateIndexerState(pools.launchpad, config.stateKey, toBlock);
+    scheduleMvRefresh(pools.launchpad);
 
     console.log(`indexed blocks ${fromBlock.toString()}-${toBlock.toString()}`);
 
@@ -210,5 +213,6 @@ main()
     process.exitCode = 1;
   })
   .finally(async () => {
+    await closeRedis();
     await closePools(pools);
   });

@@ -230,6 +230,36 @@ export type BondingCurveState = {
   virtualTokenReserve: bigint;
 };
 
+/** JSON-safe curve fields for passing between client components. */
+export type BondingCurveSnapshot = {
+  reserveZug: string;
+  soldTokens: string;
+  virtualZugReserve: string;
+  virtualTokenReserve: string;
+  paused: boolean;
+};
+
+export function bondingCurveFromSnapshot(snapshot: BondingCurveSnapshot): BondingCurveState {
+  return {
+    reserveZug: BigInt(snapshot.reserveZug),
+    soldTokens: BigInt(snapshot.soldTokens),
+    virtualZugReserve: BigInt(snapshot.virtualZugReserve),
+    virtualTokenReserve: BigInt(snapshot.virtualTokenReserve),
+  };
+}
+
+export function bondingCurveSnapshotFromTuple(
+  tuple: readonly [unknown, unknown, bigint, bigint, bigint, bigint, bigint, boolean, boolean, boolean]
+): BondingCurveSnapshot {
+  return {
+    reserveZug: tuple[2].toString(),
+    soldTokens: tuple[3].toString(),
+    virtualZugReserve: tuple[5].toString(),
+    virtualTokenReserve: tuple[6].toString(),
+    paused: tuple[9],
+  };
+}
+
 export function bondingCurveStateFromTuple(
   tuple: readonly [unknown, unknown, bigint, bigint, bigint, bigint, bigint, boolean, boolean, boolean]
 ): BondingCurveState {
@@ -258,6 +288,27 @@ export function quoteBuyFromCurveState(
   const k = x0 * y0;
   const y1 = k / (x0 + netZug);
   return { tokenOut: y0 - y1, feeZug };
+}
+
+/** Same math as BondingCurveManager.quoteSell — runs locally, no RPC. */
+export function quoteSellFromCurveState(
+  curve: BondingCurveState,
+  protocolFeeBps: bigint,
+  tokenIn: bigint
+): { zugOut: bigint; feeZug: bigint } {
+  if (tokenIn <= 0n) return { zugOut: 0n, feeZug: 0n };
+
+  const x0 = curve.virtualZugReserve + curve.reserveZug;
+  const y0 = curve.virtualTokenReserve - curve.soldTokens;
+  if (y0 === 0n) return { zugOut: 0n, feeZug: 0n };
+
+  const k = x0 * y0;
+  const x1 = k / (y0 + tokenIn);
+  let grossZugOut = x0 - x1;
+  if (grossZugOut > curve.reserveZug) grossZugOut = curve.reserveZug;
+
+  const feeZug = (grossZugOut * protocolFeeBps) / BPS;
+  return { zugOut: grossZugOut - feeZug, feeZug };
 }
 
 /**
@@ -289,6 +340,43 @@ export function resolveBnbInForTokenOut(
     const { tokenOut } = quoteBuyFromCurveState(curve, protocolFeeBps, zugIn);
     if (tokenOut >= targetTokenOut) return zugIn;
     zugIn += 1n;
+  }
+
+  return null;
+}
+
+/**
+ * Inverse of quoteSell: token amount required to receive at least `targetZugOut` BNB.
+ */
+export function resolveTokenInForBnbOut(
+  curve: BondingCurveState,
+  protocolFeeBps: bigint,
+  targetZugOut: bigint
+): bigint | null {
+  if (targetZugOut <= 0n) return null;
+
+  const x0 = curve.virtualZugReserve + curve.reserveZug;
+  const y0 = curve.virtualTokenReserve - curve.soldTokens;
+  if (y0 === 0n || x0 === 0n) return null;
+
+  const feeMultiplier = BPS - protocolFeeBps;
+  if (feeMultiplier <= 0n) return null;
+
+  let grossNeeded = (targetZugOut * BPS + feeMultiplier - 1n) / feeMultiplier;
+  if (grossNeeded > curve.reserveZug) grossNeeded = curve.reserveZug;
+  if (grossNeeded <= 0n || grossNeeded >= x0) return null;
+
+  const k = x0 * y0;
+  const x1 = x0 - grossNeeded;
+  if (x1 <= 0n) return null;
+
+  let tokenIn = k / x1 - y0;
+  if (tokenIn <= 0n) return null;
+
+  for (let i = 0; i < 8; i++) {
+    const { zugOut } = quoteSellFromCurveState(curve, protocolFeeBps, tokenIn);
+    if (zugOut >= targetZugOut) return tokenIn;
+    tokenIn += 1n;
   }
 
   return null;

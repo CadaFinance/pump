@@ -302,6 +302,77 @@ code,
     color: rgb(var(--pump-muted) / 0.76);
   }
 
+  .trade-amount-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    height: 1.25rem;
+    background: transparent;
+    cursor: pointer;
+  }
+
+  .trade-amount-slider:disabled {
+    cursor: not-allowed;
+  }
+
+  .trade-amount-slider::-webkit-slider-runnable-track {
+    height: 4px;
+    background: transparent;
+  }
+
+  .trade-amount-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 1rem;
+    height: 1rem;
+    margin-top: -6px;
+    border-radius: 9999px;
+    border: 2px solid rgb(var(--pump-accent));
+    background: rgb(var(--pump-bg));
+    box-shadow: 0 0 0 1px rgb(var(--pump-border) / 0.2);
+    transition: transform 0.12s ease, box-shadow 0.12s ease;
+  }
+
+  .trade-amount-slider:active::-webkit-slider-thumb {
+    transform: scale(1.08);
+    box-shadow: 0 0 0 4px rgb(var(--pump-accent) / 0.18);
+  }
+
+  .trade-amount-slider::-moz-range-track {
+    height: 4px;
+    background: transparent;
+    border: none;
+  }
+
+  .trade-amount-slider::-moz-range-thumb {
+    width: 1rem;
+    height: 1rem;
+    border-radius: 9999px;
+    border: 2px solid rgb(var(--pump-accent));
+    background: rgb(var(--pump-bg));
+    box-shadow: 0 0 0 1px rgb(var(--pump-border) / 0.2);
+    transition: transform 0.12s ease, box-shadow 0.12s ease;
+  }
+
+  .trade-amount-slider:active::-moz-range-thumb {
+    transform: scale(1.08);
+  }
+
+  .trade-amount-slider-danger::-webkit-slider-thumb {
+    border-color: rgb(var(--pump-danger));
+  }
+
+  .trade-amount-slider-danger:active::-webkit-slider-thumb {
+    box-shadow: 0 0 0 4px rgb(var(--pump-danger) / 0.18);
+  }
+
+  .trade-amount-slider-danger::-moz-range-thumb {
+    border-color: rgb(var(--pump-danger));
+  }
+
+  .trade-amount-slider-danger:active::-moz-range-thumb {
+    box-shadow: 0 0 0 4px rgb(var(--pump-danger) / 0.18);
+  }
+
   html:not([data-theme="dark"]) .secondary-button {
     color: rgb(var(--pump-muted) / 0.88);
   }

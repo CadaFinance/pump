@@ -1,0 +1,6 @@
+# Add inside http { } for high concurrency
+worker_connections 4096;
+
+# Rate limits (optional — tune per traffic)
+# limit_req_zone $binary_remote_addr zone=api_limit:10m rate=30r/s;
+# limit_conn_zone $binary_remote_addr zone=ws_conn:10m;

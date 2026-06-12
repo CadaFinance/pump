@@ -24,12 +24,14 @@ type CreatorRewardsCardProps = {
   creatorAddress: string;
   launchTxHash: string;
   followerCount: number;
+  onAddressClick?: (address: string) => void;
 };
 
 export function CreatorRewardsCard({
   creatorAddress,
   launchTxHash,
   followerCount,
+  onAddressClick,
 }: CreatorRewardsCardProps) {
   const { address } = useAccount();
   const { isFollowing, toggleFollow } = useCreatorFollows();
@@ -55,27 +57,35 @@ export function CreatorRewardsCard({
       </div>
 
       <div className="mt-3 flex items-center gap-3">
-        <UserAvatarForAddress address={creatorAddress} size={44} />
-        <div className="min-w-0 flex-1">
-          <div className="flex min-w-0 items-center gap-2">
-            <span className="truncate text-body-sm font-semibold financial-value text-pump-text">
-              {shortAddress(creatorAddress)}
-            </span>
-            <span className="shrink-0 rounded-full bg-pump-accent/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-pump-accent">
-              Creator
-            </span>
-          </div>
-          <div className="mt-0.5 flex items-center gap-1.5 text-caption font-medium text-pump-success">
-            <MoneyBagIcon />
-            <span>{CREATOR_FEE_SHARE_PCT}%</span>
-            {followerCount > 0 ? (
-              <span className="text-pump-muted">
-                · {followerCount.toLocaleString()} follower
-                {followerCount === 1 ? "" : "s"}
+        <button
+          type="button"
+          onClick={() => onAddressClick?.(creatorAddress)}
+          disabled={!onAddressClick}
+          className="flex min-w-0 flex-1 items-center gap-3 text-left transition hover:opacity-90 disabled:cursor-default disabled:hover:opacity-100"
+          aria-label={`View creator profile ${shortAddress(creatorAddress)}`}
+        >
+          <UserAvatarForAddress address={creatorAddress} size={44} />
+          <div className="min-w-0 flex-1">
+            <div className="flex min-w-0 items-center gap-2">
+              <span className="truncate text-body-sm font-semibold financial-value text-pump-text">
+                {shortAddress(creatorAddress)}
               </span>
-            ) : null}
+              <span className="shrink-0 rounded-full bg-pump-accent/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-pump-accent">
+                Creator
+              </span>
+            </div>
+            <div className="mt-0.5 flex items-center gap-1.5 text-caption font-medium text-pump-success">
+              <MoneyBagIcon />
+              <span>{CREATOR_FEE_SHARE_PCT}%</span>
+              {followerCount > 0 ? (
+                <span className="text-pump-muted">
+                  · {followerCount.toLocaleString()} follower
+                  {followerCount === 1 ? "" : "s"}
+                </span>
+              ) : null}
+            </div>
           </div>
-        </div>
+        </button>
 
         {!isSelf ? (
           <button

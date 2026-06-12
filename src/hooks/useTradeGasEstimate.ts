@@ -6,8 +6,8 @@ import { bondingCurveManagerAbi, minOutWithSlippage } from "@/lib/bonding-curve"
 
 const ESTIMATE_DEBOUNCE_MS = 120;
 export const BUY_GAS_FALLBACK = 130_000n;
-const SELL_GAS_FALLBACK = 150_000n;
-const APPROVE_GAS_FALLBACK = 55_000n;
+export const SELL_GAS_FALLBACK = 150_000n;
+export const APPROVE_GAS_FALLBACK = 55_000n;
 
 type Side = "buy" | "sell";
 type BuyInputMode = "usd" | "bnb" | "token";

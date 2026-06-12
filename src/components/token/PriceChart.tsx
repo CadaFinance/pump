@@ -35,6 +35,7 @@ type PriceChartProps = {
   symbol: string;
   status: string;
   optimisticTrades?: TradeItem[];
+  wsConnected?: boolean;
   bnbUsd?: number | null;
   currentPriceUsd?: number | null;
   currentMcapUsd?: number | null;
@@ -45,6 +46,7 @@ type PriceChartProps = {
 };
 
 const POLL_MS = 4_000;
+const WS_FALLBACK_POLL_MS = 30_000;
 const VOLUME_SCALE_ID = "volume";
 
 function cssVar(name: string, fallback: string): string {
@@ -82,6 +84,7 @@ export function PriceChart({
   symbol,
   status,
   optimisticTrades = [],
+  wsConnected = false,
   bnbUsd = null,
   currentPriceUsd = null,
   currentMcapUsd = null,
@@ -143,9 +146,10 @@ export function PriceChart({
 
   useEffect(() => {
     if (frozen) return;
-    const timer = setInterval(() => void fetchChartTrades(), POLL_MS);
+    const pollMs = wsConnected ? WS_FALLBACK_POLL_MS : POLL_MS;
+    const timer = setInterval(() => void fetchChartTrades(), pollMs);
     return () => clearInterval(timer);
-  }, [fetchChartTrades, frozen]);
+  }, [fetchChartTrades, frozen, wsConnected]);
 
   useEffect(() => {
     if (frozen) return;

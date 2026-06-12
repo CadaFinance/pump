@@ -14,6 +14,7 @@ import {
   formatSignedPct,
   pctTone,
 } from "@/lib/arena-board-format";
+import { useLiveChannel, resolveLivePollDelay } from "@/hooks/useLiveChannel";
 
 type FlashTone = "up" | "down";
 type BoardFilter = "all" | "new" | "highVol" | "movers" | "kothContenders" | "favorites";
@@ -284,11 +285,38 @@ export function ArenaListClient() {
     }
   }, [getComparableValues, triggerFlash]);
 
+  const loadRef = useRef(load);
+  loadRef.current = load;
+
+  const { connected: wsConnected } = useLiveChannel({
+    room: "arena",
+    onMessage: (message) => {
+      const payload = message as { type?: string };
+      if (
+        payload.type === "trade" ||
+        payload.type === "board_delta" ||
+        payload.type === "koth"
+      ) {
+        void loadRef.current();
+      }
+    },
+  });
+
   useEffect(() => {
     void load();
-    const timer = window.setInterval(() => void load(), 4000);
+    let timer: number | null = null;
+
+    const schedule = () => {
+      const delay = resolveLivePollDelay(wsConnected, false);
+      timer = window.setTimeout(() => {
+        void load().finally(schedule);
+      }, delay);
+    };
+
+    schedule();
+
     return () => {
-      window.clearInterval(timer);
+      if (timer) window.clearTimeout(timer);
       const timers = Object.values(flashTimersRef.current);
       for (const t of timers) clearTimeout(t);
       flashTimersRef.current = {};
@@ -296,7 +324,7 @@ export function ArenaListClient() {
       for (const frame of frames) cancelAnimationFrame(frame);
       capAnimFrameRef.current = {};
     };
-  }, [load]);
+  }, [load, wsConnected]);
 
   useEffect(() => {
     if (!tokens) return;

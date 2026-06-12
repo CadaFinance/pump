@@ -196,3 +196,84 @@ export async function recomputeKing(
     client.release();
   }
 }
+
+async function getTokenMcap(pool: pg.Pool, tokenAddress: string): Promise<TopToken | null> {
+  const result = await pool.query<{
+    token_address: string;
+    creator_address: string;
+    market_cap_zug: string;
+    holder_count: number;
+    trade_count: number;
+  }>(
+    `
+      SELECT
+        t.address AS token_address,
+        t.creator_address,
+        COALESCE(b.market_cap_zug, 0)::text AS market_cap_zug,
+        COALESCE(b.holder_count, 0) AS holder_count,
+        COALESCE(b.trade_count, 0) AS trade_count
+      FROM tokens t
+      LEFT JOIN bonding_states b ON b.token_address = t.address
+      WHERE t.address = $1
+        AND t.is_hidden = false
+        AND t.status = 'BONDING'
+    `,
+    [tokenAddress]
+  );
+
+  const row = result.rows[0];
+  if (!row || Number(row.trade_count) <= 0) return null;
+
+  return {
+    tokenAddress: row.token_address,
+    creatorAddress: row.creator_address,
+    marketCapBnb: Number(row.market_cap_zug),
+    holderCount: row.holder_count,
+    tradeCount: row.trade_count,
+  };
+}
+
+async function getActiveKingMcap(pool: pg.Pool): Promise<{ tokenAddress: string; marketCapBnb: number } | null> {
+  const result = await pool.query<{ token_address: string; market_cap_zug: string }>(
+    `
+      SELECT
+        kh.token_address,
+        COALESCE(b.market_cap_zug, 0)::text AS market_cap_zug
+      FROM king_history kh
+      JOIN bonding_states b ON b.token_address = kh.token_address
+      WHERE kh.dethroned_at IS NULL
+      ORDER BY kh.crowned_at DESC
+      LIMIT 1
+    `
+  );
+
+  const row = result.rows[0];
+  if (!row) return null;
+
+  return {
+    tokenAddress: row.token_address,
+    marketCapBnb: Number(row.market_cap_zug),
+  };
+}
+
+/** Skip full scan when traded token cannot dethrone current king. */
+export async function recomputeKingAfterTrade(
+  ctx: KingContext,
+  blockTime: Date,
+  txHash: Hash,
+  tradedTokenAddress: string
+): Promise<void> {
+  const traded = await getTokenMcap(ctx.launchpadPool, tradedTokenAddress);
+  if (!traded) return;
+
+  const activeKing = await getActiveKingMcap(ctx.launchpadPool);
+  if (
+    activeKing &&
+    activeKing.tokenAddress !== traded.tokenAddress &&
+    traded.marketCapBnb <= activeKing.marketCapBnb
+  ) {
+    return;
+  }
+
+  await recomputeKing(ctx, blockTime, txHash);
+}

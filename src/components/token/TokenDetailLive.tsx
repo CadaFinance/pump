@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { createPublicClient, http } from "viem";
 import { useReadContract } from "wagmi";
 import type { TokenDetail, TradeItem } from "@/lib/db/launchpad";
-import { bondingCurveManagerAbi, displayTokenPriceBnb } from "@/lib/bonding-curve";
+import { bondingCurveManagerAbi, bondingCurveSnapshotFromTuple, displayTokenPriceBnb } from "@/lib/bonding-curve";
 import {
   DEFAULT_TOKEN_TOTAL_SUPPLY,
   estimateFdvUsd,
@@ -41,6 +41,7 @@ import { CreatorRewardsCard } from "@/components/creators/CreatorRewardsCard";
 import { TokenSocialLinksBar } from "@/components/token/TokenSocialLinksBar";
 import { UserAvatarForAddress } from "@/components/user/UserAvatarForAddress";
 import { hasSocialLinks } from "@/lib/token-social";
+import { useLiveChannel, resolveLivePollDelay } from "@/hooks/useLiveChannel";
 
 const POLL_MS = 4_000;
 const BURST_POLL_MS = 1_500;
@@ -235,13 +236,19 @@ export function TokenDetailLive({
     args: [tokenAddress as `0x${string}`],
     chainId: pumpChain.id,
     query: {
-      refetchInterval: hasLivePending ? 2_000 : false,
+      refetchInterval: hasLivePending ? BURST_POLL_MS : POLL_MS,
     },
   });
 
   const liveToken = useMemo(
     () => mergeLiveStats(token, chainCurve as CurveTuple | undefined, trades),
     [token, chainCurve, trades]
+  );
+
+  const chainCurveSnapshot = useMemo(
+    () =>
+      chainCurve ? bondingCurveSnapshotFromTuple(chainCurve as CurveTuple) : undefined,
+    [chainCurve]
   );
 
   const fetchLive = useCallback(async () => {
@@ -285,15 +292,32 @@ export function TokenDetailLive({
     }
   }, [tokenAddress, refetchCurve]);
 
+  const fetchLiveRef = useRef(fetchLive);
+  fetchLiveRef.current = fetchLive;
+
+  const { connected: wsConnected } = useLiveChannel({
+    room: `token:${tokenAddress.toLowerCase()}`,
+    onMessage: (message) => {
+      const payload = message as { type?: string };
+      if (payload.type === "trade" || payload.type === "board_delta") {
+        void fetchLiveRef.current();
+      }
+    },
+  });
+
   const schedulePoll = useCallback(() => {
     if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
 
-    const delay = Date.now() < burstUntilRef.current ? BURST_POLL_MS : POLL_MS;
+    const delay = resolveLivePollDelay(
+      wsConnected,
+      hasLivePending,
+      burstUntilRef.current
+    );
     pollTimerRef.current = setTimeout(async () => {
       await fetchLive();
       schedulePoll();
     }, delay);
-  }, [fetchLive]);
+  }, [fetchLive, wsConnected, hasLivePending]);
 
   useEffect(() => {
     schedulePoll();
@@ -581,6 +605,7 @@ export function TokenDetailLive({
             symbol={symbol}
             status={liveToken.status}
             optimisticTrades={optimisticTrades}
+            wsConnected={wsConnected}
             bnbUsd={bnbUsd}
             currentPriceUsd={priceUsd}
             currentMcapUsd={fdvUsd}
@@ -598,6 +623,7 @@ export function TokenDetailLive({
             tokenAddress={tokenAddress}
             creatorAddress={liveToken.creatorAddress}
             trades={trades}
+            wsConnected={wsConnected}
             currentPriceBnb={displayPrice}
             bnbUsd={bnbUsd}
             onAddressClick={setProfileAddress}
@@ -613,12 +639,14 @@ export function TokenDetailLive({
               reserveBnb={liveToken.reserveBnb}
               prefill={tradePrefill}
               onTradeConfirmed={handleTradeConfirmed}
+              chainCurveSnapshot={chainCurveSnapshot}
             />
           </div>
           <CreatorRewardsCard
             creatorAddress={liveToken.creatorAddress}
             launchTxHash={liveToken.launchTxHash}
             followerCount={liveToken.creatorFollowerCount}
+            onAddressClick={setProfileAddress}
           />
           {liveToken.description ? (
             <section className="panel-surface p-4">
@@ -652,6 +680,7 @@ export function TokenDetailLive({
         reserveBnb={liveToken.reserveBnb}
         prefill={tradePrefill}
         onTradeConfirmed={handleTradeConfirmed}
+        chainCurveSnapshot={chainCurveSnapshot}
       />
 
       <CreatorProfileModal

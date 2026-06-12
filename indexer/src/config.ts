@@ -14,6 +14,9 @@ export type IndexerConfig = {
   pollIntervalMs: number;
   stateKey: string;
   once: boolean;
+  mvRefreshEnabled: boolean;
+  redisPublishEnabled: boolean;
+  redisUrl?: string;
 };
 
 function required(name: string): string {
@@ -75,5 +78,8 @@ export const config: IndexerConfig = {
   chunkSize: BigInt(integer("INDEXER_CHUNK_SIZE", 1_000)),
   pollIntervalMs: integer("INDEXER_POLL_INTERVAL_MS", 5_000),
   stateKey: optional("INDEXER_STATE_KEY") ?? "launchpad_indexer",
-  once: booleanFlag("INDEXER_ONCE", false)
+  once: booleanFlag("INDEXER_ONCE", false),
+  mvRefreshEnabled: booleanFlag("MV_REFRESH_ENABLED", false),
+  redisPublishEnabled: booleanFlag("REDIS_PUBLISH_ENABLED", false),
+  redisUrl: optional("REDIS_URL"),
 };

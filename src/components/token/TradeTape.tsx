@@ -143,6 +143,7 @@ export function TradeTape({
   tokenAddress,
   creatorAddress,
   trades,
+  wsConnected = false,
   currentPriceBnb,
   bnbUsd,
   onAddressClick,
@@ -150,6 +151,7 @@ export function TradeTape({
   tokenAddress: string;
   creatorAddress: string;
   trades: TradeItem[];
+  wsConnected?: boolean;
   currentPriceBnb: number;
   bnbUsd: number | null;
   onAddressClick: (address: string) => void;
@@ -176,12 +178,17 @@ export function TradeTape({
     }
 
     void loadHolderTrades();
+    if (wsConnected) {
+      return () => {
+        cancelled = true;
+      };
+    }
     const timer = window.setInterval(() => void loadHolderTrades(), 15_000);
     return () => {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [tokenAddress]);
+  }, [tokenAddress, wsConnected]);
 
   useEffect(() => {
     const byId = new Map<string, TradeItem>();
