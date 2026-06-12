@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type {
   CreatorProfile,
   CreatorProfileHolding,
@@ -10,7 +10,9 @@ import type {
 import { explorerAddressUrl, shortAddress } from "@/config/chain";
 import { TokenAvatar } from "@/components/token/TokenAvatar";
 import { UserAvatarForAddress } from "@/components/user/UserAvatarForAddress";
+import { useCreatorFollows } from "@/components/creators/CreatorFollowsProvider";
 import { useBnbUsdPrice } from "@/hooks/useBnbUsdPrice";
+import { useAccount } from "wagmi";
 import {
   DEFAULT_TOKEN_TOTAL_SUPPLY,
   bnbToUsd,
@@ -98,6 +100,30 @@ function CreatedTokenRow({
   );
 }
 
+function buildAllHoldings(profile: CreatorProfile): CreatorProfileHolding[] {
+  const fromCreated: CreatorProfileHolding[] = profile.createdTokens
+    .filter((token) => Number(token.creatorTokenBalance) > 0)
+    .map((token) => ({
+      tokenAddress: token.address,
+      symbol: token.symbol,
+      name: token.name,
+      logoUrl: token.logoUrl,
+      tokenBalance: token.creatorTokenBalance,
+      lastPriceBnb: token.lastPriceBnb,
+    }));
+
+  const ownAddresses = new Set(fromCreated.map((holding) => holding.tokenAddress.toLowerCase()));
+  const fromOthers = profile.otherHoldings.filter(
+    (holding) => !ownAddresses.has(holding.tokenAddress.toLowerCase())
+  );
+
+  return [...fromCreated, ...fromOthers].sort((a, b) => {
+    const valueA = Number(a.tokenBalance) * Number(a.lastPriceBnb);
+    const valueB = Number(b.tokenBalance) * Number(b.lastPriceBnb);
+    return valueB - valueA;
+  });
+}
+
 function HoldingRow({
   holding,
   bnbUsd,
@@ -136,10 +162,30 @@ function HoldingRow({
 }
 
 export function CreatorProfileModal({ open, onClose, creatorAddress }: CreatorProfileModalProps) {
+  const { address } = useAccount();
+  const { isFollowing, toggleFollow } = useCreatorFollows();
   const { bnbUsd } = useBnbUsdPrice();
   const [profile, setProfile] = useState<CreatorProfileData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [open, onClose]);
 
   useEffect(() => {
     if (!open || !creatorAddress) return;
@@ -175,6 +221,11 @@ export function CreatorProfileModal({ open, onClose, creatorAddress }: CreatorPr
     };
   }, [open, creatorAddress]);
 
+  const allHoldings = useMemo(
+    () => (profile ? buildAllHoldings(profile) : []),
+    [profile]
+  );
+
   if (!open) return null;
 
   const bnbBalance = profile ? Number(profile.bnbBalance) : 0;
@@ -185,10 +236,12 @@ export function CreatorProfileModal({ open, onClose, creatorAddress }: CreatorPr
         ? bnbBalance.toFixed(6)
         : bnbBalance.toFixed(8);
   const walletUsdLabel = formatUsdReadable(bnbToUsd(bnbBalance, bnbUsd));
+  const isSelf = address?.toLowerCase() === creatorAddress.toLowerCase();
+  const following = isFollowing(creatorAddress);
 
   return (
     <div
-      className="fixed inset-0 z-[60] flex items-end justify-center bg-black/75 p-4 sm:items-center"
+      className="fixed inset-0 z-[60] flex items-end justify-center bg-black/75 sm:items-center sm:p-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby="creator-profile-title"
@@ -199,139 +252,159 @@ export function CreatorProfileModal({ open, onClose, creatorAddress }: CreatorPr
         aria-label="Close"
         onClick={onClose}
       />
-      <div className="panel-surface relative w-full max-w-2xl p-5 shadow-panel">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="flex min-w-0 items-start gap-3">
-            <UserAvatarForAddress address={creatorAddress} size={48} />
-            <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <h2
-                id="creator-profile-title"
-                className="financial-value text-h2 font-semibold text-pump-text"
-              >
-                {shortAddress(creatorAddress)}
-              </h2>
-              <span className="rounded-full bg-pump-accent/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-pump-accent">
-                Creator
-              </span>
-            </div>
-            <a
-              href={explorerAddressUrl(creatorAddress)}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-1 text-caption text-pump-muted hover:text-pump-accent hover:underline"
-            >
-              View on BscScan
-            </a>
-            </div>
+      <div className="panel-surface relative flex w-full max-w-2xl max-h-[92dvh] flex-col overflow-hidden rounded-t-2xl shadow-panel sm:max-h-[min(85vh,820px)] sm:rounded-xl">
+        <div className="shrink-0 border-b border-pump-border/10 px-4 pb-4 pt-3 sm:px-5 sm:pt-5">
+          <div className="mb-3 flex justify-center sm:hidden">
+            <div className="h-1 w-10 rounded-full bg-pump-border/50" aria-hidden />
           </div>
-          <button type="button" onClick={onClose} className="secondary-button shrink-0 px-3 py-1.5 text-body-sm">
-            Close
-          </button>
-        </div>
-
-        {loading ? (
-          <div className="mt-6 space-y-3">
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              {Array.from({ length: 4 }).map((_, i) => (
-                <div
-                  key={i}
-                  className="h-20 animate-pulse rounded-md bg-pump-surface/60"
-                />
-              ))}
-            </div>
-            <div className="h-32 animate-pulse rounded-md bg-pump-surface/60" />
-          </div>
-        ) : error ? (
-          <p className="notice-error mt-6 p-4 text-body-sm">{error}</p>
-        ) : profile ? (
-          <div className="mt-5 space-y-5">
-            <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <StatCard
-                label="Wallet BNB"
-                value={`${walletBnbLabel} BNB`}
-                sub={walletUsdLabel !== "—" ? walletUsdLabel : undefined}
-              />
-              <StatCard
-                label="Tokens launched"
-                value={String(profile.createdTokens.length)}
-              />
-              <StatCard
-                label="Followers"
-                value={profile.followerCount.toLocaleString()}
-              />
-              <StatCard
-                label="Trading volume"
-                value={formatUsdReadable(bnbToUsd(profile.totalVolumeBnb, bnbUsd), {
-                  compact: true,
-                })}
-                sub={`${profile.totalVolumeBnb.toFixed(4)} BNB`}
-              />
-            </section>
-
-            {profile.creatorFeesTotalBnb > 0 || profile.createdTokens.length > 0 ? (
-              <div className="rounded-md border border-pump-border/15 bg-pump-surface/30 px-3 py-2.5">
-                <div className="flex flex-wrap items-baseline justify-between gap-2">
-                  <span className="text-body-sm text-pump-muted">Total creator fees</span>
-                  <span className="financial-value text-body font-semibold text-pump-text">
-                    {formatFeeBnb(profile.creatorFeesTotalBnb)} BNB
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="flex min-w-0 items-start gap-3">
+              <UserAvatarForAddress address={creatorAddress} size={48} />
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2
+                    id="creator-profile-title"
+                    className="financial-value text-h2 font-semibold text-pump-text"
+                  >
+                    {shortAddress(creatorAddress)}
+                  </h2>
+                  <span className="rounded-full bg-pump-accent/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-pump-accent">
+                    Creator
                   </span>
                 </div>
+                <a
+                  href={explorerAddressUrl(creatorAddress)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-1 text-caption text-pump-muted hover:text-pump-accent hover:underline"
+                >
+                  View on BscScan
+                </a>
               </div>
-            ) : null}
-
-            <section>
-              <h3 className="section-heading">Launched tokens</h3>
-              {profile.createdTokens.length === 0 ? (
-                <p className="mt-2 text-body-sm text-pump-muted">No launched tokens yet.</p>
-              ) : (
-                <div className="mt-3 overflow-x-auto rounded-lg border border-pump-border/15">
-                  <table className="min-w-[520px] w-full text-body-sm">
-                    <thead className="border-b border-pump-border/15 bg-pump-surface/55 text-left">
-                      <tr>
-                        <th className="section-label px-3 py-2.5">Coin</th>
-                        <th className="section-label px-3 py-2.5">Creator holds</th>
-                        <th className="section-label px-3 py-2.5">Supply</th>
-                        <th className="section-label px-3 py-2.5">Mcap</th>
-                        <th className="section-label px-3 py-2.5 text-right">Trades</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {profile.createdTokens.map((token) => (
-                        <CreatedTokenRow key={token.address} token={token} bnbUsd={bnbUsd} />
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </section>
-
-            {profile.otherHoldings.length > 0 ? (
-              <section>
-                <h3 className="section-heading">Other holdings</h3>
-                <p className="mt-1 text-caption text-pump-muted">
-                  Tokens launched by others held in this wallet.
-                </p>
-                <div className="mt-3 overflow-x-auto rounded-lg border border-pump-border/15">
-                  <table className="min-w-[400px] w-full text-body-sm">
-                    <thead className="border-b border-pump-border/15 bg-pump-surface/55 text-left">
-                      <tr>
-                        <th className="section-label px-3 py-2.5">Coin</th>
-                        <th className="section-label px-3 py-2.5">Balance</th>
-                        <th className="section-label px-3 py-2.5">Est. value</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {profile.otherHoldings.map((holding) => (
-                        <HoldingRow key={holding.tokenAddress} holding={holding} bnbUsd={bnbUsd} />
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </section>
+            </div>
+            {!isSelf ? (
+              <button
+                type="button"
+                onClick={() => toggleFollow(creatorAddress)}
+                className={
+                  following
+                    ? "secondary-button shrink-0 px-4 py-2 text-body-sm font-semibold"
+                    : "shrink-0 rounded-md bg-pump-accent px-4 py-2 text-body-sm font-semibold text-pump-accent-foreground transition hover:opacity-95"
+                }
+              >
+                {following ? "Following" : "Follow"}
+              </button>
             ) : null}
           </div>
-        ) : null}
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-5 sm:py-5 [touch-action:pan-y]">
+          {loading ? (
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <div key={i} className="h-20 animate-pulse rounded-md bg-pump-surface/60" />
+                ))}
+              </div>
+              <div className="h-32 animate-pulse rounded-md bg-pump-surface/60" />
+            </div>
+          ) : error ? (
+            <p className="notice-error p-4 text-body-sm">{error}</p>
+          ) : profile ? (
+            <div className="space-y-5">
+              <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <StatCard
+                  label="Wallet BNB"
+                  value={`${walletBnbLabel} BNB`}
+                  sub={walletUsdLabel !== "—" ? walletUsdLabel : undefined}
+                />
+                <StatCard
+                  label="Tokens launched"
+                  value={String(profile.createdTokens.length)}
+                />
+                <StatCard
+                  label="Followers"
+                  value={profile.followerCount.toLocaleString()}
+                />
+                <StatCard
+                  label="Trading volume"
+                  value={formatUsdReadable(bnbToUsd(profile.totalVolumeBnb, bnbUsd), {
+                    compact: true,
+                  })}
+                  sub={`${profile.totalVolumeBnb.toFixed(4)} BNB`}
+                />
+              </section>
+
+              {profile.creatorFeesTotalBnb > 0 || profile.createdTokens.length > 0 ? (
+                <div className="rounded-md border border-pump-border/15 bg-pump-surface/30 px-3 py-2.5">
+                  <div className="flex flex-wrap items-baseline justify-between gap-2">
+                    <span className="text-body-sm text-pump-muted">Total creator fees</span>
+                    <span className="financial-value text-body font-semibold text-pump-text">
+                      {formatFeeBnb(profile.creatorFeesTotalBnb)} BNB
+                    </span>
+                  </div>
+                </div>
+              ) : null}
+
+              <section>
+                <h3 className="section-heading">Holdings</h3>
+                <p className="mt-1 text-caption text-pump-muted">
+                  Token balances in this wallet, including self-launched coins.
+                </p>
+                {allHoldings.length === 0 ? (
+                  <p className="mt-2 text-body-sm text-pump-muted">No token holdings yet.</p>
+                ) : (
+                  <div className="-mx-1 mt-3 overflow-x-auto rounded-lg border border-pump-border/15 [touch-action:pan-x_pan-y]">
+                    <table className="min-w-[400px] w-full text-body-sm">
+                      <thead className="border-b border-pump-border/15 bg-pump-surface/55 text-left">
+                        <tr>
+                          <th className="section-label px-3 py-2.5">Coin</th>
+                          <th className="section-label px-3 py-2.5">Balance</th>
+                          <th className="section-label px-3 py-2.5">Est. value</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {allHoldings.map((holding) => (
+                          <HoldingRow
+                            key={holding.tokenAddress}
+                            holding={holding}
+                            bnbUsd={bnbUsd}
+                          />
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </section>
+
+              <section>
+                <h3 className="section-heading">Launched tokens</h3>
+                {profile.createdTokens.length === 0 ? (
+                  <p className="mt-2 text-body-sm text-pump-muted">No launched tokens yet.</p>
+                ) : (
+                  <div className="-mx-1 mt-3 overflow-x-auto rounded-lg border border-pump-border/15 [touch-action:pan-x_pan-y]">
+                    <table className="min-w-[520px] w-full text-body-sm">
+                      <thead className="border-b border-pump-border/15 bg-pump-surface/55 text-left">
+                        <tr>
+                          <th className="section-label px-3 py-2.5">Coin</th>
+                          <th className="section-label px-3 py-2.5">Creator holds</th>
+                          <th className="section-label px-3 py-2.5">Supply</th>
+                          <th className="section-label px-3 py-2.5">Mcap</th>
+                          <th className="section-label px-3 py-2.5 text-right">Trades</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {profile.createdTokens.map((token) => (
+                          <CreatedTokenRow key={token.address} token={token} bnbUsd={bnbUsd} />
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </section>
+            </div>
+          ) : null}
+        </div>
       </div>
     </div>
   );

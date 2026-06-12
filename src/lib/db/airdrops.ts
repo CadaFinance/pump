@@ -16,6 +16,8 @@ export type AirdropListItem = {
   claimEnd: string | null;
   linkedSymbol: string | null;
   linkedName: string | null;
+  /** Last bonding-curve price in BNB per pool token. */
+  linkedPriceBnb: string | null;
   rewardSymbol: string | null;
   rewardName: string | null;
   /** Last bonding-curve price in BNB per token (DB column legacy name: last_price_zug). */
@@ -47,6 +49,19 @@ export type LeaderboardRow = {
   holdAmount: string;
   buyVolumeBnb: string;
   rank: number;
+};
+
+export type LeaderboardViewer = {
+  rank: number | null;
+  holdAmount: string;
+  buyVolumeBnb: string;
+  qualified: boolean;
+  inTop100: boolean;
+};
+
+export type AirdropLeaderboardResult = {
+  rows: LeaderboardRow[];
+  viewer: LeaderboardViewer | null;
 };
 
 export type WinnerRow = {
@@ -91,6 +106,7 @@ export async function listAirdrops(limit = 50): Promise<AirdropListItem[]> {
     name: string | null;
     reward_symbol: string | null;
     reward_name: string | null;
+    linked_price_bnb: string | null;
     reward_price_bnb: string | null;
   }>(
     `
@@ -98,10 +114,12 @@ export async function listAirdrops(limit = 50): Promise<AirdropListItem[]> {
              a.total_funded, a.rules_json, a.status, a.qualify_start, a.qualify_end, a.claim_end,
              t.symbol, t.name,
              rt.symbol AS reward_symbol, rt.name AS reward_name,
+             COALESCE(lb.last_price_zug, 0)::text AS linked_price_bnb,
              COALESCE(rb.last_price_zug, 0)::text AS reward_price_bnb
       FROM airdrops a
       LEFT JOIN tokens t ON t.address = a.linked_token
       LEFT JOIN tokens rt ON rt.address = a.reward_token
+      LEFT JOIN bonding_states lb ON lb.token_address = a.linked_token
       LEFT JOIN bonding_states rb ON rb.token_address = a.reward_token
       WHERE a.status IN ('ACTIVE', 'FINALIZED')
       ORDER BY a.qualify_end DESC
@@ -124,6 +142,7 @@ export async function listAirdrops(limit = 50): Promise<AirdropListItem[]> {
     claimEnd: row.claim_end?.toISOString() ?? null,
     linkedSymbol: row.symbol,
     linkedName: row.name,
+    linkedPriceBnb: row.linked_price_bnb,
     rewardSymbol: row.reward_symbol,
     rewardName: row.reward_name,
     rewardPriceBnb: row.reward_price_bnb,
@@ -153,15 +172,18 @@ export async function getAirdropById(id: string, viewerAddress?: string): Promis
     name: string | null;
     reward_symbol: string | null;
     reward_name: string | null;
+    linked_price_bnb: string | null;
     reward_price_bnb: string | null;
   }>(
     `
       SELECT a.*, t.symbol, t.name,
              rt.symbol AS reward_symbol, rt.name AS reward_name,
+             COALESCE(lb.last_price_zug, 0)::text AS linked_price_bnb,
              COALESCE(rb.last_price_zug, 0)::text AS reward_price_bnb
       FROM airdrops a
       LEFT JOIN tokens t ON t.address = a.linked_token
       LEFT JOIN tokens rt ON rt.address = a.reward_token
+      LEFT JOIN bonding_states lb ON lb.token_address = a.linked_token
       LEFT JOIN bonding_states rb ON rb.token_address = a.reward_token
       WHERE a.id = $1::bigint
       LIMIT 1
@@ -214,6 +236,7 @@ export async function getAirdropById(id: string, viewerAddress?: string): Promis
     createTxHash: row.create_tx_hash,
     linkedSymbol: row.symbol,
     linkedName: row.name,
+    linkedPriceBnb: row.linked_price_bnb,
     rewardSymbol: row.reward_symbol,
     rewardName: row.reward_name,
     rewardPriceBnb: row.reward_price_bnb,
@@ -469,10 +492,14 @@ export async function getAirdropProgress(airdropId: string, address: string): Pr
   };
 }
 
-export async function getAirdropLeaderboard(airdropId: string, limit = 100): Promise<LeaderboardRow[]> {
+export async function getAirdropLeaderboard(
+  airdropId: string,
+  opts?: { limit?: number; viewerAddress?: string | null }
+): Promise<AirdropLeaderboardResult> {
+  const limit = opts?.limit ?? 100;
   const pool = getLaunchpadPool();
   const airdrop = await getAirdropById(airdropId);
-  if (!airdrop) return [];
+  if (!airdrop) return { rows: [], viewer: null };
 
   const minHold = airdrop.rules.onchain?.minHoldWei ?? "0";
   const minBuy = airdrop.rules.onchain?.minBuyBnbWei ?? "0";
@@ -512,33 +539,60 @@ export async function getAirdropLeaderboard(airdropId: string, limit = 100): Pro
     candidates.rows.map((row) => row.address)
   );
 
-  const ranked = candidates.rows
-    .map((row) => {
-      const holdAmount = liveBalances.get(row.address.toLowerCase()) ?? "0";
-      return {
-        address: row.address,
-        holdAmount,
-        buyVolumeBnb: row.buy_volume_bnb,
-      };
-    })
-    .filter((row) => {
-      const holdOk = minHoldDecimal === "0" || Number(row.holdAmount) >= Number(minHoldDecimal);
-      const buyOk = minBuyDecimal === "0" || Number(row.buyVolumeBnb) >= Number(minBuyDecimal);
-      return holdOk && buyOk;
-    })
+  const scored = candidates.rows.map((row) => {
+    const holdAmount = liveBalances.get(row.address.toLowerCase()) ?? "0";
+    const holdOk = minHoldDecimal === "0" || Number(holdAmount) >= Number(minHoldDecimal);
+    const buyOk = minBuyDecimal === "0" || Number(row.buy_volume_bnb) >= Number(minBuyDecimal);
+    return {
+      address: row.address,
+      holdAmount,
+      buyVolumeBnb: row.buy_volume_bnb,
+      qualified: holdOk && buyOk,
+    };
+  });
+
+  const ranked = scored
+    .filter((row) => row.qualified)
     .sort((a, b) => {
       const holdDiff = Number(b.holdAmount) - Number(a.holdAmount);
       if (holdDiff !== 0) return holdDiff;
       return Number(b.buyVolumeBnb) - Number(a.buyVolumeBnb);
-    })
-    .slice(0, limit);
+    });
 
-  return ranked.map((row, index) => ({
-    address: row.address,
-    holdAmount: row.holdAmount,
-    buyVolumeBnb: row.buyVolumeBnb,
-    rank: index + 1,
-  }));
+  let viewer: LeaderboardViewer | null = null;
+  const viewerAddress = opts?.viewerAddress?.toLowerCase() ?? null;
+  if (viewerAddress) {
+    const viewerIndex = ranked.findIndex((row) => row.address.toLowerCase() === viewerAddress);
+    const viewerCandidate = scored.find((row) => row.address.toLowerCase() === viewerAddress);
+    if (viewerIndex >= 0) {
+      const row = ranked[viewerIndex]!;
+      viewer = {
+        rank: viewerIndex + 1,
+        holdAmount: row.holdAmount,
+        buyVolumeBnb: row.buyVolumeBnb,
+        qualified: true,
+        inTop100: viewerIndex < limit,
+      };
+    } else if (viewerCandidate) {
+      viewer = {
+        rank: null,
+        holdAmount: viewerCandidate.holdAmount,
+        buyVolumeBnb: viewerCandidate.buyVolumeBnb,
+        qualified: viewerCandidate.qualified,
+        inTop100: false,
+      };
+    }
+  }
+
+  return {
+    rows: ranked.slice(0, limit).map((row, index) => ({
+      address: row.address,
+      holdAmount: row.holdAmount,
+      buyVolumeBnb: row.buyVolumeBnb,
+      rank: index + 1,
+    })),
+    viewer,
+  };
 }
 
 export async function getAirdropWinners(airdropId: string): Promise<WinnerRow[]> {

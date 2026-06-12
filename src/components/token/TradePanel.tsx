@@ -24,6 +24,7 @@ import { formatTradeError } from "@/lib/trade-errors";
 import { bnbToUsd, formatUsdReadable } from "@/lib/format-usd";
 import { useBnbUsdPrice } from "@/hooks/useBnbUsdPrice";
 import { useTradeGasEstimate } from "@/hooks/useTradeGasEstimate";
+import type { TradePrefillConfig } from "@/lib/token-trade-prefill";
 
 type Side = "buy" | "sell";
 type BuyInputMode = "usd" | "bnb" | "token";
@@ -43,6 +44,8 @@ type TradePanelProps = {
   symbol: string;
   status: string;
   reserveBnb?: string;
+  embedded?: boolean;
+  prefill?: TradePrefillConfig | null;
   onTradeConfirmed?: (payload: TradeConfirmedPayload) => void;
 };
 
@@ -121,6 +124,8 @@ export function TradePanel({
   tokenAddress,
   symbol,
   status,
+  embedded = false,
+  prefill = null,
   onTradeConfirmed,
 }: TradePanelProps) {
   const { address, isConnected, chain } = useAccount();
@@ -129,10 +134,23 @@ export function TradePanel({
   const [side, setSide] = useState<Side>("buy");
   const [buyInputMode, setBuyInputMode] = useState<BuyInputMode>("usd");
   const [amount, setAmount] = useState("");
+  const prefillAppliedRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const [receiveExpanded, setReceiveExpanded] = useState(true);
   const [pendingAction, setPendingAction] = useState<"buy" | "sell" | "approve" | null>(null);
   const pendingSellRef = useRef<{ amountWei: bigint; minBnbOut: bigint } | null>(null);
+
+  useEffect(() => {
+    if (!prefill || prefillAppliedRef.current) return;
+    prefillAppliedRef.current = true;
+    setSide(prefill.side);
+    if (prefill.side === "buy" && prefill.buyMode) {
+      setBuyInputMode(prefill.buyMode);
+    }
+    if (prefill.amount) {
+      setAmount(prefill.amount);
+    }
+  }, [prefill]);
 
   const targetTokenWei = useMemo(() => {
     if (side === "sell" || (side === "buy" && buyInputMode === "token")) {
@@ -637,7 +655,9 @@ export function TradePanel({
   const isBuyTokenMode = side === "buy" && buyInputMode === "token";
 
   return (
-    <section className="panel-surface overflow-hidden p-0">
+    <section
+      className={embedded ? "overflow-hidden p-0" : "panel-surface overflow-hidden p-0"}
+    >
       <form onSubmit={onSubmit}>
         <div className="flex gap-2 px-4 pt-4">
           <button

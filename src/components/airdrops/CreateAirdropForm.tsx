@@ -1,13 +1,30 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { formatEther, parseEther, parseEventLogs } from "viem";
+import { formatEther, formatUnits, parseEther, parseEventLogs } from "viem";
+import { TokenAvatar } from "@/components/token/TokenAvatar";
+import { AirdropQualifyRulesEditor, AirdropQualifyRulesPreview } from "@/components/airdrops/AirdropQualifyRules";
+import { AirdropRewardSplitPreview } from "@/components/airdrops/AirdropRewardSplitPreview";
+import {
+  AirdropSocialTasksEditor,
+  AirdropSocialTasksPreview,
+} from "@/components/airdrops/AirdropSocialTasks";
+import { LaunchpadTokenPicker } from "@/components/airdrops/LaunchpadTokenPicker";
+import {
+  createDefaultSocialTasks,
+  normalizeSocialTaskTarget,
+  socialTaskLabel,
+  validateSocialTaskUrl,
+  type SocialTaskDraft,
+} from "@/lib/airdrop-social";
 import { useConnectModal } from "@rainbow-me/rainbowkit";
 import {
   useAccount,
   useBalance,
   useReadContract,
+  useReadContracts,
   useWaitForTransactionReceipt,
   useWriteContract,
 } from "wagmi";
@@ -21,9 +38,11 @@ import {
 } from "@/lib/airdrop-rules";
 import type { TokenListItem } from "@/lib/db/launchpad";
 import {
+  CLAIM_WINDOW_SEC,
   defaultQualifyEndLocal,
   defaultQualifyStartLocal,
   endAfterStartOrDefault,
+  formatDurationDhM,
   formatUtcPreview,
   localDatetimeToUnix,
   minDatetimeLocal,
@@ -40,20 +59,6 @@ const ZERO = "0x0000000000000000000000000000000000000000" as const;
 /** Leave headroom for create tx gas on top of escrow + fee. */
 const GAS_BUFFER_BNB = parseEther("0.002");
 
-const SOCIAL_TASK_TYPES = [
-  { value: "FOLLOW_X", label: "Follow on X" },
-  { value: "JOIN_TELEGRAM", label: "Join Telegram" },
-  { value: "JOIN_DISCORD", label: "Join Discord" },
-  { value: "VISIT_WEBSITE", label: "Visit website" },
-  { value: "RETWEET_X", label: "Retweet / like on X" },
-] as const;
-
-type SocialTaskDraft = {
-  key: string;
-  taskType: string;
-  targetUrl: string;
-};
-
 type PendingCreate = {
   linkedToken: `0x${string}`;
   rewardToken: `0x${string}`;
@@ -63,12 +68,6 @@ type PendingCreate = {
   qualifyEnd: bigint;
   value: bigint;
 };
-
-let socialKeySeq = 0;
-function newSocialKey(): string {
-  socialKeySeq += 1;
-  return `social-${socialKeySeq}`;
-}
 
 export function CreateAirdropForm() {
   const router = useRouter();
@@ -80,6 +79,8 @@ export function CreateAirdropForm() {
   const { openConnectModal } = useConnectModal();
   const { address, isConnected } = useAccount();
   const [tokens, setTokens] = useState<TokenListItem[]>([]);
+  const [createdTokens, setCreatedTokens] = useState<TokenListItem[]>([]);
+  const [tokensLoading, setTokensLoading] = useState(true);
   const [linkedToken, setLinkedToken] = useState("");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -92,7 +93,7 @@ export function CreateAirdropForm() {
   const [qualifyEndLocal, setQualifyEndLocal] = useState(() =>
     defaultQualifyEndLocal(defaultQualifyStartLocal())
   );
-  const [socialTasks, setSocialTasks] = useState<SocialTaskDraft[]>([]);
+  const [socialTasks, setSocialTasks] = useState<SocialTaskDraft[]>(createDefaultSocialTasks);
   const [error, setError] = useState<string | null>(null);
   const [pendingAction, setPendingAction] = useState<"approve" | "create" | null>(null);
   const [nowTick, setNowTick] = useState(0);
@@ -142,18 +143,82 @@ export function CreateAirdropForm() {
 
   useEffect(() => {
     (async () => {
-      const res = await fetch("/api/tokens");
-      const json = (await res.json()) as { data?: TokenListItem[] };
-      setTokens(json.data ?? []);
+      setTokensLoading(true);
+      try {
+        const res = await fetch("/api/tokens");
+        const json = (await res.json()) as { data?: TokenListItem[] };
+        setTokens(json.data ?? []);
+      } finally {
+        setTokensLoading(false);
+      }
     })();
   }, []);
 
+  useEffect(() => {
+    if (!address) {
+      setCreatedTokens([]);
+      return;
+    }
+
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const res = await fetch(`/api/portfolio?address=${address}`, { cache: "no-store" });
+        const json = (await res.json()) as { data?: { createdTokens?: TokenListItem[] } };
+        if (!cancelled && res.ok) {
+          setCreatedTokens(json.data?.createdTokens ?? []);
+        }
+      } catch {
+        if (!cancelled) setCreatedTokens([]);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [address]);
+
+  const allTokens = useMemo(() => {
+    const map = new Map<string, TokenListItem>();
+    for (const token of tokens) map.set(token.address.toLowerCase(), token);
+    for (const token of createdTokens) map.set(token.address.toLowerCase(), token);
+    return [...map.values()];
+  }, [tokens, createdTokens]);
+
+  const creatorTokenAddresses = useMemo(
+    () => createdTokens.map((token) => token.address as `0x${string}`),
+    [createdTokens]
+  );
+
+  const { data: creatorBalanceResults } = useReadContracts({
+    contracts: creatorTokenAddresses.map((tokenAddress) => ({
+      address: tokenAddress,
+      abi: erc20Abi,
+      functionName: "balanceOf" as const,
+      args: address ? [address as `0x${string}`] : undefined,
+      chainId: pumpChain.id,
+    })),
+    query: { enabled: Boolean(address && creatorTokenAddresses.length > 0) },
+  });
+
+  const creatorBalanceMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    creatorTokenAddresses.forEach((tokenAddress, index) => {
+      const result = creatorBalanceResults?.[index];
+      if (result?.status === "success") {
+        map[tokenAddress.toLowerCase()] = formatUnits(result.result, 18);
+      }
+    });
+    return map;
+  }, [creatorBalanceResults, creatorTokenAddresses]);
+
   const socialTasksForSync = useMemo((): AirdropSocialTaskInput[] => {
     return socialTasks
-      .filter((t) => t.targetUrl.trim())
-      .map((t, index) => ({
-        taskType: t.taskType,
-        targetUrl: t.targetUrl.trim(),
+      .filter((task) => task.enabled && task.targetUrl.trim())
+      .map((task, index) => ({
+        taskType: task.taskType,
+        targetUrl: normalizeSocialTaskTarget(task.taskType, task.targetUrl),
         isRequired: true,
         sortOrder: index,
       }));
@@ -241,10 +306,10 @@ export function CreateAirdropForm() {
             rules: rulesRef.current,
             rulesHash,
             socialTasks: socialTasksRef.current
-              .filter((t) => t.targetUrl.trim())
-              .map((t, index) => ({
-                taskType: t.taskType,
-                targetUrl: t.targetUrl.trim(),
+              .filter((task) => task.enabled && task.targetUrl.trim())
+              .map((task, index) => ({
+                taskType: task.taskType,
+                targetUrl: normalizeSocialTaskTarget(task.taskType, task.targetUrl),
                 isRequired: true,
                 sortOrder: index,
               })),
@@ -273,19 +338,24 @@ export function CreateAirdropForm() {
     writeContract,
   ]);
 
-  function addSocialTask() {
-    setSocialTasks((prev) => [
-      ...prev,
-      { key: newSocialKey(), taskType: "FOLLOW_X", targetUrl: "" },
-    ]);
+  function toggleSocialTask(taskType: SocialTaskDraft["taskType"]) {
+    setSocialTasks((prev) =>
+      prev.map((task) =>
+        task.taskType === taskType
+          ? {
+              ...task,
+              enabled: !task.enabled,
+              targetUrl: task.enabled ? "" : task.targetUrl,
+            }
+          : task
+      )
+    );
   }
 
-  function updateSocialTask(key: string, patch: Partial<SocialTaskDraft>) {
-    setSocialTasks((prev) => prev.map((t) => (t.key === key ? { ...t, ...patch } : t)));
-  }
-
-  function removeSocialTask(key: string) {
-    setSocialTasks((prev) => prev.filter((t) => t.key !== key));
+  function updateSocialTaskUrl(taskType: SocialTaskDraft["taskType"], targetUrl: string) {
+    setSocialTasks((prev) =>
+      prev.map((task) => (task.taskType === taskType ? { ...task, targetUrl } : task))
+    );
   }
 
   function submitCreate(pending: PendingCreate) {
@@ -340,8 +410,10 @@ export function CreateAirdropForm() {
     const { startSec, endSec } = windowCheck;
 
     for (const task of socialTasks) {
-      if (task.targetUrl.trim() && !/^https?:\/\//i.test(task.targetUrl.trim())) {
-        setError("Social task URLs must start with http:// or https://");
+      if (!task.enabled) continue;
+      const urlError = validateSocialTaskUrl(task.taskType, task.targetUrl);
+      if (urlError) {
+        setError(`${socialTaskLabel(task.taskType)}: ${urlError}`);
         return;
       }
     }
@@ -415,8 +487,9 @@ export function CreateAirdropForm() {
   const qualifyDurationLabel = useMemo(() => {
     const check = validateQualifyWindow(qualifyStartLocal, qualifyEndLocal);
     if (!check.ok) return null;
-    const hours = Math.round((check.endSec - check.startSec) / 3600);
-    return `${hours}h qualification · claim opens at end · 24h claim window`;
+    const duration = formatDurationDhM(check.endSec - check.startSec);
+    const claimWindow = formatDurationDhM(CLAIM_WINDOW_SEC);
+    return `${duration} qualification · claim opens at end · ${claimWindow} claim window`;
   }, [qualifyStartLocal, qualifyEndLocal]);
 
   const startUtcPreview = formatUtcPreview(qualifyStartLocal);
@@ -437,9 +510,25 @@ export function CreateAirdropForm() {
   }, [rewardAmount]);
 
   const selectedRewardSymbol = useMemo(
-    () => tokens.find((t) => t.address === rewardToken)?.symbol ?? "tokens",
-    [tokens, rewardToken]
+    () => allTokens.find((t) => t.address === rewardToken)?.symbol ?? "tokens",
+    [allTokens, rewardToken]
   );
+
+  const selectedLinkedToken = useMemo(
+    () => allTokens.find((t) => t.address.toLowerCase() === linkedToken.toLowerCase()) ?? null,
+    [allTokens, linkedToken]
+  );
+
+  const selectedRewardTokenMeta = useMemo(
+    () => allTokens.find((t) => t.address.toLowerCase() === rewardToken.toLowerCase()) ?? null,
+    [allTokens, rewardToken]
+  );
+
+  const feeWei = createFee ?? 0n;
+  const totalBnbCost = useMemo(() => {
+    if (!parsedRewardAmount) return null;
+    return rewardType === "bnb" ? parsedRewardAmount + feeWei : feeWei;
+  }, [parsedRewardAmount, rewardType, feeWei]);
 
   const formValidation = useMemo(() => {
     const warnings: string[] = [];
@@ -472,8 +561,10 @@ export function CreateAirdropForm() {
     }
 
     for (const task of socialTasks) {
-      if (task.targetUrl.trim() && !/^https?:\/\//i.test(task.targetUrl.trim())) {
-        warnings.push("Social task URLs must start with http:// or https://");
+      if (!task.enabled) continue;
+      const urlError = validateSocialTaskUrl(task.taskType, task.targetUrl);
+      if (urlError) {
+        warnings.push(`${socialTaskLabel(task.taskType)}: ${urlError}`);
         canSubmit = false;
         break;
       }
@@ -534,249 +625,412 @@ export function CreateAirdropForm() {
   ]);
 
   if (!contracts.airdropManager) {
-    return <p className="text-body-sm text-pump-danger">NEXT_PUBLIC_AIRDROP_MANAGER is not set.</p>;
+    return (
+      <div className="notice-error p-4 text-body-sm">
+        NEXT_PUBLIC_AIRDROP_MANAGER is not set.
+      </div>
+    );
   }
 
   const busy = isPending || Boolean(txHash && !error);
   const submitDisabled = busy || !formValidation.canSubmit;
+  const displayTitle = title.trim() || "Your campaign";
+  const displayPoolSymbol = selectedLinkedToken?.symbol ?? "TOKEN";
+
+  const submitLabel = !isConnected
+    ? "Connect wallet"
+    : pendingAction === "approve"
+      ? "Approving token…"
+      : busy
+        ? "Creating…"
+        : "Create campaign";
 
   return (
-    <form onSubmit={onSubmit} className="space-y-5 rounded-xl border border-pump-border/30 bg-pump-surface/40 p-4">
-      <section className="space-y-3">
-        <h3 className="text-sm font-medium text-pump-text">1. Target token</h3>
-        <select
-          className="w-full rounded-lg border border-pump-border/40 bg-pump-bg px-3 py-2 text-sm"
-          value={linkedToken}
-          onChange={(e) => setLinkedToken(e.target.value)}
-        >
-          <option value="">Select token</option>
-          {tokens.map((t) => (
-            <option key={t.address} value={t.address}>
-              {t.symbol} — {t.name}
-            </option>
-          ))}
-        </select>
-      </section>
-
-      <section className="space-y-3">
-        <h3 className="text-sm font-medium text-pump-text">2. Campaign info</h3>
-        <input
-          className="w-full rounded-lg border border-pump-border/40 bg-pump-bg px-3 py-2 text-sm"
-          placeholder="Campaign title"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-        />
-        <textarea
-          className="w-full rounded-lg border border-pump-border/40 bg-pump-bg px-3 py-2 text-sm"
-          rows={3}
-          placeholder="Description (optional)"
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-        />
-      </section>
-
-      <section className="space-y-3">
-        <h3 className="text-sm font-medium text-pump-text">3. Reward pool</h3>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <label className="block space-y-1">
-            <span className="text-body-sm text-pump-muted">Reward type</span>
-            <select
-              className="w-full rounded-lg border border-pump-border/40 bg-pump-bg px-3 py-2 text-sm"
-              value={rewardType}
-              onChange={(e) => setRewardType(e.target.value as "bnb" | "token")}
-            >
-              <option value="bnb">BNB (native)</option>
-              <option value="token">Platform token (launchpad)</option>
-            </select>
-          </label>
-          {rewardType === "token" ? (
-            <label className="block space-y-1">
-              <span className="text-body-sm text-pump-muted">Reward token</span>
-              <select
-                className="w-full rounded-lg border border-pump-border/40 bg-pump-bg px-3 py-2 text-sm"
-                value={rewardToken}
-                onChange={(e) => setRewardToken(e.target.value)}
-              >
-                <option value="">Select reward token</option>
-                {tokens.map((t) => (
-                  <option key={t.address} value={t.address}>
-                    {t.symbol} — {t.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-          ) : null}
-          <label className={`block space-y-1 ${rewardType === "bnb" ? "sm:col-span-2" : ""}`}>
-            <span className="text-body-sm text-pump-muted">
-              Total reward amount ({rewardType === "bnb" ? "BNB" : "tokens"})
-            </span>
-            <input
-              className="w-full rounded-lg border border-pump-border/40 bg-pump-bg px-3 py-2 text-sm"
-              value={rewardAmount}
-              onChange={(e) => setRewardAmount(e.target.value)}
-            />
-          </label>
-        </div>
-        {isConnected && bnbBalance ? (
-          <p className="text-xs text-pump-muted">
-            Wallet BNB: {formatEther(bnbBalance.value)}
-            {rewardType === "token" && rewardTokenBalance !== undefined && rewardToken
-              ? ` · ${selectedRewardSymbol}: ${formatEther(rewardTokenBalance)}`
-              : ""}
+    <form
+      onSubmit={onSubmit}
+      className="grid gap-4 xl:grid-cols-[5fr_7fr] xl:items-start"
+    >
+      <div className="space-y-4 xl:max-w-[640px]">
+        <section className="panel-surface p-4 md:p-5">
+          <p className="section-label">Target token</p>
+          <p className="mt-1 field-hint">
+            Participants qualify by holding or buying this launchpad token.
           </p>
-        ) : null}
-        {rewardType === "token" ? (
-          <p className="text-xs text-pump-muted">
-            Token rewards require approval, plus {createFee !== undefined ? formatEther(createFee) : "…"} BNB create fee.
-          </p>
-        ) : null}
-      </section>
 
-      <section className="space-y-3">
-        <h3 className="text-sm font-medium text-pump-text">4. Qualification window</h3>
-        <p className="text-xs text-pump-muted">
-          Times are in your local timezone ({tzLabel}). On-chain and database store UTC (Unix timestamp /
-          timestamptz). Past times cannot be selected.
-        </p>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <label className="block space-y-1">
-            <span className="text-body-sm text-pump-muted">Start (local)</span>
-            <input
-              type="datetime-local"
-              className="w-full rounded-lg border border-pump-border/40 bg-pump-bg px-3 py-2 text-sm"
-              value={qualifyStartLocal}
-              min={startMinLocal}
-              onChange={(e) => handleQualifyStartChange(e.target.value)}
-            />
-            {startUtcPreview ? (
-              <span className="text-xs text-pump-muted">On-chain: {startUtcPreview}</span>
-            ) : null}
-          </label>
-          <label className="block space-y-1">
-            <span className="text-body-sm text-pump-muted">End (local)</span>
-            <input
-              type="datetime-local"
-              className="w-full rounded-lg border border-pump-border/40 bg-pump-bg px-3 py-2 text-sm"
-              value={qualifyEndLocal}
-              min={endMinLocal}
-              onChange={(e) => setQualifyEndLocal(e.target.value)}
-            />
-            {endUtcPreview ? (
-              <span className="text-xs text-pump-muted">On-chain: {endUtcPreview}</span>
-            ) : null}
-          </label>
-        </div>
-        {qualifyDurationLabel ? (
-          <p className="text-xs text-pump-muted">{qualifyDurationLabel}</p>
-        ) : (
-          <p className="text-xs text-pump-warning">
-            End must be at least 15 minutes after start and in the future.
-          </p>
-        )}
-      </section>
-
-      <section className="space-y-3">
-        <h3 className="text-sm font-medium text-pump-text">5. On-chain rules (at least one)</h3>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <label className="block space-y-1">
-            <span className="text-body-sm text-pump-muted">Min hold (tokens)</span>
-            <input
-              className="w-full rounded-lg border border-pump-border/40 bg-pump-bg px-3 py-2 text-sm"
-              value={minHoldTokens}
-              onChange={(e) => setMinHoldTokens(e.target.value)}
-              placeholder="e.g. 1000"
-            />
-          </label>
-          <label className="block space-y-1">
-            <span className="text-body-sm text-pump-muted">Min buy (BNB)</span>
-            <input
-              className="w-full rounded-lg border border-pump-border/40 bg-pump-bg px-3 py-2 text-sm"
-              value={minBuyBnb}
-              onChange={(e) => setMinBuyBnb(e.target.value)}
-              placeholder="e.g. 0.01"
-            />
-          </label>
-        </div>
-      </section>
-
-      <section className="space-y-3">
-        <div className="flex items-center justify-between gap-2">
-          <h3 className="text-sm font-medium text-pump-text">6. Social tasks (optional)</h3>
-          <button
-            type="button"
-            className="btn-secondary px-3 py-1.5 text-xs"
-            onClick={addSocialTask}
-          >
-            + Add task
-          </button>
-        </div>
-        {socialTasks.length === 0 ? (
-          <p className="text-body-sm text-pump-muted">
-            No social gate — on-chain rules unlock immediately for everyone.
-          </p>
-        ) : (
-          <ul className="space-y-2">
-            {socialTasks.map((task, index) => (
-              <li
-                key={task.key}
-                className="grid gap-2 rounded-lg border border-pump-border/25 bg-pump-bg/40 p-3 sm:grid-cols-[minmax(0,9rem)_1fr_auto]"
-              >
-                <select
-                  className="rounded-lg border border-pump-border/40 bg-pump-bg px-2 py-2 text-sm"
-                  value={task.taskType}
-                  onChange={(e) => updateSocialTask(task.key, { taskType: e.target.value })}
-                >
-                  {SOCIAL_TASK_TYPES.map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
-                <input
-                  className="rounded-lg border border-pump-border/40 bg-pump-bg px-3 py-2 text-sm"
-                  placeholder="https://..."
-                  value={task.targetUrl}
-                  onChange={(e) => updateSocialTask(task.key, { targetUrl: e.target.value })}
+          <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-start">
+            {selectedLinkedToken ? (
+              <div className="flex shrink-0 flex-col items-center gap-2">
+                <TokenAvatar
+                  address={selectedLinkedToken.address}
+                  symbol={selectedLinkedToken.symbol}
+                  logoUrl={selectedLinkedToken.logoUrl}
+                  size={72}
                 />
+                <p className="text-caption font-medium text-pump-text">
+                  ${selectedLinkedToken.symbol}
+                </p>
+              </div>
+            ) : (
+              <div className="flex h-[72px] w-[72px] shrink-0 items-center justify-center rounded-full border border-dashed border-pump-border/30 bg-pump-surface/40 text-caption text-pump-muted">
+                Pool
+              </div>
+            )}
+
+            <div className="min-w-0 flex-1">
+              <LaunchpadTokenPicker
+                id="linkedToken"
+                modalTitle="Select pool token"
+                label={
+                  <>
+                    Pool token <span className="text-pump-accent">*</span>
+                  </>
+                }
+                value={linkedToken}
+                onChange={setLinkedToken}
+                tokens={tokens}
+                priorityTokens={createdTokens}
+                balances={creatorBalanceMap}
+                loading={tokensLoading}
+                placeholder="Select a launchpad token"
+                hint={
+                  selectedLinkedToken ? (
+                    <p className="field-hint">
+                      <Link
+                        href={`/token/${selectedLinkedToken.address}`}
+                        className="text-pump-accent hover:underline"
+                      >
+                        View ${selectedLinkedToken.symbol} on Arena
+                      </Link>
+                    </p>
+                  ) : null
+                }
+              />
+            </div>
+          </div>
+        </section>
+
+        <section className="panel-surface p-4 md:p-5">
+          <p className="section-label">Campaign info</p>
+
+          <div className="mt-4 space-y-4">
+            <div>
+              <label className="field-label" htmlFor="campaignTitle">
+                Campaign title
+              </label>
+              <input
+                id="campaignTitle"
+                className="field-input"
+                placeholder="e.g. Early holder rewards"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                maxLength={120}
+              />
+            </div>
+            <div>
+              <label className="field-label" htmlFor="campaignDescription">
+                Description
+              </label>
+              <textarea
+                id="campaignDescription"
+                className="field-textarea"
+                rows={4}
+                placeholder="Explain who qualifies and how rewards are distributed."
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                maxLength={2000}
+              />
+              <p className="mt-1 field-hint">{description.length}/2000</p>
+            </div>
+          </div>
+        </section>
+
+        <section className="panel-surface p-4 md:p-5">
+          <p className="section-label">Reward pool</p>
+          <p className="mt-1 field-hint">
+            Funds are locked in on-chain escrow. TOP 100 wallets split the pool after qualify ends.
+          </p>
+
+          <div className="mt-4 space-y-4">
+            <div>
+              <span className="field-label">Reward asset</span>
+              <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
-                  className="text-sm text-pump-muted hover:text-pump-danger"
-                  onClick={() => removeSocialTask(task.key)}
-                  aria-label={`Remove task ${index + 1}`}
+                  className={
+                    rewardType === "bnb" ? "chip-button chip-button-active" : "chip-button"
+                  }
+                  onClick={() => setRewardType("bnb")}
                 >
-                  Remove
+                  BNB
                 </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+                <button
+                  type="button"
+                  className={
+                    rewardType === "token" ? "chip-button chip-button-active" : "chip-button"
+                  }
+                  onClick={() => setRewardType("token")}
+                >
+                  Platform token
+                </button>
+              </div>
+            </div>
 
-      <p className="text-xs text-pump-muted">
-        Fixed TOP 100 distribution. Create fee: {createFee !== undefined ? formatEther(createFee) : "…"} BNB. No cancel after deposit.
-      </p>
+            <div className="grid gap-4 sm:grid-cols-2">
+              {rewardType === "token" ? (
+                <div className="sm:col-span-2">
+                  <LaunchpadTokenPicker
+                    id="rewardToken"
+                    modalTitle="Select reward token"
+                    label={
+                      <>
+                        Reward token <span className="text-pump-accent">*</span>
+                      </>
+                    }
+                    value={rewardToken}
+                    onChange={setRewardToken}
+                    tokens={tokens}
+                    priorityTokens={createdTokens}
+                    balances={creatorBalanceMap}
+                    loading={tokensLoading}
+                    placeholder="Select reward token"
+                    hint={
+                      !isConnected ? (
+                        <p className="field-hint">
+                          Connect wallet to see your launched tokens with balances at the top.
+                        </p>
+                      ) : createdTokens.length === 0 ? (
+                        <p className="field-hint">
+                          Your launched tokens appear first when you have created coins on the
+                          launchpad.
+                        </p>
+                      ) : null
+                    }
+                  />
+                </div>
+              ) : null}
+              <div className="sm:col-span-2">
+                <label className="field-label" htmlFor="rewardAmount">
+                  Total reward amount{" "}
+                  <span className="text-pump-accent">*</span>
+                  <span className="font-normal text-pump-muted">
+                    {" "}
+                    ({rewardType === "bnb" ? "BNB" : selectedRewardSymbol})
+                  </span>
+                </label>
+                <input
+                  id="rewardAmount"
+                  inputMode="decimal"
+                  className="field-input financial-value"
+                  value={rewardAmount}
+                  onChange={(e) => setRewardAmount(e.target.value)}
+                  placeholder={rewardType === "bnb" ? "0.1" : "10000"}
+                />
+              </div>
+            </div>
 
-      {error ? <p className="text-body-sm text-pump-danger">{error}</p> : null}
+            {isConnected && bnbBalance ? (
+              <div className="rounded-md border border-pump-border/15 bg-pump-surface/35 px-3 py-2.5">
+                <p className="section-label text-[10px]">Wallet balance</p>
+                <p className="mt-1 financial-value text-body-sm text-pump-text">
+                  {formatEther(bnbBalance.value)} BNB
+                  {rewardType === "token" && rewardTokenBalance !== undefined && rewardToken
+                    ? ` · ${formatEther(rewardTokenBalance)} ${selectedRewardSymbol}`
+                    : ""}
+                </p>
+              </div>
+            ) : null}
 
-      {formValidation.warnings.length > 0 ? (
-        <ul className="space-y-1 rounded-lg border border-pump-warning/30 bg-pump-warning/5 px-3 py-2">
-          {formValidation.warnings.map((warning) => (
-            <li key={warning} className="text-body-sm text-pump-warning">
-              {warning}
-            </li>
-          ))}
-        </ul>
-      ) : null}
+            {rewardType === "token" ? (
+              <p className="field-hint">
+                Token rewards require a one-time approval, plus{" "}
+                {createFee !== undefined ? formatEther(createFee) : "…"} BNB create fee.
+              </p>
+            ) : null}
+          </div>
+        </section>
 
-      <button type="submit" disabled={submitDisabled} className="btn-primary w-full">
-        {!isConnected
-          ? "Connect wallet"
-          : pendingAction === "approve"
-            ? "Approving token…"
-            : busy
-              ? "Creating…"
-              : "Create airdrop"}
-      </button>
+        <section className="panel-surface p-4 md:p-5">
+          <p className="section-label">Qualification window</p>
+          <p className="mt-1 field-hint">
+            Local timezone ({tzLabel}). Stored on-chain as UTC. Past times cannot be selected.
+          </p>
+
+          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+            <div>
+              <label className="field-label" htmlFor="qualifyStart">
+                Start
+              </label>
+              <input
+                id="qualifyStart"
+                type="datetime-local"
+                className="field-input"
+                value={qualifyStartLocal}
+                min={startMinLocal}
+                onChange={(e) => handleQualifyStartChange(e.target.value)}
+              />
+              {startUtcPreview ? (
+                <p className="mt-1 field-hint">On-chain: {startUtcPreview}</p>
+              ) : null}
+            </div>
+            <div>
+              <label className="field-label" htmlFor="qualifyEnd">
+                End
+              </label>
+              <input
+                id="qualifyEnd"
+                type="datetime-local"
+                className="field-input"
+                value={qualifyEndLocal}
+                min={endMinLocal}
+                onChange={(e) => setQualifyEndLocal(e.target.value)}
+              />
+              {endUtcPreview ? (
+                <p className="mt-1 field-hint">On-chain: {endUtcPreview}</p>
+              ) : null}
+            </div>
+          </div>
+
+          {qualifyDurationLabel ? (
+            <p className="mt-3 field-hint">{qualifyDurationLabel}</p>
+          ) : (
+            <p className="mt-3 text-caption text-pump-warning">
+              End must be at least 15 minutes after start and in the future.
+            </p>
+          )}
+        </section>
+
+        <section className="panel-surface p-4 md:p-5">
+          <p className="section-label">On-chain rules</p>
+          <p className="mt-1 field-hint">At least one rule is required to qualify wallets.</p>
+
+          <AirdropQualifyRulesEditor
+            linkedToken={selectedLinkedToken}
+            minHoldTokens={minHoldTokens}
+            minBuyBnb={minBuyBnb}
+            onMinHoldChange={setMinHoldTokens}
+            onMinBuyChange={setMinBuyBnb}
+          />
+        </section>
+
+        <AirdropSocialTasksEditor
+          tasks={socialTasks}
+          onToggle={toggleSocialTask}
+          onUrlChange={updateSocialTaskUrl}
+        />
+      </div>
+
+      <aside className="space-y-2.5 xl:sticky xl:top-16 xl:min-w-0">
+        <section className="rounded-lg border border-pump-accent/25 bg-gradient-to-br from-pump-accent/12 via-pump-card/70 to-pump-surface/55 p-3 md:p-4">
+          <p className="section-label text-[10px]">Preview</p>
+          <div className="mt-2 flex items-center gap-2.5">
+            {selectedLinkedToken ? (
+              <TokenAvatar
+                address={selectedLinkedToken.address}
+                symbol={selectedLinkedToken.symbol}
+                logoUrl={selectedLinkedToken.logoUrl}
+                size={40}
+              />
+            ) : (
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-dashed border-pump-border/30 bg-pump-surface/40 text-caption text-pump-muted">
+                ?
+              </div>
+            )}
+            <div className="min-w-0">
+              <p className="truncate text-body-sm font-semibold text-pump-text">{displayTitle}</p>
+              <p className="text-caption text-pump-muted">Pool ${displayPoolSymbol}</p>
+            </div>
+          </div>
+          {description.trim() ? (
+            <p className="mt-2 text-caption leading-snug text-pump-muted line-clamp-2">
+              {description.trim()}
+            </p>
+          ) : (
+            <p className="mt-2 text-caption leading-snug text-pump-warning">
+              Add a description so participants understand the campaign.
+            </p>
+          )}
+          <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 border-t border-pump-border/15 pt-2 text-caption">
+            <dt className="text-pump-muted">Qualify</dt>
+            <dd className="financial-value text-right text-pump-text">
+              {qualifyDurationLabel ?? "Set window"}
+            </dd>
+            <dt className="self-start text-pump-muted">Rules</dt>
+            <dd>
+              <AirdropQualifyRulesPreview
+                linkedToken={selectedLinkedToken}
+                minHoldTokens={minHoldTokens}
+                minBuyBnb={minBuyBnb}
+              />
+            </dd>
+            <AirdropSocialTasksPreview tasks={socialTasksForSync} />
+          </dl>
+        </section>
+
+        <AirdropRewardSplitPreview
+          totalReward={parsedRewardAmount}
+          assetLabel={rewardType === "bnb" ? "BNB" : selectedRewardSymbol}
+        />
+
+        <section className="panel-surface p-3 md:p-4">
+          <p className="section-label text-[10px]">Campaign summary</p>
+          <dl className="mt-2 space-y-1.5 text-caption">
+            <div className="flex items-center justify-between gap-2">
+              <dt className="text-pump-muted">Reward pool</dt>
+              <dd className="financial-value font-medium text-pump-text">
+                {parsedRewardAmount
+                  ? `${formatEther(parsedRewardAmount)} ${rewardType === "bnb" ? "BNB" : selectedRewardSymbol}`
+                  : "—"}
+              </dd>
+            </div>
+            <div className="flex items-center justify-between gap-2">
+              <dt className="text-pump-muted">Create fee</dt>
+              <dd className="financial-value font-medium text-pump-text">
+                {createFee !== undefined ? `${formatEther(createFee)} BNB` : "…"}
+              </dd>
+            </div>
+            {rewardType === "token" && parsedRewardAmount ? (
+              <div className="flex items-center justify-between gap-2">
+                <dt className="text-pump-muted">Token escrow</dt>
+                <dd className="financial-value font-medium text-pump-text">
+                  {formatEther(parsedRewardAmount)} {selectedRewardSymbol}
+                </dd>
+              </div>
+            ) : null}
+            <div className="flex items-center justify-between gap-2 border-t border-pump-border/15 pt-1.5">
+              <dt className="font-medium text-pump-text">Total BNB</dt>
+              <dd className="financial-value text-body-sm font-semibold text-pump-text">
+                {totalBnbCost != null ? `${formatEther(totalBnbCost)} BNB` : "—"}
+              </dd>
+            </div>
+          </dl>
+
+          {error ? <p className="notice-error mt-2 text-caption">{error}</p> : null}
+
+          {formValidation.warnings.length > 0 ? (
+            <ul className="mt-2 space-y-1 rounded-md border border-pump-warning/30 bg-pump-warning/5 px-2.5 py-2">
+              {formValidation.warnings.map((warning) => (
+                <li key={warning} className="text-[11px] leading-snug text-pump-warning">
+                  {warning}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+
+          <button
+            type="submit"
+            disabled={submitDisabled}
+            className="primary-button mt-3 flex w-full items-center justify-center gap-2"
+          >
+            {busy ? (
+              <span
+                className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-current border-t-transparent"
+                aria-hidden
+              />
+            ) : null}
+            {submitLabel}
+          </button>
+        </section>
+      </aside>
     </form>
   );
 }

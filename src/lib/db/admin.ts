@@ -7,6 +7,8 @@ export type AdminAirdropRow = {
   title: string | null;
   linkedSymbol: string | null;
   rewardToken: string | null;
+  rewardSymbol: string | null;
+  rewardPriceBnb: string | null;
   totalFunded: string;
   status: string;
   merkleRoot: string | null;
@@ -25,12 +27,18 @@ export async function listAdminAirdrops(): Promise<AdminAirdropRow[]> {
     merkle_root: string | null;
     claim_end: Date | null;
     symbol: string | null;
+    reward_symbol: string | null;
+    reward_price_bnb: string | null;
   }>(
     `
       SELECT a.id, a.on_chain_id, a.rules_json, a.reward_token, a.total_funded,
-             a.status, a.merkle_root, a.claim_end, t.symbol
+             a.status, a.merkle_root, a.claim_end, t.symbol,
+             rt.symbol AS reward_symbol,
+             COALESCE(rb.last_price_zug, 0)::text AS reward_price_bnb
       FROM airdrops a
       LEFT JOIN tokens t ON t.address = a.linked_token
+      LEFT JOIN tokens rt ON rt.address = a.reward_token
+      LEFT JOIN bonding_states rb ON rb.token_address = a.reward_token
       WHERE a.on_chain_id IS NOT NULL
       ORDER BY a.claim_end DESC NULLS LAST, a.id DESC
     `
@@ -42,6 +50,8 @@ export async function listAdminAirdrops(): Promise<AdminAirdropRow[]> {
     title: row.rules_json?.title ?? null,
     linkedSymbol: row.symbol,
     rewardToken: row.reward_token,
+    rewardSymbol: row.reward_symbol,
+    rewardPriceBnb: row.reward_price_bnb,
     totalFunded: row.total_funded,
     status: row.status,
     merkleRoot: row.merkle_root,

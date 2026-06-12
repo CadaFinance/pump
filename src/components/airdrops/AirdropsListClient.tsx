@@ -39,10 +39,20 @@ type SortDir = "asc" | "desc";
 type EnrichedAirdrop = AirdropListItem & {
   displayStatus: AirdropDisplayStatus;
   rewardNum: number;
+  rewardUsd: number;
 };
 
 const HIGH_VALUE_THRESHOLD = 10_000;
 const ENDING_SOON_HOURS = 48;
+
+function rewardUsdValue(
+  item: Pick<AirdropListItem, "totalFunded" | "rewardToken" | "rewardPriceBnb">,
+  bnbUsd: number | null | undefined
+): number {
+  const usd = airdropRewardUsd(item, bnbUsd);
+  if (usd != null) return usd;
+  return Number(item.totalFunded) || 0;
+}
 
 const createCampaignButtonClass =
   "inline-flex shrink-0 items-center justify-center gap-1.5 rounded-full border border-transparent bg-pump-accent font-semibold text-pump-accent-foreground shadow-sm transition hover:bg-pump-accent-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pump-accent/40";
@@ -67,7 +77,7 @@ function CreateCampaignLink({
   );
 }
 
-function enrichItem(item: AirdropListItem): EnrichedAirdrop {
+function enrichItem(item: AirdropListItem, bnbUsd: number | null): EnrichedAirdrop {
   return {
     ...item,
     displayStatus: getAirdropDisplayStatus({
@@ -78,6 +88,7 @@ function enrichItem(item: AirdropListItem): EnrichedAirdrop {
       merkleRoot: item.status === "FINALIZED" ? "0x1" : null,
     }),
     rewardNum: Number(item.totalFunded) || 0,
+    rewardUsd: rewardUsdValue(item, bnbUsd),
   };
 }
 
@@ -153,7 +164,7 @@ function matchesFilter(item: EnrichedAirdrop, filter: AirdropFilter): boolean {
     return item.displayStatus === "QUALIFYING" && isEndingSoon(item.qualifyEnd, ENDING_SOON_HOURS);
   }
   if (filter === "ended") return item.displayStatus === "CLOSED";
-  if (filter === "highValue") return item.rewardNum >= HIGH_VALUE_THRESHOLD;
+  if (filter === "highValue") return item.rewardUsd >= HIGH_VALUE_THRESHOLD;
   return true;
 }
 
@@ -247,7 +258,7 @@ function pickFeatured(items: EnrichedAirdrop[]): EnrichedAirdrop | null {
   if (!items.length) return null;
 
   const byPriority = (list: EnrichedAirdrop[]) =>
-    [...list].sort((a, b) => b.rewardNum - a.rewardNum)[0] ?? null;
+    [...list].sort((a, b) => b.rewardUsd - a.rewardUsd)[0] ?? null;
 
   const qualifying = items.filter((i) => i.displayStatus === "QUALIFYING");
   if (qualifying.length) return byPriority(qualifying);
@@ -262,12 +273,12 @@ function pickFeatured(items: EnrichedAirdrop[]): EnrichedAirdrop | null {
 }
 
 export function AirdropsListClient() {
-  const [items, setItems] = useState<EnrichedAirdrop[] | null>(null);
+  const [items, setItems] = useState<AirdropListItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [activeFilter, setActiveFilter] = useState<AirdropFilter>("all");
-  const [sortKey, setSortKey] = useState<SortKey>("end");
-  const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const [sortKey, setSortKey] = useState<SortKey>("reward");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
   const { bnbUsd } = useBnbUsdPrice();
 
   const load = useCallback(async () => {
@@ -275,7 +286,7 @@ export function AirdropsListClient() {
       const res = await fetch("/api/airdrops", { cache: "no-store" });
       const json = (await res.json()) as { data?: AirdropListItem[]; error?: string };
       if (!res.ok) throw new Error(json.error ?? "Failed to load airdrops");
-      setItems((json.data ?? []).map(enrichItem));
+      setItems(json.data ?? []);
       setError(null);
     } catch (err) {
       setItems(null);
@@ -289,7 +300,10 @@ export function AirdropsListClient() {
     return () => window.clearInterval(timer);
   }, [load]);
 
-  const resolvedItems = items ?? [];
+  const resolvedItems = useMemo(
+    () => (items ?? []).map((item) => enrichItem(item, bnbUsd)),
+    [items, bnbUsd]
+  );
   const featured = useMemo(() => pickFeatured(resolvedItems), [resolvedItems]);
 
   const stats = useMemo(() => {
@@ -308,7 +322,7 @@ export function AirdropsListClient() {
   }, [resolvedItems, bnbUsd]);
 
   const largestReward = useMemo(
-    () => [...resolvedItems].sort((a, b) => b.rewardNum - a.rewardNum)[0] ?? null,
+    () => [...resolvedItems].sort((a, b) => b.rewardUsd - a.rewardUsd)[0] ?? null,
     [resolvedItems]
   );
 
@@ -351,8 +365,14 @@ export function AirdropsListClient() {
     });
 
     const sorted = [...filtered].sort((a, b) => {
+      if (activeFilter === "all") {
+        const aClosed = a.displayStatus === "CLOSED";
+        const bClosed = b.displayStatus === "CLOSED";
+        if (aClosed !== bClosed) return aClosed ? 1 : -1;
+      }
+
       let delta = 0;
-      if (sortKey === "reward") delta = a.rewardNum - b.rewardNum;
+      if (sortKey === "reward") delta = a.rewardUsd - b.rewardUsd;
       else if (sortKey === "end") {
         delta = new Date(a.qualifyEnd).getTime() - new Date(b.qualifyEnd).getTime();
       } else if (sortKey === "start") {

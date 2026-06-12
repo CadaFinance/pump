@@ -339,4 +339,26 @@ code,
     background: rgb(var(--pump-warning) / 0.1);
     color: rgb(var(--pump-warning));
   }
+
+  .scrollbar-subtle {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(var(--pump-border) / 0.35) transparent;
+  }
+
+  .scrollbar-subtle::-webkit-scrollbar {
+    width: 5px;
+  }
+
+  .scrollbar-subtle::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .scrollbar-subtle::-webkit-scrollbar-thumb {
+    border-radius: 9999px;
+    background: rgb(var(--pump-border) / 0.3);
+  }
+
+  .scrollbar-subtle::-webkit-scrollbar-thumb:hover {
+    background: rgb(var(--pump-border) / 0.45);
+  }
 }

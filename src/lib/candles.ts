@@ -1,7 +1,7 @@
 import type { TradeItem } from "@/lib/db/launchpad";
 import { DEFAULT_STARTING_SPOT_PRICE_BNB } from "@/lib/bonding-curve";
 
-export type CandleInterval = "15s" | "1m" | "5m" | "15m" | "1h";
+export type CandleInterval = "15s" | "1m" | "5m" | "15m" | "1h" | "4h";
 
 export const CANDLE_INTERVALS: { id: CandleInterval; label: string; ms: number }[] = [
   { id: "15s", label: "15s", ms: 15_000 },
@@ -9,6 +9,7 @@ export const CANDLE_INTERVALS: { id: CandleInterval; label: string; ms: number }
   { id: "5m", label: "5m", ms: 5 * 60_000 },
   { id: "15m", label: "15m", ms: 15 * 60_000 },
   { id: "1h", label: "1h", ms: 60 * 60_000 },
+  { id: "4h", label: "4h", ms: 4 * 60 * 60_000 },
 ];
 
 export type CandleBar = {
@@ -155,19 +156,25 @@ export function buildCandlesFromTrades(
     return { candles, volumes };
   }
 
-  const startSec = sortedTimes[0]!;
+  let startSec = sortedTimes[0]!;
   const lastTradeSec = sortedTimes[sortedTimes.length - 1]!;
   const endBucketMs = Math.floor(endTimeMs / intervalMs) * intervalMs;
-  let endSec = Math.max(Math.floor(endBucketMs / 1000), lastTradeSec);
+  const endSec = Math.max(Math.floor(endBucketMs / 1000), lastTradeSec);
 
   const span = Math.floor((endSec - startSec) / intervalSec) + 1;
   if (span > MAX_CANDLES) {
-    endSec = startSec + (MAX_CANDLES - 1) * intervalSec;
+    // Keep the most recent window — older 15s intervals were dropping new trades.
+    startSec = endSec - (MAX_CANDLES - 1) * intervalSec;
   }
 
   const candles: CandleBar[] = [];
   const volumes: VolumeBar[] = [];
   let lastClose: number | null = null;
+  for (const t of sortedTimes) {
+    if (t < startSec) {
+      lastClose = buckets.get(t)!.close;
+    }
+  }
 
   for (let t = startSec; t <= endSec; t += intervalSec) {
     const b = buckets.get(t);

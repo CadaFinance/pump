@@ -17,6 +17,19 @@ export const QUALIFY_END_MIN_LEAD_SEC = 180;
 /** Min gap between start and end (15 minutes — testnet-friendly). */
 export const QUALIFY_MIN_DURATION_SEC = 15 * 60;
 
+/** Matches PumpAirdropManager.CLAIM_DURATION (24 hours). */
+export const CLAIM_WINDOW_SEC = 24 * 60 * 60;
+
+/** e.g. 360h → "15d 0h 0m" */
+export function formatDurationDhM(totalSeconds: number): string {
+  const safe = Math.max(0, Math.floor(totalSeconds));
+  const totalMinutes = Math.floor(safe / 60);
+  const days = Math.floor(totalMinutes / (24 * 60));
+  const hours = Math.floor((totalMinutes % (24 * 60)) / 60);
+  const minutes = totalMinutes % 60;
+  return `${days}d ${hours}h ${minutes}m`;
+}
+
 export function toDatetimeLocalValue(date: Date): string {
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;

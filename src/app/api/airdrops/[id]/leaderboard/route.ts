@@ -3,7 +3,7 @@ import { getAirdropById, getAirdropLeaderboard } from "@/lib/db/airdrops";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
-export async function GET(_request: Request, context: RouteContext) {
+export async function GET(request: Request, context: RouteContext) {
   try {
     const { id } = await context.params;
     const airdrop = await getAirdropById(id);
@@ -14,7 +14,8 @@ export async function GET(_request: Request, context: RouteContext) {
       return NextResponse.json({ error: "Leaderboard closed after finalize" }, { status: 400 });
     }
 
-    const data = await getAirdropLeaderboard(id);
+    const viewerAddress = new URL(request.url).searchParams.get("address");
+    const data = await getAirdropLeaderboard(id, { viewerAddress });
     return NextResponse.json(
       { data },
       { headers: { "Cache-Control": "no-store" } }

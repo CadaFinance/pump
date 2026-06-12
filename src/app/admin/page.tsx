@@ -10,7 +10,8 @@ export default function AdminPage() {
           <div>
             <h2 className="section-heading">Admin</h2>
             <p className="mt-1 text-body-sm text-pump-muted">
-              Treasury fees, airdrop escrow, and remainder sweeps.
+              Protocol treasury, airdrop escrow, and remainder sweeps — amounts shown with USD
+              estimates.
             </p>
           </div>
           <AdminPanel />

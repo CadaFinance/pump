@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { createPublicClient, http } from "viem";
 import { useReadContract } from "wagmi";
 import type { TokenDetail, TradeItem } from "@/lib/db/launchpad";
@@ -8,7 +9,6 @@ import { bondingCurveManagerAbi, displayTokenPriceBnb } from "@/lib/bonding-curv
 import {
   DEFAULT_TOKEN_TOTAL_SUPPLY,
   estimateFdvUsd,
-  formatBnbWithUsd,
   tokenPriceUsd,
 } from "@/lib/format-usd";
 import { useBnbUsdPrice } from "@/hooks/useBnbUsdPrice";
@@ -27,12 +27,20 @@ import {
 } from "@/lib/optimistic-activity";
 import { contracts, pumpChain, shortAddress } from "@/config/chain";
 import { TradePanel, type TradeConfirmedPayload } from "@/components/token/TradePanel";
+import { TradeSheet } from "@/components/token/TradeSheet";
+import {
+  parseTradePrefillFromSearchParams,
+  type TradePrefillConfig,
+} from "@/lib/token-trade-prefill";
 import { TradeTape } from "@/components/token/TradeTape";
 import { PriceChart } from "@/components/token/PriceChart";
 import { useFavorites } from "@/components/favorites/FavoritesProvider";
 import { TokenAvatar } from "@/components/token/TokenAvatar";
+import { CreatorProfileModal } from "@/components/creators/CreatorProfileModal";
 import { CreatorRewardsCard } from "@/components/creators/CreatorRewardsCard";
 import { TokenSocialLinksBar } from "@/components/token/TokenSocialLinksBar";
+import { UserAvatarForAddress } from "@/components/user/UserAvatarForAddress";
+import { hasSocialLinks } from "@/lib/token-social";
 
 const POLL_MS = 4_000;
 const BURST_POLL_MS = 1_500;
@@ -186,6 +194,12 @@ export function TokenDetailLive({
   const [optimisticTrades, setOptimisticTrades] = useState<TradeItem[]>([]);
   const [indexerSyncing, setIndexerSyncing] = useState(false);
   const [copiedAddress, setCopiedAddress] = useState(false);
+  const [tradeSheetOpen, setTradeSheetOpen] = useState(false);
+  const [creatorProfileOpen, setCreatorProfileOpen] = useState(false);
+  const [tradePrefill, setTradePrefill] = useState<TradePrefillConfig | null>(null);
+  const tradePrefillCapturedRef = useRef(false);
+  const searchParams = useSearchParams();
+  const router = useRouter();
   const { bnbUsd } = useBnbUsdPrice();
   const { isFavorite, toggleFavorite } = useFavorites();
   const burstUntilRef = useRef(0);
@@ -193,6 +207,19 @@ export function TokenDetailLive({
   const optimisticRef = useRef<TradeItem[]>([]);
   optimisticRef.current = optimisticTrades;
   const hydratedRef = useRef(false);
+
+  useEffect(() => {
+    if (tradePrefillCapturedRef.current) return;
+    const parsed = parseTradePrefillFromSearchParams(searchParams);
+    if (!parsed) return;
+
+    tradePrefillCapturedRef.current = true;
+    setTradePrefill(parsed);
+    if (parsed.side === "buy") {
+      setTradeSheetOpen(true);
+    }
+    router.replace(`/token/${tokenAddress}`, { scroll: false });
+  }, [searchParams, router, tokenAddress]);
 
   const trades = useMemo(
     () => mergeTrades(dbTrades, optimisticTrades),
@@ -371,7 +398,6 @@ export function TokenDetailLive({
   const priceUsd = tokenPriceUsd(displayPrice, bnbUsd);
   const fdvUsd = estimateFdvUsd(displayPrice, bnbUsd);
   const volume24hBnb = useMemo(() => computeVolumeWindowBnb(trades, 86_400_000), [trades]);
-  const volume24h = formatBnbWithUsd(volume24hBnb, bnbUsd, { compact: true });
   const change24h = useMemo(
     () => compute24hPriceChange(trades, displayPrice, bnbUsd),
     [trades, displayPrice, bnbUsd]
@@ -404,9 +430,89 @@ export function TokenDetailLive({
     }
   }
 
+  const elapsed = formatElapsedSince(liveToken.createdAt);
+  const favorited = isFavorite(tokenAddress);
+  const creatorLabel = shortAddress(liveToken.creatorAddress);
+
+  const creatorMeta = (
+    <button
+      type="button"
+      onClick={() => setCreatorProfileOpen(true)}
+      className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-md text-caption text-pump-muted transition hover:text-pump-text"
+      aria-label={`View creator profile ${creatorLabel}`}
+    >
+      <UserAvatarForAddress address={liveToken.creatorAddress} size={20} />
+      <span className="financial-value truncate">{creatorLabel}</span>
+    </button>
+  );
+
+  const tokenActions = (
+    <div className="inline-flex items-center rounded-xl border border-pump-border/20 bg-pump-surface/35 p-1">
+      <button
+        type="button"
+        onClick={() => void onShare()}
+        className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-pump-muted transition hover:bg-pump-surface/80 hover:text-pump-text"
+        aria-label="Share"
+      >
+        <ShareIcon />
+      </button>
+      <span className="h-5 w-px bg-pump-border/25" aria-hidden />
+      <button
+        type="button"
+        onClick={() => void onCopyAddress()}
+        className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-pump-muted transition hover:bg-pump-surface/80 hover:text-pump-text"
+        aria-label={copiedAddress ? "Address copied" : "Copy token address"}
+      >
+        {copiedAddress ? <CheckIcon /> : <CopyIcon />}
+      </button>
+      <span className="h-5 w-px bg-pump-border/25" aria-hidden />
+      <button
+        type="button"
+        onClick={() => toggleFavorite(tokenAddress)}
+        aria-label={favorited ? "Remove from favorites" : "Add to favorites"}
+        className={
+          favorited
+            ? "inline-flex h-9 w-9 items-center justify-center rounded-lg text-lg leading-none text-pump-accent transition hover:bg-pump-accent/10"
+            : "inline-flex h-9 w-9 items-center justify-center rounded-lg text-lg leading-none text-pump-muted transition hover:bg-pump-surface/80 hover:text-pump-text"
+        }
+      >
+        {favorited ? "★" : "☆"}
+      </button>
+    </div>
+  );
+
   return (
-    <div className="mt-4 space-y-6">
-      <header className="flex flex-wrap items-start justify-between gap-4">
+    <div className="mt-3 space-y-5 pb-20 md:mt-4 md:space-y-6 xl:pb-0">
+      <header className="xl:hidden">
+        <div className="flex items-center gap-3">
+          <TokenAvatar
+            address={liveToken.address}
+            symbol={liveToken.symbol}
+            logoUrl={liveToken.logoUrl}
+            size={44}
+          />
+          <div className="min-w-0 flex-1">
+            <h1 className="financial-value truncate text-h2 font-semibold tracking-tight text-pump-text">
+              ${liveToken.symbol}
+            </h1>
+            <div className="mt-1 flex min-w-0 items-center gap-1.5">
+              {creatorMeta}
+              <span className="shrink-0 text-pump-muted/45" aria-hidden>
+                ·
+              </span>
+              <span className="shrink-0 text-caption text-pump-muted">{elapsed}</span>
+            </div>
+          </div>
+          {tokenActions}
+        </div>
+        {hasSocialLinks(liveToken.socialLinks) ? (
+          <div className="mt-3 border-t border-pump-border/10 pt-3">
+            <TokenSocialLinksBar links={liveToken.socialLinks} variant="mobile" />
+          </div>
+        ) : null}
+      </header>
+
+      <header className="hidden flex-wrap items-start justify-between gap-4 xl:flex">
         <div className="flex min-w-0 items-start gap-3">
           <TokenAvatar
             address={liveToken.address}
@@ -415,14 +521,20 @@ export function TokenDetailLive({
             size={48}
           />
           <div className="min-w-0">
-            <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+            <div className="flex min-w-0 items-center gap-3">
               <h1 className="min-w-0 truncate section-heading">{liveToken.name}</h1>
               <TokenSocialLinksBar links={liveToken.socialLinks} inline />
             </div>
-            <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-caption text-pump-muted">
+            <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-caption text-pump-muted">
               <span>${liveToken.symbol}</span>
-              <span>{shortAddress(liveToken.creatorAddress)}</span>
-              <span>{formatElapsedSince(liveToken.createdAt)}</span>
+              <span className="text-pump-muted/45" aria-hidden>
+                ·
+              </span>
+              {creatorMeta}
+              <span className="text-pump-muted/45" aria-hidden>
+                ·
+              </span>
+              <span>{elapsed}</span>
             </div>
           </div>
         </div>
@@ -449,15 +561,15 @@ export function TokenDetailLive({
           <button
             type="button"
             onClick={() => toggleFavorite(tokenAddress)}
-            title={isFavorite(tokenAddress) ? "Remove from favorites" : "Add to favorites"}
-            aria-label={isFavorite(tokenAddress) ? "Remove from favorites" : "Add to favorites"}
+            title={favorited ? "Remove from favorites" : "Add to favorites"}
+            aria-label={favorited ? "Remove from favorites" : "Add to favorites"}
             className={
-              isFavorite(tokenAddress)
+              favorited
                 ? "inline-flex h-10 w-10 items-center justify-center rounded-md border border-pump-accent/35 bg-pump-accent/12 text-lg leading-none text-pump-accent transition hover:border-pump-accent/50 hover:bg-pump-accent/18 hover:text-pump-accent"
                 : "secondary-button inline-flex h-10 w-10 items-center justify-center text-lg leading-none"
             }
           >
-            {isFavorite(tokenAddress) ? "★" : "☆"}
+            {favorited ? "★" : "☆"}
           </button>
         </div>
       </header>
@@ -472,7 +584,7 @@ export function TokenDetailLive({
             bnbUsd={bnbUsd}
             currentPriceUsd={priceUsd}
             currentMcapUsd={fdvUsd}
-            volume24hUsd={volume24h.usd}
+            volume24hBnb={volume24hBnb}
             price24hChangePct={change24h?.changePct ?? null}
             price24hChangeUsd={change24h?.changeUsd ?? null}
             mcap24hChangeUsd={mcap24hChangeUsd}
@@ -492,13 +604,16 @@ export function TokenDetailLive({
         </div>
 
         <aside className="min-w-0 w-full space-y-4 xl:sticky xl:top-20 xl:self-start">
-          <TradePanel
-            tokenAddress={tokenAddress as `0x${string}`}
-            symbol={symbol}
-            status={liveToken.status}
-            reserveBnb={liveToken.reserveBnb}
-            onTradeConfirmed={handleTradeConfirmed}
-          />
+          <div className="hidden xl:block">
+            <TradePanel
+              tokenAddress={tokenAddress as `0x${string}`}
+              symbol={symbol}
+              status={liveToken.status}
+              reserveBnb={liveToken.reserveBnb}
+              prefill={tradePrefill}
+              onTradeConfirmed={handleTradeConfirmed}
+            />
+          </div>
           <CreatorRewardsCard
             creatorAddress={liveToken.creatorAddress}
             launchTxHash={liveToken.launchTxHash}
@@ -514,6 +629,35 @@ export function TokenDetailLive({
           ) : null}
         </aside>
       </div>
+
+      <div className="pointer-events-none fixed bottom-[4.25rem] left-0 right-0 z-30 px-4 xl:hidden">
+        <div className="pointer-events-auto mx-auto w-full max-w-lg">
+          <button
+            type="button"
+            onClick={() => setTradeSheetOpen(true)}
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-pump-accent py-3.5 text-body-sm font-semibold text-pump-accent-foreground shadow-panelDark transition hover:opacity-95 active:scale-[0.99]"
+          >
+            Buy ${symbol}
+          </button>
+        </div>
+      </div>
+
+      <TradeSheet
+        open={tradeSheetOpen}
+        onClose={() => setTradeSheetOpen(false)}
+        tokenAddress={tokenAddress as `0x${string}`}
+        symbol={symbol}
+        status={liveToken.status}
+        reserveBnb={liveToken.reserveBnb}
+        prefill={tradePrefill}
+        onTradeConfirmed={handleTradeConfirmed}
+      />
+
+      <CreatorProfileModal
+        open={creatorProfileOpen}
+        onClose={() => setCreatorProfileOpen(false)}
+        creatorAddress={liveToken.creatorAddress}
+      />
     </div>
   );
 }

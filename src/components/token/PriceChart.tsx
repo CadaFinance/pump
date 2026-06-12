@@ -23,7 +23,12 @@ import {
   type CandleInterval,
 } from "@/lib/candles";
 import { useTheme } from "@/components/theme/ThemeProvider";
-import { DEFAULT_TOKEN_TOTAL_SUPPLY, formatUsd, formatUsdReadable } from "@/lib/format-usd";
+import {
+  bnbToUsd,
+  DEFAULT_TOKEN_TOTAL_SUPPLY,
+  formatUsd,
+  formatUsdReadable,
+} from "@/lib/format-usd";
 
 type PriceChartProps = {
   tokenAddress: string;
@@ -33,7 +38,7 @@ type PriceChartProps = {
   bnbUsd?: number | null;
   currentPriceUsd?: number | null;
   currentMcapUsd?: number | null;
-  volume24hUsd?: string | null;
+  volume24hBnb?: number;
   price24hChangePct?: number | null;
   price24hChangeUsd?: number | null;
   mcap24hChangeUsd?: number | null;
@@ -49,9 +54,9 @@ function cssVar(name: string, fallback: string): string {
 
 function chartHeightPx(): number {
   if (typeof window === "undefined") return 400;
-  if (window.innerWidth >= 1024) return 480;
-  if (window.innerWidth >= 768) return 420;
-  return 360;
+  if (window.innerWidth >= 1024) return 460;
+  if (window.innerWidth >= 768) return 400;
+  return 280;
 }
 
 function formatOhlc(value: number, currency: "usd" | "mcap"): string {
@@ -80,7 +85,7 @@ export function PriceChart({
   bnbUsd = null,
   currentPriceUsd = null,
   currentMcapUsd = null,
-  volume24hUsd = null,
+  volume24hBnb = 0,
   price24hChangePct = null,
   price24hChangeUsd = null,
   mcap24hChangeUsd = null,
@@ -245,7 +250,17 @@ export function PriceChart({
           return `${hh}:${mm}:${ss}`;
         },
       },
-      handleScroll: { vertTouchDrag: false },
+      handleScroll: {
+        mouseWheel: true,
+        pressedMouseMove: true,
+        horzTouchDrag: true,
+        vertTouchDrag: true,
+      },
+      handleScale: {
+        mouseWheel: true,
+        pinch: true,
+        axisPressedMouseMove: { time: true, price: true },
+      },
       width: el.clientWidth || el.offsetWidth,
       height,
       localization: {
@@ -412,12 +427,6 @@ export function PriceChart({
     }
   }, [candles, volumes, priceFormat, ready]);
 
-  const pctChange =
-    candles.length >= 2
-      ? ((candles[candles.length - 1]!.close - candles[0]!.open) / candles[0]!.open) * 100
-      : null;
-
-  const summaryLabel = currency === "usd" ? "Price" : "Market cap";
   const summaryValue =
     currency === "usd"
       ? (currentPriceUsd != null ? formatPumpSubscriptPrice(currentPriceUsd, "$") : "—")
@@ -430,99 +439,131 @@ export function PriceChart({
       : summaryDeltaPct >= 0
         ? "text-pump-success"
         : "text-pump-danger";
-  const summaryDeltaText =
+  const summaryDeltaPctText =
     summaryDeltaPct == null
-      ? "24h —"
-      : `${summaryDeltaUsd != null ? formatUsdReadable(summaryDeltaUsd, { compact: true, signed: true }) : "—"} (${summaryDeltaPct >= 0 ? "+" : ""}${summaryDeltaPct.toFixed(2)}%) / 24h`;
+      ? "—"
+      : `${summaryDeltaPct >= 0 ? "+" : ""}${summaryDeltaPct.toFixed(2)}%`;
+  const summaryDeltaUsdText =
+    summaryDeltaUsd != null
+      ? formatUsdReadable(summaryDeltaUsd, { compact: true, signed: true })
+      : null;
+
+  const volumeUsd = bnbToUsd(volume24hBnb, bnbUsd);
+  const volumeUsdLabel =
+    volumeUsd != null ? formatUsdReadable(volumeUsd, { compact: true }) : null;
 
   const showEmpty = !loading && !error && mergedTrades.length === 0;
   const showError = !loading && error && mergedTrades.length === 0;
 
   return (
     <section className="panel-surface overflow-hidden">
-      <div className="border-b border-pump-border/20 px-4 py-4">
-        <p className="section-label">{summaryLabel}</p>
-        <p className="financial-value mt-1 text-display font-semibold text-pump-text">{summaryValue}</p>
-        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-          <span className={summaryDeltaTone}>{summaryDeltaText}</span>
-          <span className="text-pump-muted">Volume {volume24hUsd ?? "—"}</span>
-        </div>
-      </div>
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-pump-border/15 px-3 py-2">
-        <div className="flex flex-wrap items-center gap-1">
-          {CANDLE_INTERVALS.map((item) => (
+      <div className="px-4 py-3 md:py-4">
+        <div className="flex items-center justify-between gap-3">
+          <p className="section-label">{currency === "usd" ? "Price" : "Market cap"}</p>
+          <div className="inline-flex shrink-0 items-center gap-0.5 rounded-lg border border-pump-border/20 bg-pump-surface/25 p-0.5">
             <button
-              key={item.id}
               type="button"
-              onClick={() => selectInterval(item.id)}
-              className={
-                timeInterval === item.id ? "chip-button chip-button-active" : "chip-button"
-              }
+              onClick={() => selectCurrency("usd")}
+              disabled={bnbUsd == null}
+              className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition disabled:opacity-40 md:px-3 md:py-1.5 md:text-caption ${
+                currency === "usd"
+                  ? "bg-pump-accent text-pump-accent-foreground"
+                  : "text-pump-muted hover:text-pump-text"
+              }`}
             >
-              {item.label}
+              USD
             </button>
-          ))}
+            <button
+              type="button"
+              onClick={() => selectCurrency("mcap")}
+              disabled={bnbUsd == null}
+              className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition disabled:opacity-40 md:px-3 md:py-1.5 md:text-caption ${
+                currency === "mcap"
+                  ? "bg-pump-accent text-pump-accent-foreground"
+                  : "text-pump-muted hover:text-pump-text"
+              }`}
+            >
+              MCAP
+            </button>
+          </div>
         </div>
-        <div className="flex items-center gap-1">
-          <button
-            type="button"
-            onClick={() => selectCurrency("usd")}
-            disabled={bnbUsd == null}
-            className={`disabled:opacity-40 ${
-              currency === "usd" ? "chip-button chip-button-active" : "chip-button"
-            }`}
-          >
-            USD
-          </button>
-          <button
-            type="button"
-            onClick={() => selectCurrency("mcap")}
-            disabled={bnbUsd == null}
-            className={`disabled:opacity-40 ${
-              currency === "mcap" ? "chip-button chip-button-active" : "chip-button"
-            }`}
-          >
-            MCAP
-          </button>
-          <button
-            type="button"
-            title="Reset zoom"
-            onClick={() => {
-              shouldFitViewportRef.current = true;
-              chartRef.current?.timeScale().fitContent();
-            }}
-            className="chip-button chip-button-ghost ml-1"
-          >
-            Fit
-          </button>
+
+        <p className="financial-value mt-1 text-[1.65rem] font-semibold leading-tight text-pump-text md:text-display">
+          {summaryValue}
+        </p>
+
+        <div className="mt-2 inline-flex max-w-full flex-wrap items-center gap-x-2 gap-y-1 rounded-md border border-pump-border/15 bg-pump-surface/35 px-2.5 py-1.5 text-caption">
+          <span className={`financial-value font-medium ${summaryDeltaTone}`}>
+            {summaryDeltaPctText}
+          </span>
+          {summaryDeltaUsdText ? (
+            <>
+              <span className="text-pump-muted/40">·</span>
+              <span className={`financial-value ${summaryDeltaTone}`}>{summaryDeltaUsdText}</span>
+            </>
+          ) : null}
+          <span className="text-pump-muted/40">·</span>
+          <span className="text-pump-muted">Vol</span>
+          <span className="financial-value font-medium text-pump-text">
+            {volumeUsdLabel ?? "—"}
+          </span>
+          <span className="text-pump-muted">24h</span>
         </div>
       </div>
 
+      <div className="flex items-center justify-between gap-2 border-t border-pump-border/10 px-3 py-2.5">
+        <div className="min-w-0 flex-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <div className="inline-flex min-w-max items-center gap-2">
+            <div className="inline-flex gap-0.5 rounded-lg border border-pump-border/20 bg-pump-surface/25 p-0.5">
+              {CANDLE_INTERVALS.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => selectInterval(item.id)}
+                  className={`shrink-0 rounded-md px-2.5 py-1.5 text-[11px] font-medium transition md:px-3 md:text-caption ${
+                    timeInterval === item.id
+                      ? "bg-pump-accent text-pump-accent-foreground"
+                      : "text-pump-muted hover:text-pump-text"
+                  }`}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+            <span className="financial-value shrink-0 pr-1 text-[11px] text-pump-muted md:text-caption">
+              {symbol}/{unitLabel}
+            </span>
+          </div>
+        </div>
+        <button
+          type="button"
+          title="Reset zoom"
+          onClick={() => {
+            shouldFitViewportRef.current = true;
+            chartRef.current?.timeScale().fitContent();
+          }}
+          className="chip-button chip-button-ghost hidden shrink-0 px-2.5 py-1.5 text-caption md:inline-flex"
+        >
+          Fit
+        </button>
+      </div>
+
       {displayCandle ? (
-        <div className="financial-value flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-pump-border/15 px-3 py-2 text-xs">
-          <span className="text-pump-muted">
-            {symbol}/{unitLabel} · {timeInterval}
-          </span>
-          <span>
+        <div className="financial-value flex items-center gap-x-3 overflow-x-auto border-t border-pump-border/10 px-3 py-1.5 text-[11px] text-pump-muted [scrollbar-width:none] md:gap-x-4 md:py-2 md:text-xs [&::-webkit-scrollbar]:hidden">
+          <span className="shrink-0">
             O <span className="text-pump-text">{formatOhlc(displayCandle.open, currency)}</span>
           </span>
-          <span>
+          <span className="shrink-0">
             H <span className="text-pump-accent">{formatOhlc(displayCandle.high, currency)}</span>
           </span>
-          <span>
+          <span className="shrink-0">
             L <span className="text-pump-danger">{formatOhlc(displayCandle.low, currency)}</span>
           </span>
-          <span>
+          <span className="shrink-0">
             C <span className="text-pump-text">{formatOhlc(displayCandle.close, currency)}</span>
           </span>
-          {pctChange != null && !hoverOhlc ? (
-            <span className={pctChange >= 0 ? "text-pump-success" : "text-pump-danger"}>
-              {pctChange >= 0 ? "+" : ""}
-              {pctChange.toFixed(2)}%
-            </span>
-          ) : null}
-          {displayTimeUtc ? (
-            <span className="text-pump-muted">{displayTimeUtc}</span>
+          {hoverOhlc && displayTimeUtc ? (
+            <span className="hidden shrink-0 sm:inline">{displayTimeUtc}</span>
           ) : null}
         </div>
       ) : null}

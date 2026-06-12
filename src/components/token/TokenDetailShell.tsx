@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import type { TokenDetail, TradeItem } from "@/lib/db/launchpad";
 import { AppShell } from "@/components/layout/AppShell";
 import { TokenDetailLive } from "@/components/token/TokenDetailLive";
@@ -42,13 +42,15 @@ function TokenDetailView({
         </p>
       ) : null}
 
-      <TokenDetailLive
-        tokenAddress={token.address}
-        symbol={token.symbol}
-        status={token.status}
-        initialToken={token}
-        initialTrades={trades}
-      />
+      <Suspense fallback={<TokenDetailBodySkeleton />}>
+        <TokenDetailLive
+          tokenAddress={token.address}
+          symbol={token.symbol}
+          status={token.status}
+          initialToken={token}
+          initialTrades={trades}
+        />
+      </Suspense>
     </>
   );
 }

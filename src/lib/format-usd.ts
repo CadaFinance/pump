@@ -65,6 +65,17 @@ export function formatBnbWithUsd(
   return { bnb, usd: usdValue != null ? formatUsd(usdValue, opts) : null };
 }
 
+export function tokenAmountUsd(
+  tokenAmount: number,
+  priceBnb: number,
+  bnbUsd: number | null | undefined
+): number | null {
+  if (!Number.isFinite(tokenAmount) || tokenAmount <= 0) return null;
+  if (!Number.isFinite(priceBnb) || priceBnb <= 0 || bnbUsd == null) return null;
+  const usd = tokenAmount * priceBnb * bnbUsd;
+  return Number.isFinite(usd) ? usd : null;
+}
+
 export function tokenPriceUsd(priceBnb: number, bnbUsd: number | null | undefined): number | null {
   if (bnbUsd == null || !Number.isFinite(priceBnb) || priceBnb <= 0) return null;
   const usd = priceBnb * bnbUsd;

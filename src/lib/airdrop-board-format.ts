@@ -1,3 +1,5 @@
+import { parseEther, formatEther } from "viem";
+import { rewardAmountForRank } from "@/lib/airdrop-distribution";
 import { bnbToUsd } from "@/lib/format-usd";
 
 type AirdropRewardMeta = {
@@ -96,4 +98,48 @@ export function formatQualifyDateTime(iso: string): string {
 export function isEndingSoon(endIso: string, withinHours = 48): boolean {
   const ms = new Date(endIso).getTime() - Date.now();
   return Number.isFinite(ms) && ms > 0 && ms <= withinHours * 60 * 60 * 1000;
+}
+
+export function projectedRankRewardAmount(totalFunded: string, rank: number): number {
+  if (rank < 1 || rank > 100) return 0;
+  const totalWei = parseEther(totalFunded || "0");
+  const rewardWei = rewardAmountForRank(totalWei, rank);
+  return Number(formatEther(rewardWei));
+}
+
+export function projectedRankRewardUsd(
+  totalFunded: string,
+  rank: number,
+  item: AirdropRewardMeta,
+  bnbUsd: number | null | undefined
+): number | null {
+  const amount = projectedRankRewardAmount(totalFunded, rank);
+  if (!Number.isFinite(amount) || amount <= 0) return null;
+  if (!item.rewardToken) return bnbToUsd(amount, bnbUsd);
+  const priceBnb = Number(item.rewardPriceBnb);
+  if (!Number.isFinite(priceBnb) || priceBnb <= 0 || bnbUsd == null) return null;
+  return amount * priceBnb * bnbUsd;
+}
+
+export function formatProjectedRankReward(
+  totalFunded: string,
+  rank: number,
+  opts: { isBnb: boolean; symbol?: string | null }
+): string {
+  const amount = projectedRankRewardAmount(totalFunded, rank);
+  if (amount <= 0) return "—";
+  return formatAirdropReward(String(amount), opts);
+}
+
+export function airdropRewardAmountUsd(
+  amount: string | number,
+  item: AirdropRewardMeta,
+  bnbUsd: number | null | undefined
+): number | null {
+  const value = Number(amount);
+  if (!Number.isFinite(value) || value <= 0) return null;
+  if (!item.rewardToken) return bnbToUsd(value, bnbUsd);
+  const priceBnb = Number(item.rewardPriceBnb);
+  if (!Number.isFinite(priceBnb) || priceBnb <= 0 || bnbUsd == null) return null;
+  return value * priceBnb * bnbUsd;
 }

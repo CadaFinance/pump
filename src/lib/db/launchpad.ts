@@ -893,6 +893,48 @@ export async function getCreatorFeesAccruedBnb(address: string): Promise<number>
   return getCreatorFeesClaimedBnb(address);
 }
 
+export type LaunchpadTokenWalletCatalogEntry = {
+  address: string;
+  symbol: string;
+  name: string;
+  logoUrl: string | null;
+  lastPriceBnb: string;
+};
+
+export async function listLaunchpadTokensForWalletBalance(): Promise<
+  LaunchpadTokenWalletCatalogEntry[]
+> {
+  const db = getLaunchpadPool();
+  const result = await db.query<{
+    address: string;
+    symbol: string;
+    name: string;
+    logo_url: string | null;
+    last_price_zug: string;
+  }>(
+    `
+      SELECT
+        t.address,
+        t.symbol,
+        t.name,
+        t.logo_url,
+        COALESCE(b.last_price_zug, 0)::text AS last_price_zug
+      FROM tokens t
+      LEFT JOIN bonding_states b ON b.token_address = t.address
+      WHERE t.is_hidden = false
+      ORDER BY t.created_at DESC
+    `
+  );
+
+  return result.rows.map((row) => ({
+    address: row.address,
+    symbol: row.symbol,
+    name: row.name,
+    logoUrl: row.logo_url,
+    lastPriceBnb: row.last_price_zug,
+  }));
+}
+
 export async function getPortfolioForAddress(address: string): Promise<PortfolioSnapshot> {
   const db = getLaunchpadPool();
   const normalized = address.toLowerCase();
@@ -1258,6 +1300,7 @@ export type CreatorProfileToken = {
   createdAt: string;
   progressBps: number;
   marketCapBnb: string;
+  lastPriceBnb: string;
   tradeCount: number;
   creatorTokenBalance: string;
 };
@@ -1316,6 +1359,7 @@ export async function getCreatorProfile(address: string): Promise<CreatorProfile
         created_at: Date;
         progress_bps: number;
         market_cap_zug: string;
+        last_price_zug: string;
         trade_count: number;
         creator_token_balance: string;
       }>(
@@ -1329,6 +1373,7 @@ export async function getCreatorProfile(address: string): Promise<CreatorProfile
           t.created_at,
           COALESCE(b.progress_bps, 0) AS progress_bps,
           COALESCE(b.market_cap_zug, 0)::text AS market_cap_zug,
+          COALESCE(b.last_price_zug, 0)::text AS last_price_zug,
           COALESCE(b.trade_count, 0) AS trade_count,
           COALESCE(p.token_balance, 0)::text AS creator_token_balance
         FROM tokens t
@@ -1389,6 +1434,7 @@ export async function getCreatorProfile(address: string): Promise<CreatorProfile
       createdAt: row.created_at.toISOString(),
       progressBps: row.progress_bps,
       marketCapBnb: row.market_cap_zug,
+      lastPriceBnb: row.last_price_zug,
       tradeCount: row.trade_count,
       creatorTokenBalance: row.creator_token_balance,
     })),

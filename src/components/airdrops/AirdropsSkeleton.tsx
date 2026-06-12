@@ -57,3 +57,36 @@ export function AirdropsSkeleton() {
     </div>
   );
 }
+
+export function AirdropDetailSkeleton() {
+  return (
+    <div className="space-y-4">
+      <div className="panel-surface overflow-hidden">
+        <div className="border-b border-pump-border/15 p-4 md:p-5">
+          <div className="flex items-start gap-3">
+            <Skeleton className="h-14 w-14 shrink-0 rounded-full md:h-16 md:w-16" />
+            <div className="min-w-0 flex-1 space-y-2">
+              <Skeleton className="h-6 w-48" />
+              <Skeleton className="h-4 w-full max-w-md" />
+              <Skeleton className="h-4 w-32" />
+            </div>
+            <Skeleton className="h-7 w-24 rounded-sm" />
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-2 p-4 md:grid-cols-4 md:p-5">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-16 w-full rounded-md" />
+          ))}
+        </div>
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-[5fr_7fr]">
+        <div className="space-y-4">
+          <Skeleton className="h-48 w-full rounded-lg" />
+          <Skeleton className="h-40 w-full rounded-lg" />
+        </div>
+        <Skeleton className="h-72 w-full rounded-lg" />
+      </div>
+    </div>
+  );
+}

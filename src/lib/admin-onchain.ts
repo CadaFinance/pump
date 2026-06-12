@@ -1,5 +1,6 @@
 import { createPublicClient, formatEther, http, type Address } from "viem";
 import { pumpAirdropManagerAbi } from "@/lib/abis/pump-airdrop-manager";
+import { launchpadTreasuryAbi } from "@/lib/abis/launchpad-treasury";
 import { memeFactoryAbi } from "@/lib/abis/meme-factory";
 import { bondingCurveManagerAbi } from "@/lib/bonding-curve";
 import { contracts, pumpChain, rpcUrl } from "@/config/chain";
@@ -120,7 +121,14 @@ export async function getAdminProtocolSnapshot() {
   ]);
 
   const treasuryAddress = (memeTreasury as Address).toLowerCase();
-  const treasuryBalance = await publicClient.getBalance({ address: memeTreasury as Address });
+  const [treasuryBalance, treasuryOwner] = await Promise.all([
+    publicClient.getBalance({ address: memeTreasury as Address }),
+    publicClient.readContract({
+      address: memeTreasury as Address,
+      abi: launchpadTreasuryAbi,
+      functionName: "owner",
+    }),
+  ]);
 
   return {
     memeFactory: {
@@ -147,6 +155,7 @@ export async function getAdminProtocolSnapshot() {
       : null,
     treasury: {
       address: treasuryAddress,
+      owner: (treasuryOwner as Address).toLowerCase(),
       balanceBnb: formatEther(treasuryBalance),
     },
   };

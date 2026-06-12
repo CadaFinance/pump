@@ -48,6 +48,16 @@ type PortfolioData = {
   createdTokens: TokenListItem[];
 };
 
+type WalletLaunchpadHolding = {
+  tokenAddress: string;
+  symbol: string;
+  name: string;
+  logoUrl: string | null;
+  tokenBalance: string;
+  lastPriceBnb: string;
+  estimatedValueBnb: number;
+};
+
 type TradeRow = {
   id: string;
   side: string;
@@ -133,6 +143,89 @@ function PnlCell({ usd, pct }: { usd: number | null; pct: number | null }) {
   );
 }
 
+function WalletHoldingMobileRow({
+  holding,
+  bnbUsd,
+}: {
+  holding: WalletLaunchpadHolding;
+  bnbUsd: number | null;
+}) {
+  const balance = Number(holding.tokenBalance);
+  const positionValueUsd = bnbToUsd(balance * Number(holding.lastPriceBnb), bnbUsd);
+
+  return (
+    <article className="grid grid-cols-[1.75rem_1fr_auto] gap-x-2 gap-y-2 p-2.5">
+      <TokenAvatar
+        address={holding.tokenAddress}
+        symbol={holding.symbol}
+        logoUrl={holding.logoUrl}
+        size={28}
+        className="row-span-2 self-start"
+      />
+      <Link
+        href={`/token/${holding.tokenAddress}`}
+        className="self-center truncate text-body-sm font-medium text-pump-text"
+      >
+        ${holding.symbol}
+        <span className="ml-1 text-caption font-normal text-pump-muted">· on-chain</span>
+      </Link>
+      <div className="self-center text-caption text-pump-muted">—</div>
+      <div className="col-span-2 col-start-2 flex w-full items-center justify-between gap-2 text-[11px] leading-tight">
+        <span className="financial-value min-w-0 truncate text-pump-text">
+          <span className="text-pump-muted">VAL </span>
+          {formatUsdReadable(positionValueUsd, { compact: true })}
+        </span>
+        <span className="financial-value min-w-0 truncate text-pump-text">
+          <span className="text-pump-muted">BAL </span>
+          {formatTokenBalance(balance)}
+        </span>
+        <span className="financial-value min-w-0 truncate text-right text-pump-muted">—</span>
+      </div>
+    </article>
+  );
+}
+
+function WalletHoldingDesktopRow({
+  holding,
+  bnbUsd,
+}: {
+  holding: WalletLaunchpadHolding;
+  bnbUsd: number | null;
+}) {
+  const balance = Number(holding.tokenBalance);
+  const positionValueUsd = bnbToUsd(balance * Number(holding.lastPriceBnb), bnbUsd);
+
+  return (
+    <tr className="border-b border-pump-border/10 last:border-b-0">
+      <td className="px-4 py-3">
+        <Link
+          href={`/token/${holding.tokenAddress}`}
+          className="flex min-w-0 items-center gap-3"
+        >
+          <TokenAvatar
+            address={holding.tokenAddress}
+            symbol={holding.symbol}
+            logoUrl={holding.logoUrl}
+            size={30}
+          />
+          <div className="min-w-0">
+            <p className="truncate text-body-sm font-medium text-pump-text">{holding.name}</p>
+            <p className="truncate text-caption text-pump-muted">
+              ${holding.symbol} · on-chain
+            </p>
+          </div>
+        </Link>
+      </td>
+      <td className="px-4 py-3 financial-value font-semibold text-pump-text">
+        {formatUsdReadable(positionValueUsd, { compact: true })}
+      </td>
+      <td className="px-4 py-3 financial-value text-pump-text">{formatTokenBalance(balance)}</td>
+      <td className="px-4 py-3 financial-value text-pump-muted">—</td>
+      <td className="px-4 py-3 text-right text-caption text-pump-muted">—</td>
+    </tr>
+  );
+}
+
 const BURST_POLL_MS = 1_500;
 const BURST_DURATION_MS = 60_000;
 const NORMAL_POLL_MS = 15_000;
@@ -187,6 +280,7 @@ export function PortfolioPanel() {
   const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
   const { avatarId } = useUserAvatar();
   const [derivedLots, setDerivedLots] = useState<Record<string, DerivedLot>>({});
+  const [walletHoldings, setWalletHoldings] = useState<WalletLaunchpadHolding[]>([]);
   const burstUntilRef = useRef(0);
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -199,6 +293,34 @@ export function PortfolioPanel() {
     query: { enabled: Boolean(address && isConnected) },
   });
 
+  const loadWalletHoldings = useCallback(
+    async (walletAddress: string, excludeTokenAddresses: string[]) => {
+      try {
+        const excludeQuery =
+          excludeTokenAddresses.length > 0
+            ? `&exclude=${excludeTokenAddresses.join(",")}`
+            : "";
+        const response = await fetch(
+          `/api/portfolio/wallet-holdings?address=${walletAddress}${excludeQuery}`,
+          { cache: "no-store" }
+        );
+        const body = (await response.json()) as {
+          data?: WalletLaunchpadHolding[];
+        };
+
+        if (!response.ok) {
+          setWalletHoldings([]);
+          return;
+        }
+
+        setWalletHoldings(body.data ?? []);
+      } catch {
+        setWalletHoldings([]);
+      }
+    },
+    []
+  );
+
   const loadPortfolio = useCallback(async (walletAddress: string) => {
     setError(null);
 
@@ -210,24 +332,36 @@ export function PortfolioPanel() {
         throw new Error(body.error ?? "Failed to load portfolio");
       }
 
-      setData(body.data ?? null);
+      const portfolio = body.data ?? null;
+      setData(portfolio);
+      if (portfolio) {
+        void loadWalletHoldings(
+          walletAddress,
+          portfolio.positions.map((position) => position.tokenAddress)
+        );
+      } else {
+        setWalletHoldings([]);
+      }
     } catch (err) {
       setData(null);
+      setWalletHoldings([]);
       setError(err instanceof Error ? err.message : "Failed to load portfolio");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [loadWalletHoldings]);
 
   useEffect(() => {
     if (!isConnected || !address) {
       setData(null);
+      setWalletHoldings([]);
       setError(null);
       setLoading(false);
       return;
     }
 
     setData(null);
+    setWalletHoldings([]);
     setLoading(true);
     void loadPortfolio(address);
   }, [address, isConnected, loadPortfolio]);
@@ -343,6 +477,7 @@ export function PortfolioPanel() {
   const creatorFeesTotalUsd = bnbToUsd(creatorFeesTotalBnb, bnbUsd);
   const showCreatorFees =
     creatorFeesTotalBnb > 0 || pendingBnb > 0 || (data?.createdTokens.length ?? 0) > 0;
+  const holdingsCount = (data?.positions.length ?? 0) + walletHoldings.length;
 
   return (
     <>
@@ -463,8 +598,8 @@ export function PortfolioPanel() {
         {data && !error ? (
           <>
             <div className="space-y-2 md:space-y-3">
-              <h3 className="section-heading text-h3">Holdings ({data.positions.length})</h3>
-              {data.positions.length === 0 ? (
+              <h3 className="section-heading text-h3">Holdings ({holdingsCount})</h3>
+              {holdingsCount === 0 ? (
                 <p className="panel-surface p-6 text-center text-body-sm text-pump-muted">
                   No open positions. Buy from the Arena.
                 </p>
@@ -527,6 +662,13 @@ export function PortfolioPanel() {
                         </article>
                       );
                     })}
+                    {walletHoldings.map((holding) => (
+                      <WalletHoldingMobileRow
+                        key={holding.tokenAddress}
+                        holding={holding}
+                        bnbUsd={bnbUsd}
+                      />
+                    ))}
                   </div>
 
                   <div className="hidden lg:block overflow-x-auto">
@@ -601,6 +743,13 @@ export function PortfolioPanel() {
                             </tr>
                           );
                         })}
+                        {walletHoldings.map((holding) => (
+                          <WalletHoldingDesktopRow
+                            key={holding.tokenAddress}
+                            holding={holding}
+                            bnbUsd={bnbUsd}
+                          />
+                        ))}
                       </tbody>
                     </table>
                   </div>
