@@ -66,3 +66,16 @@ WHERE t.is_hidden = false;
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_mv_token_price_anchors_token
   ON mv_token_price_anchors (token_address);
+
+-- Indexer (pump_indexer) runs REFRESH CONCURRENTLY; TMA (pump_app) reads only.
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'pump_indexer') THEN
+    ALTER MATERIALIZED VIEW mv_token_trade_stats OWNER TO pump_indexer;
+    ALTER MATERIALIZED VIEW mv_token_price_anchors OWNER TO pump_indexer;
+  END IF;
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'pump_app') THEN
+    GRANT SELECT ON mv_token_trade_stats TO pump_app;
+    GRANT SELECT ON mv_token_price_anchors TO pump_app;
+  END IF;
+END $$;
