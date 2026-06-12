@@ -151,11 +151,18 @@ export async function getAirdropById(id: string, viewerAddress?: string): Promis
     create_tx_hash: string;
     symbol: string | null;
     name: string | null;
+    reward_symbol: string | null;
+    reward_name: string | null;
+    reward_price_bnb: string | null;
   }>(
     `
-      SELECT a.*, t.symbol, t.name
+      SELECT a.*, t.symbol, t.name,
+             rt.symbol AS reward_symbol, rt.name AS reward_name,
+             COALESCE(rb.last_price_zug, 0)::text AS reward_price_bnb
       FROM airdrops a
       LEFT JOIN tokens t ON t.address = a.linked_token
+      LEFT JOIN tokens rt ON rt.address = a.reward_token
+      LEFT JOIN bonding_states rb ON rb.token_address = a.reward_token
       WHERE a.id = $1::bigint
       LIMIT 1
     `,
@@ -207,6 +214,9 @@ export async function getAirdropById(id: string, viewerAddress?: string): Promis
     createTxHash: row.create_tx_hash,
     linkedSymbol: row.symbol,
     linkedName: row.name,
+    rewardSymbol: row.reward_symbol,
+    rewardName: row.reward_name,
+    rewardPriceBnb: row.reward_price_bnb,
     rules: row.rules_json ?? {},
     socialTasks: tasks.rows.map((task) => ({
       id: task.id,

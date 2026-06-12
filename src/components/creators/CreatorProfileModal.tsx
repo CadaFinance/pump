@@ -136,7 +136,7 @@ function HoldingRow({
 }
 
 export function CreatorProfileModal({ open, onClose, creatorAddress }: CreatorProfileModalProps) {
-  const bnbUsd = useBnbUsdPrice();
+  const { bnbUsd } = useBnbUsdPrice();
   const [profile, setProfile] = useState<CreatorProfileData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
