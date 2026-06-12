@@ -195,7 +195,7 @@ export function TokenDetailLive({
   const [indexerSyncing, setIndexerSyncing] = useState(false);
   const [copiedAddress, setCopiedAddress] = useState(false);
   const [tradeSheetOpen, setTradeSheetOpen] = useState(false);
-  const [creatorProfileOpen, setCreatorProfileOpen] = useState(false);
+  const [profileAddress, setProfileAddress] = useState<string | null>(null);
   const [tradePrefill, setTradePrefill] = useState<TradePrefillConfig | null>(null);
   const tradePrefillCapturedRef = useRef(false);
   const searchParams = useSearchParams();
@@ -437,7 +437,7 @@ export function TokenDetailLive({
   const creatorMeta = (
     <button
       type="button"
-      onClick={() => setCreatorProfileOpen(true)}
+      onClick={() => setProfileAddress(liveToken.creatorAddress)}
       className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-md text-caption text-pump-muted transition hover:text-pump-text"
       aria-label={`View creator profile ${creatorLabel}`}
     >
@@ -600,6 +600,7 @@ export function TokenDetailLive({
             trades={trades}
             currentPriceBnb={displayPrice}
             bnbUsd={bnbUsd}
+            onAddressClick={setProfileAddress}
           />
         </div>
 
@@ -654,9 +655,9 @@ export function TokenDetailLive({
       />
 
       <CreatorProfileModal
-        open={creatorProfileOpen}
-        onClose={() => setCreatorProfileOpen(false)}
-        creatorAddress={liveToken.creatorAddress}
+        open={profileAddress != null}
+        onClose={() => setProfileAddress(null)}
+        creatorAddress={profileAddress ?? ""}
       />
     </div>
   );

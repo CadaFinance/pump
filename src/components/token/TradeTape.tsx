@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { TradeItem } from "@/lib/db/launchpad";
-import { explorerAddressUrl, explorerTxUrl, shortAddress } from "@/config/chain";
+import { explorerTxUrl, shortAddress } from "@/config/chain";
 import { UserAvatarForAddress } from "@/components/user/UserAvatarForAddress";
 import { DEFAULT_TOKEN_TOTAL_SUPPLY, formatUsdReadable } from "@/lib/format-usd";
 
@@ -118,22 +118,24 @@ function CreatorBadge() {
 function IdentityPill({
   address,
   showCreatorBadge = false,
+  onAddressClick,
 }: {
   address: string;
   showCreatorBadge?: boolean;
+  onAddressClick: (address: string) => void;
 }) {
   const label = shortAddress(address);
   return (
-    <a
-      href={explorerAddressUrl(address)}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="inline-flex min-w-0 items-center gap-2 text-pump-text hover:text-pump-accent"
+    <button
+      type="button"
+      onClick={() => onAddressClick(address)}
+      className="inline-flex min-w-0 items-center gap-2 text-left text-pump-text transition hover:text-pump-accent"
+      aria-label={`View profile ${label}`}
     >
       <UserAvatarForAddress address={address} size={32} />
       <span className="truncate font-medium">{label}</span>
       {showCreatorBadge ? <CreatorBadge /> : null}
-    </a>
+    </button>
   );
 }
 
@@ -143,12 +145,14 @@ export function TradeTape({
   trades,
   currentPriceBnb,
   bnbUsd,
+  onAddressClick,
 }: {
   tokenAddress: string;
   creatorAddress: string;
   trades: TradeItem[];
   currentPriceBnb: number;
   bnbUsd: number | null;
+  onAddressClick: (address: string) => void;
 }) {
   const creatorKey = creatorAddress.toLowerCase();
   const [tab, setTab] = useState<ActivityTab>("trades");
@@ -254,6 +258,7 @@ export function TradeTape({
                           <IdentityPill
                             address={row.address}
                             showCreatorBadge={row.address.toLowerCase() === creatorKey}
+                            onAddressClick={onAddressClick}
                           />
                         </td>
                         <td className="px-4 py-3 financial-value text-pump-text">
@@ -312,7 +317,11 @@ export function TradeTape({
                         }`}
                       >
                         <td className="px-4 py-3">
-                          <IdentityPill address={trade.traderAddress} />
+                          <IdentityPill
+                            address={trade.traderAddress}
+                            showCreatorBadge={trade.traderAddress.toLowerCase() === creatorKey}
+                            onAddressClick={onAddressClick}
+                          />
                         </td>
                         <td className="px-4 py-3">
                           <span
