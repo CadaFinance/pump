@@ -1,5 +1,5 @@
 -- 5 sabit system mission — launchpad_tasks boşsa (wipe sonrası) yeniden ekler.
--- Idempotent: task_key zaten varsa dokunmaz.
+-- Idempotent: task_key varsa reward_points / metinler güncellenir.
 
 INSERT INTO launchpad_tasks (
   task_key, title, description, reward_points, task_kind, task_source, is_active
@@ -8,7 +8,7 @@ INSERT INTO launchpad_tasks (
     'LAUNCHPAD_DAILY_SWAP',
     'Daily Swap',
     'Complete one buy or sell on any meme today (UTC).',
-    100,
+    20,
     'DAILY',
     'system',
     true
@@ -26,7 +26,7 @@ INSERT INTO launchpad_tasks (
     'LAUNCHPAD_FIRST_SMART_BUY',
     'First Smart Buy',
     'Buy at least 0.01 BNB of any meme token.',
-    50,
+    100,
     'ONE_TIME',
     'system',
     true
@@ -49,4 +49,12 @@ INSERT INTO launchpad_tasks (
     'system',
     true
   )
-ON CONFLICT (task_key) DO NOTHING;
+ON CONFLICT (task_key) DO UPDATE
+SET
+  title = EXCLUDED.title,
+  description = EXCLUDED.description,
+  reward_points = EXCLUDED.reward_points,
+  task_kind = EXCLUDED.task_kind,
+  task_source = EXCLUDED.task_source,
+  is_active = EXCLUDED.is_active,
+  updated_at = now();

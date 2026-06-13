@@ -342,16 +342,23 @@ export function CreatorProfileModal({ open, onClose, creatorAddress }: CreatorPr
                 />
               </section>
 
-              {profile.creatorFeesTotalBnb > 0 || profile.createdTokens.length > 0 ? (
-                <div className="rounded-md border border-pump-border/15 bg-pump-surface/30 px-3 py-2.5">
-                  <div className="flex flex-wrap items-baseline justify-between gap-2">
-                    <span className="text-body-sm text-pump-muted">Total creator fees</span>
-                    <span className="financial-value text-body font-semibold text-pump-text">
-                      {formatFeeBnb(profile.creatorFeesTotalBnb)} BNB
-                    </span>
-                  </div>
+              <div className="rounded-md border border-pump-border/15 bg-pump-surface/30 px-3 py-2.5">
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                  <span className="text-body-sm text-pump-muted">Creator fees</span>
+                  <span className="financial-value text-body font-semibold text-pump-text">
+                    {formatFeeBnb(profile.creatorFeesTotalBnb)} BNB
+                  </span>
                 </div>
-              ) : null}
+                <p className="mt-1 text-caption text-pump-muted">
+                  {formatFeeBnb(profile.creatorFeesClaimedBnb)} claimed ·{" "}
+                  {formatFeeBnb(profile.creatorFeesPendingBnb)} pending
+                </p>
+                {profile.creatorFeesTotalBnb <= 0 ? (
+                  <p className="mt-1 text-[11px] text-pump-muted">
+                    Launch a meme — earn BNB from every trade on your token.
+                  </p>
+                ) : null}
+              </div>
 
               <section>
                 <h3 className="section-heading">Holdings</h3>

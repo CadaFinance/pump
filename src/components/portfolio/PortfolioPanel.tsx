@@ -640,8 +640,7 @@ export function PortfolioPanel() {
   const pendingBnb = pendingWei != null ? Number(formatEther(pendingWei)) : 0;
   const creatorFeesTotalBnb = claimedBnb + pendingBnb;
   const creatorFeesTotalUsd = bnbToUsd(creatorFeesTotalBnb, bnbUsd);
-  const showCreatorFees =
-    creatorFeesTotalBnb > 0 || pendingBnb > 0 || (data?.createdTokens.length ?? 0) > 0;
+  const canClaimCreatorFees = pendingBnb > 0;
   const holdingsCount = verifiedPositionViews.length + walletHoldings.length;
 
   return (
@@ -741,8 +740,7 @@ export function PortfolioPanel() {
               sub={<span className={pnlTone(totalNetPnl)}>{formatSignedBnb(totalNetPnl)}</span>}
               valueClassName={`financial-value text-body-sm font-semibold ${pnlTone(totalNetPnl)}`}
             />
-            {showCreatorFees ? (
-              <div className="col-span-2 flex min-w-0 flex-col gap-1 md:col-span-2">
+            <div className="col-span-2 flex min-w-0 flex-col gap-1 md:col-span-2">
                 <p className="section-label text-[10px] md:hidden">Creator fees</p>
                 <div className="rounded-md border border-pump-border/15 bg-pump-surface/35 p-2.5 md:flex md:items-center md:justify-between md:gap-3 md:p-3">
                   <div className="min-w-0 md:flex md:flex-1 md:items-center md:justify-between md:gap-3">
@@ -755,18 +753,23 @@ export function PortfolioPanel() {
                         {formatFeeBnb(creatorFeesTotalBnb)} BNB · {formatFeeBnb(claimedBnb)} claimed ·{" "}
                         {formatFeeBnb(pendingBnb)} pending
                       </p>
+                      {creatorFeesTotalBnb <= 0 ? (
+                        <p className="mt-1 text-[11px] text-pump-muted">
+                          Launch a meme — earn BNB from every trade on your token.
+                        </p>
+                      ) : null}
                     </div>
                   </div>
                   <button
                     type="button"
+                    disabled={!canClaimCreatorFees}
                     onClick={() => setClaimOpen(true)}
-                    className="chip-button chip-button-active mt-2 w-full shrink-0 md:mt-0 md:w-auto"
+                    className="chip-button chip-button-active mt-2 w-full shrink-0 disabled:cursor-not-allowed disabled:opacity-50 md:mt-0 md:w-auto"
                   >
                     Claim fees
                   </button>
                 </div>
               </div>
-            ) : null}
             {address ? (
               <ReferralRewardsCard
                 address={address}
