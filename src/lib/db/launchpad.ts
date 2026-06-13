@@ -607,6 +607,7 @@ export type TradeItem = {
 export type TokenHolderSnapshot = {
   address: string;
   tokenBalance: string;
+  onChainBalance?: string;
   totalBoughtBnb: string;
   totalSoldBnb: string;
   realizedPnlBnb: string;

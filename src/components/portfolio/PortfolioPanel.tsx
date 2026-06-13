@@ -21,6 +21,10 @@ import type { TokenListItem } from "@/lib/db/launchpad";
 import { useBnbUsdPrice } from "@/hooks/useBnbUsdPrice";
 import { bnbToUsd, formatUsdReadable } from "@/lib/format-usd";
 import { formatCapForBoard, formatSignedPct, pctTone } from "@/lib/arena-board-format";
+import {
+  resolveVerifiedTokenBalance,
+  scaleCostBasisForBalance,
+} from "@/lib/onchain-balance";
 
 type PortfolioPosition = {
   tokenAddress: string;
@@ -75,6 +79,47 @@ type DerivedLot = {
   netTokens: number;
   remainingCostBnb: number;
 };
+
+type VerifiedPositionView = {
+  position: PortfolioPosition;
+  balance: number;
+  remainingCostBasis: number;
+  avgEntry: number | null;
+};
+
+function buildVerifiedPositionView(
+  position: PortfolioPosition,
+  lot: DerivedLot | undefined,
+  onChainBalances: Record<string, string>,
+  onChainVerified: boolean
+): VerifiedPositionView | null {
+  const totalBought = Number(position.totalBoughtBnb);
+  const totalSold = Number(position.totalSoldBnb);
+  const indexedBalance = lot?.netTokens ?? Number(position.tokenBalance);
+  const fullCostBasis = lot?.remainingCostBnb ?? Math.max(0, totalBought - totalSold);
+  const onChainStr = onChainBalances[position.tokenAddress.toLowerCase()];
+  const onChainBalance =
+    onChainStr != null && onChainVerified ? Number(onChainStr) : undefined;
+  const { displayBalance, hidden } = resolveVerifiedTokenBalance(
+    indexedBalance,
+    onChainBalance
+  );
+
+  if (hidden) return null;
+
+  const remainingCostBasis = scaleCostBasisForBalance(
+    fullCostBasis,
+    indexedBalance,
+    displayBalance
+  );
+
+  return {
+    position,
+    balance: displayBalance,
+    remainingCostBasis,
+    avgEntry: displayBalance > 0 ? remainingCostBasis / displayBalance : null,
+  };
+}
 
 function formatFeeBnb(value: number): string {
   if (!Number.isFinite(value) || value <= 0) return "0";
@@ -281,6 +326,8 @@ export function PortfolioPanel() {
   const { avatarId } = useUserAvatar();
   const [derivedLots, setDerivedLots] = useState<Record<string, DerivedLot>>({});
   const [walletHoldings, setWalletHoldings] = useState<WalletLaunchpadHolding[]>([]);
+  const [onChainBalances, setOnChainBalances] = useState<Record<string, string>>({});
+  const [onChainVerified, setOnChainVerified] = useState(false);
   const burstUntilRef = useRef(0);
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -292,6 +339,34 @@ export function PortfolioPanel() {
     chainId: pumpChain.id,
     query: { enabled: Boolean(address && isConnected) },
   });
+
+  const loadOnChainBalances = useCallback(
+    async (walletAddress: string, tokenAddresses: string[]) => {
+      if (tokenAddresses.length === 0) {
+        setOnChainBalances({});
+        setOnChainVerified(true);
+        return;
+      }
+
+      setOnChainVerified(false);
+      try {
+        const response = await fetch(
+          `/api/portfolio/onchain-balances?address=${walletAddress}&tokens=${tokenAddresses.join(",")}`,
+          { cache: "no-store" }
+        );
+        const body = (await response.json()) as { data?: Record<string, string> };
+        if (!response.ok) {
+          setOnChainBalances({});
+          return;
+        }
+        setOnChainBalances(body.data ?? {});
+        setOnChainVerified(true);
+      } catch {
+        setOnChainBalances({});
+      }
+    },
+    []
+  );
 
   const loadWalletHoldings = useCallback(
     async (walletAddress: string, excludeTokenAddresses: string[]) => {
@@ -335,12 +410,18 @@ export function PortfolioPanel() {
       const portfolio = body.data ?? null;
       setData(portfolio);
       if (portfolio) {
+        void loadOnChainBalances(
+          walletAddress,
+          portfolio.positions.map((position) => position.tokenAddress)
+        );
         void loadWalletHoldings(
           walletAddress,
           portfolio.positions.map((position) => position.tokenAddress)
         );
       } else {
         setWalletHoldings([]);
+        setOnChainBalances({});
+        setOnChainVerified(true);
       }
     } catch (err) {
       setData(null);
@@ -349,12 +430,14 @@ export function PortfolioPanel() {
     } finally {
       setLoading(false);
     }
-  }, [loadWalletHoldings]);
+  }, [loadOnChainBalances, loadWalletHoldings]);
 
   useEffect(() => {
     if (!isConnected || !address) {
       setData(null);
       setWalletHoldings([]);
+      setOnChainBalances({});
+      setOnChainVerified(false);
       setError(null);
       setLoading(false);
       return;
@@ -362,6 +445,8 @@ export function PortfolioPanel() {
 
     setData(null);
     setWalletHoldings([]);
+    setOnChainBalances({});
+    setOnChainVerified(false);
     setLoading(true);
     void loadPortfolio(address);
   }, [address, isConnected, loadPortfolio]);
@@ -459,15 +544,26 @@ export function PortfolioPanel() {
     return <PortfolioPanelSkeleton />;
   }
 
-  const totalEstimated = data?.positions.reduce((sum, p) => sum + p.estimatedValueBnb, 0) ?? 0;
-  const totalNetPnl =
-    data?.positions.reduce((sum, p) => {
-      const lot = derivedLots[p.tokenAddress];
-      const balance = lot?.netTokens ?? Number(p.tokenBalance);
-      const remainingCost = lot?.remainingCostBnb ?? Math.max(0, Number(p.totalBoughtBnb) - Number(p.totalSoldBnb));
-      const openValue = balance * Number(p.lastPriceBnb);
-      return sum + (openValue - remainingCost);
-    }, 0) ?? 0;
+  const verifiedPositionViews =
+    data?.positions
+      .map((position) =>
+        buildVerifiedPositionView(
+          position,
+          derivedLots[position.tokenAddress],
+          onChainBalances,
+          onChainVerified
+        )
+      )
+      .filter((view): view is VerifiedPositionView => view != null) ?? [];
+
+  const totalEstimated = verifiedPositionViews.reduce(
+    (sum, view) => sum + view.balance * Number(view.position.lastPriceBnb),
+    0
+  );
+  const totalNetPnl = verifiedPositionViews.reduce((sum, view) => {
+    const openValue = view.balance * Number(view.position.lastPriceBnb);
+    return sum + (openValue - view.remainingCostBasis);
+  }, 0);
   const totalEstimatedUsd = bnbToUsd(totalEstimated, bnbUsd);
   const totalNetPnlUsd =
     bnbUsd != null && Number.isFinite(totalNetPnl) ? totalNetPnl * bnbUsd : null;
@@ -477,7 +573,7 @@ export function PortfolioPanel() {
   const creatorFeesTotalUsd = bnbToUsd(creatorFeesTotalBnb, bnbUsd);
   const showCreatorFees =
     creatorFeesTotalBnb > 0 || pendingBnb > 0 || (data?.createdTokens.length ?? 0) > 0;
-  const holdingsCount = (data?.positions.length ?? 0) + walletHoldings.length;
+  const holdingsCount = verifiedPositionViews.length + walletHoldings.length;
 
   return (
     <>
@@ -606,14 +702,8 @@ export function PortfolioPanel() {
               ) : (
                 <section className="rounded-lg border border-pump-border/15 bg-transparent">
                   <div className="lg:hidden divide-y divide-pump-border/10">
-                    {data.positions.map((position) => {
-                      const totalBought = Number(position.totalBoughtBnb);
-                      const totalSold = Number(position.totalSoldBnb);
-                      const lot = derivedLots[position.tokenAddress];
-                      const balance = lot?.netTokens ?? Number(position.tokenBalance);
-                      const remainingCostBasis =
-                        lot?.remainingCostBnb ?? Math.max(0, totalBought - totalSold);
-                      const avgEntry = balance > 0 ? remainingCostBasis / balance : null;
+                    {verifiedPositionViews.map((view) => {
+                      const { position, balance, remainingCostBasis, avgEntry } = view;
                       const avgEntryUsd = avgEntry != null ? bnbToUsd(avgEntry, bnbUsd) : null;
                       const positionValueUsd = bnbToUsd(
                         balance * Number(position.lastPriceBnb),
@@ -683,14 +773,8 @@ export function PortfolioPanel() {
                         </tr>
                       </thead>
                       <tbody>
-                        {data.positions.map((position) => {
-                          const totalBought = Number(position.totalBoughtBnb);
-                          const totalSold = Number(position.totalSoldBnb);
-                          const lot = derivedLots[position.tokenAddress];
-                          const balance = lot?.netTokens ?? Number(position.tokenBalance);
-                          const remainingCostBasis =
-                            lot?.remainingCostBnb ?? Math.max(0, totalBought - totalSold);
-                          const avgEntry = balance > 0 ? remainingCostBasis / balance : null;
+                        {verifiedPositionViews.map((view) => {
+                          const { position, balance, remainingCostBasis, avgEntry } = view;
                           const avgEntryUsd = avgEntry != null ? bnbToUsd(avgEntry, bnbUsd) : null;
                           const positionValueUsd = bnbToUsd(
                             balance * Number(position.lastPriceBnb),

@@ -20,7 +20,8 @@ export type WalletLaunchpadHolding = {
   estimatedValueBnb: number;
 };
 
-async function fetchWalletTokenBalances(
+/** ERC20 balanceOf(wallet) for many launchpad tokens. */
+export async function fetchOnChainTokenBalancesForWallet(
   walletAddress: string,
   tokenAddresses: string[]
 ): Promise<Map<string, string>> {
@@ -78,6 +79,65 @@ async function fetchWalletTokenBalances(
   return balances;
 }
 
+/** ERC20 balanceOf(holder) for one token — used to verify indexer holder snapshots. */
+export async function fetchOnChainTokenBalancesForHolders(
+  tokenAddress: string,
+  holderAddresses: string[]
+): Promise<Map<string, string>> {
+  const token = tokenAddress.toLowerCase() as Address;
+  const balances = new Map<string, string>();
+  if (holderAddresses.length === 0) return balances;
+
+  const chunkSize = 50;
+
+  for (let i = 0; i < holderAddresses.length; i += chunkSize) {
+    const chunk = holderAddresses.slice(i, i + chunkSize);
+    const contracts = chunk.map((holderAddress) => ({
+      address: token,
+      abi: erc20Abi,
+      functionName: "balanceOf" as const,
+      args: [holderAddress.toLowerCase() as Address],
+    }));
+
+    let results: { status: "success"; result: bigint }[] | null = null;
+    try {
+      results = (await publicClient.multicall({
+        allowFailure: true,
+        contracts,
+      })) as { status: "success"; result: bigint }[];
+    } catch {
+      results = null;
+    }
+
+    if (results) {
+      chunk.forEach((holderAddress, index) => {
+        const result = results[index];
+        const wei = result?.status === "success" ? result.result : 0n;
+        balances.set(holderAddress.toLowerCase(), formatUnits(wei, 18));
+      });
+      continue;
+    }
+
+    await Promise.all(
+      chunk.map(async (holderAddress) => {
+        try {
+          const wei = await publicClient.readContract({
+            address: token,
+            abi: erc20Abi,
+            functionName: "balanceOf",
+            args: [holderAddress.toLowerCase() as Address],
+          });
+          balances.set(holderAddress.toLowerCase(), formatUnits(wei, 18));
+        } catch {
+          balances.set(holderAddress.toLowerCase(), "0");
+        }
+      })
+    );
+  }
+
+  return balances;
+}
+
 /** On-chain ERC20 balances for launchpad tokens not already covered by indexer positions. */
 export async function fetchWalletLaunchpadHoldings(
   walletAddress: string,
@@ -90,7 +150,7 @@ export async function fetchWalletLaunchpadHoldings(
   const candidates = catalog.filter((token) => !exclude.has(token.address.toLowerCase()));
   if (candidates.length === 0) return [];
 
-  const balances = await fetchWalletTokenBalances(
+  const balances = await fetchOnChainTokenBalancesForWallet(
     walletAddress,
     candidates.map((token) => token.address)
   );

@@ -41,6 +41,7 @@ import { CreatorRewardsCard } from "@/components/creators/CreatorRewardsCard";
 import { TokenSocialLinksBar } from "@/components/token/TokenSocialLinksBar";
 import { UserAvatarForAddress } from "@/components/user/UserAvatarForAddress";
 import { hasSocialLinks } from "@/lib/token-social";
+import { copyToClipboard } from "@/lib/copy-to-clipboard";
 import { useLiveChannel, resolveLivePollDelay } from "@/hooks/useLiveChannel";
 
 const POLL_MS = 4_000;
@@ -430,13 +431,9 @@ export function TokenDetailLive({
     change24h?.changeUsd != null ? change24h.changeUsd * DEFAULT_TOKEN_TOTAL_SUPPLY : null;
 
   async function onCopyAddress() {
-    try {
-      await navigator.clipboard.writeText(liveToken.address);
-      setCopiedAddress(true);
-      setTimeout(() => setCopiedAddress(false), 2000);
-    } catch {
-      setCopiedAddress(false);
-    }
+    const ok = await copyToClipboard(liveToken.address);
+    setCopiedAddress(ok);
+    if (ok) setTimeout(() => setCopiedAddress(false), 2000);
   }
 
   async function onShare() {
@@ -448,7 +445,7 @@ export function TokenDetailLive({
         await navigator.share(shareData);
         return;
       }
-      await navigator.clipboard.writeText(url || liveToken.address);
+      await copyToClipboard(url || liveToken.address);
     } catch {
       // ignore cancelled share
     }

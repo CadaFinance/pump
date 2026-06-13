@@ -1,18 +1,15 @@
 "use client";
 
 import { useState } from "react";
+import { copyToClipboard } from "@/lib/copy-to-clipboard";
 
 export function CopyAddress({ address, label = "Token address" }: { address: string; label?: string }) {
   const [copied, setCopied] = useState(false);
 
   async function onCopy() {
-    try {
-      await navigator.clipboard.writeText(address);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      setCopied(false);
-    }
+    const ok = await copyToClipboard(address);
+    setCopied(ok);
+    if (ok) setTimeout(() => setCopied(false), 2000);
   }
 
   return (
@@ -21,7 +18,7 @@ export function CopyAddress({ address, label = "Token address" }: { address: str
         <span className="text-xs text-pump-muted">{label}</span>
         <button
           type="button"
-          onClick={onCopy}
+          onClick={() => void onCopy()}
           className="text-xs text-pump-accent hover:underline"
         >
           {copied ? "Copied" : "Copy"}

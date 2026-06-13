@@ -1,10 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { TradeItem } from "@/lib/db/launchpad";
+import type { TokenHolderSnapshot, TradeItem } from "@/lib/db/launchpad";
 import { explorerTxUrl, shortAddress } from "@/config/chain";
 import { UserAvatarForAddress } from "@/components/user/UserAvatarForAddress";
 import { DEFAULT_TOKEN_TOTAL_SUPPLY, formatUsdReadable } from "@/lib/format-usd";
+import {
+  ON_CHAIN_BALANCE_EPSILON,
+  resolveVerifiedTokenBalance,
+  scaleCostBasisForBalance,
+} from "@/lib/onchain-balance";
 
 type ActivityTab = "holders" | "trades";
 
@@ -15,7 +20,7 @@ type HolderRow = {
   avgEntryBnb: number | null;
 };
 
-const HOLDER_BALANCE_EPSILON = 1e-6;
+const HOLDER_BALANCE_EPSILON = ON_CHAIN_BALANCE_EPSILON;
 
 function tradeNetBnb(trade: TradeItem): number {
   if (trade.netBnb != null) return Number(trade.netBnb);
@@ -63,47 +68,37 @@ function formatSupplyShare(balance: number): string {
   return `${pct.toFixed(4)}%`;
 }
 
-function buildHolderRowsFromTrades(trades: TradeItem[]): HolderRow[] {
-  const byAddress = new Map<string, HolderRow>();
-  const orderedTrades = [...trades].sort(
-    (a, b) => new Date(a.blockTime).getTime() - new Date(b.blockTime).getTime()
-  );
+function mapApiHoldersToRows(holders: TokenHolderSnapshot[]): HolderRow[] {
+  return holders
+    .map((holder) => {
+      const indexedBalance = Number(holder.tokenBalance);
+      const onChainBalance =
+        holder.onChainBalance != null ? Number(holder.onChainBalance) : undefined;
+      const { displayBalance, hidden } = resolveVerifiedTokenBalance(
+        indexedBalance,
+        onChainBalance
+      );
+      if (hidden) return null;
 
-  for (const trade of orderedTrades) {
-    const key = trade.traderAddress.toLowerCase();
-    const current = byAddress.get(key) ?? {
-      address: trade.traderAddress,
-      netTokens: 0,
-      remainingCostBasisBnb: 0,
-      avgEntryBnb: null,
-    };
+      const fullCostBasis = Math.max(
+        0,
+        Number(holder.totalBoughtBnb) - Number(holder.totalSoldBnb)
+      );
+      const remainingCostBasisBnb = scaleCostBasisForBalance(
+        fullCostBasis,
+        indexedBalance,
+        displayBalance
+      );
 
-    const tokenAmount = Number(trade.tokenAmount);
-    const bnbAmount = tradeNetBnb(trade);
-
-    if (trade.side === "BUY") {
-      current.netTokens += tokenAmount;
-      current.remainingCostBasisBnb += bnbAmount;
-    } else {
-      const tracked = Math.max(current.netTokens, 0);
-      const sold = Math.min(tokenAmount, tracked);
-      const avgCost = tracked > 0 ? current.remainingCostBasisBnb / tracked : 0;
-      current.netTokens = Math.max(0, tracked - sold);
-      current.remainingCostBasisBnb = Math.max(0, current.remainingCostBasisBnb - avgCost * sold);
-    }
-
-    if (current.netTokens <= HOLDER_BALANCE_EPSILON) {
-      current.netTokens = 0;
-      current.remainingCostBasisBnb = 0;
-    }
-
-    current.avgEntryBnb =
-      current.netTokens > 0 ? current.remainingCostBasisBnb / current.netTokens : null;
-    byAddress.set(key, current);
-  }
-
-  return [...byAddress.values()]
-    .filter((row) => Number.isFinite(row.netTokens) && row.netTokens > HOLDER_BALANCE_EPSILON)
+      return {
+        address: holder.address,
+        netTokens: displayBalance,
+        remainingCostBasisBnb,
+        avgEntryBnb:
+          displayBalance > 0 ? remainingCostBasisBnb / displayBalance : null,
+      };
+    })
+    .filter((row): row is HolderRow => row != null)
     .sort((a, b) => b.netTokens - a.netTokens);
 }
 
@@ -158,46 +153,36 @@ export function TradeTape({
 }) {
   const creatorKey = creatorAddress.toLowerCase();
   const [tab, setTab] = useState<ActivityTab>("trades");
-  const [holderTrades, setHolderTrades] = useState<TradeItem[]>([]);
   const [holderRows, setHolderRows] = useState<HolderRow[]>([]);
 
   useEffect(() => {
     let cancelled = false;
 
-    async function loadHolderTrades() {
+    async function loadHolders() {
       try {
-        const response = await fetch(`/api/tokens/${tokenAddress}/chart-trades`, {
+        const response = await fetch(`/api/tokens/${tokenAddress}/holders`, {
           cache: "no-store",
         });
-        const body = (await response.json()) as { data?: TradeItem[] };
+        const body = (await response.json()) as { data?: TokenHolderSnapshot[] };
         if (!response.ok || cancelled) return;
-        setHolderTrades(body.data ?? []);
+        setHolderRows(mapApiHoldersToRows(body.data ?? []));
       } catch {
-        if (!cancelled) setHolderTrades([]);
+        if (!cancelled) setHolderRows([]);
       }
     }
 
-    void loadHolderTrades();
+    void loadHolders();
     if (wsConnected) {
       return () => {
         cancelled = true;
       };
     }
-    const timer = window.setInterval(() => void loadHolderTrades(), 15_000);
+    const timer = window.setInterval(() => void loadHolders(), 15_000);
     return () => {
       cancelled = true;
       window.clearInterval(timer);
     };
   }, [tokenAddress, wsConnected]);
-
-  useEffect(() => {
-    const byId = new Map<string, TradeItem>();
-    for (const trade of holderTrades) byId.set(trade.id, trade);
-    for (const trade of trades) {
-      if (!byId.has(trade.id)) byId.set(trade.id, trade);
-    }
-    setHolderRows(buildHolderRowsFromTrades([...byId.values()]));
-  }, [holderTrades, trades]);
 
   return (
     <section className="space-y-3">

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type MouseEvent } from "react";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { formatEther } from "viem";
 import { useBalance, useDisconnect, useWatchBlockNumber } from "wagmi";
@@ -10,6 +10,7 @@ import { UserAvatar } from "@/components/user/UserAvatar";
 import { useUserAvatar } from "@/components/user/UserAvatarProvider";
 import { useBnbUsdPrice } from "@/hooks/useBnbUsdPrice";
 import { bnbToUsd } from "@/lib/format-usd";
+import { copyToClipboard } from "@/lib/copy-to-clipboard";
 
 function formatHeaderBalanceUsd(usd: number | null): string {
   if (usd == null || !Number.isFinite(usd)) return "$0.00";
@@ -93,14 +94,11 @@ function WalletMenu({
   const { disconnect } = useDisconnect();
   const [copied, setCopied] = useState(false);
 
-  async function onCopyAddress() {
-    try {
-      await navigator.clipboard.writeText(address);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      setCopied(false);
-    }
+  async function onCopyAddress(event: MouseEvent<HTMLButtonElement>) {
+    event.stopPropagation();
+    const ok = await copyToClipboard(address);
+    setCopied(ok);
+    if (ok) setTimeout(() => setCopied(false), 2000);
   }
 
   function onDisconnect() {
@@ -132,8 +130,9 @@ function WalletMenu({
 
       <button
         type="button"
-        onClick={() => void onCopyAddress()}
+        onClick={(event) => void onCopyAddress(event)}
         className="mt-4 flex w-full items-center justify-between gap-2 rounded-lg border border-pump-border/18 bg-pump-card/40 px-3 py-2 text-caption text-pump-text transition hover:border-pump-accent/25"
+        aria-label={copied ? "Address copied" : "Copy wallet address"}
       >
         <span className="financial-value">{shortAddress(address)}</span>
         <span className="flex items-center gap-1 text-pump-muted">
