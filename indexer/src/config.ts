@@ -6,8 +6,6 @@ export type IndexerConfig = {
   rpcUrl: string;
   rpcUrls: string[];
   chainId: number;
-  poolManagerAddress: string;
-  positionManagerAddress?: string;
   startBlock: bigint;
   confirmations: bigint;
   chunkSize: bigint;
@@ -71,8 +69,6 @@ export const config: IndexerConfig = {
   rpcUrl: rpcUrlsFromEnv()[0]!,
   rpcUrls: rpcUrlsFromEnv(),
   chainId: integer("ZUGCHAIN_CHAIN_ID", 824642),
-  poolManagerAddress: optional("POOL_MANAGER_ADDRESS") ?? "0x6458aa52df5970eb0154c1e30e81a362daea8b81",
-  positionManagerAddress: optional("POSITION_MANAGER_ADDRESS") ?? "0x0496b7a65231a39776d71adb48f4ce35d484f689",
   startBlock: BigInt(integer("INDEXER_START_BLOCK", 0)),
   confirmations: BigInt(integer("INDEXER_CONFIRMATIONS", 2)),
   chunkSize: BigInt(integer("INDEXER_CHUNK_SIZE", 1_000)),

@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict dFJphjeCOEsuOFQMpGEjbq2tX9izE3OIrMqL7zRgu6hwe7oAGFcR6MUXqMSpk4X
+\restrict fI938joxK2mAs6h9jReFibanJ3Bgdko75JShVYM1sAg2I9WjnxyY1TDOdIdM9Q3
 
 -- Dumped from database version 16.14 (Ubuntu 16.14-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.14 (Ubuntu 16.14-0ubuntu0.24.04.1)
@@ -420,6 +420,58 @@ ALTER SEQUENCE public.creator_fee_claims_id_seq OWNED BY public.creator_fee_clai
 
 
 --
+-- Name: referral_bindings; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.referral_bindings (
+    invitee_address text NOT NULL,
+    referrer_address text NOT NULL,
+    bound_tx_hash text,
+    bound_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT referral_bindings_check CHECK ((invitee_address <> referrer_address)),
+    CONSTRAINT referral_bindings_invitee_address_check CHECK ((invitee_address = lower(invitee_address))),
+    CONSTRAINT referral_bindings_referrer_address_check CHECK ((referrer_address = lower(referrer_address)))
+);
+
+
+--
+-- Name: referrer_fee_claims; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.referrer_fee_claims (
+    id bigint NOT NULL,
+    referrer_address text NOT NULL,
+    amount_bnb numeric(78,18) NOT NULL,
+    tx_hash text NOT NULL,
+    log_index integer DEFAULT 0 NOT NULL,
+    block_number bigint NOT NULL,
+    block_time timestamp with time zone NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT referrer_fee_claims_amount_bnb_check CHECK ((amount_bnb > (0)::numeric)),
+    CONSTRAINT referrer_fee_claims_referrer_address_check CHECK ((referrer_address = lower(referrer_address)))
+);
+
+
+--
+-- Name: referrer_fee_claims_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.referrer_fee_claims_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: referrer_fee_claims_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.referrer_fee_claims_id_seq OWNED BY public.referrer_fee_claims.id;
+
+
+--
 -- Name: creator_follows; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -703,6 +755,7 @@ CREATE TABLE public.trades (
     fee_zug numeric(78,18) DEFAULT 0 NOT NULL,
     creator_fee_zug numeric(78,18) DEFAULT 0 NOT NULL,
     treasury_fee_zug numeric(78,18) DEFAULT 0 NOT NULL,
+    referrer_fee_zug numeric(78,18) DEFAULT 0 NOT NULL,
     tx_hash text NOT NULL,
     log_index integer NOT NULL,
     block_number bigint NOT NULL,
@@ -715,6 +768,7 @@ CREATE TABLE public.trades (
     CONSTRAINT trades_token_amount_check CHECK ((token_amount >= (0)::numeric)),
     CONSTRAINT trades_trader_address_check CHECK ((trader_address = lower(trader_address))),
     CONSTRAINT trades_treasury_fee_zug_check CHECK ((treasury_fee_zug >= (0)::numeric)),
+    CONSTRAINT trades_referrer_fee_zug_check CHECK ((referrer_fee_zug >= (0)::numeric)),
     CONSTRAINT trades_zug_amount_check CHECK ((zug_amount >= (0)::numeric))
 );
 
@@ -957,6 +1011,13 @@ ALTER TABLE ONLY public.creator_fee_claims ALTER COLUMN id SET DEFAULT nextval('
 
 
 --
+-- Name: referrer_fee_claims id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.referrer_fee_claims ALTER COLUMN id SET DEFAULT nextval('public.referrer_fee_claims_id_seq'::regclass);
+
+
+--
 -- Name: deep_links id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -1138,6 +1199,30 @@ ALTER TABLE ONLY public.creator_fee_claims
 
 ALTER TABLE ONLY public.creator_fee_claims
     ADD CONSTRAINT creator_fee_claims_tx_hash_log_index_key UNIQUE (tx_hash, log_index);
+
+
+--
+-- Name: referral_bindings referral_bindings_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.referral_bindings
+    ADD CONSTRAINT referral_bindings_pkey PRIMARY KEY (invitee_address);
+
+
+--
+-- Name: referrer_fee_claims referrer_fee_claims_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.referrer_fee_claims
+    ADD CONSTRAINT referrer_fee_claims_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: referrer_fee_claims referrer_fee_claims_tx_hash_log_index_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.referrer_fee_claims
+    ADD CONSTRAINT referrer_fee_claims_tx_hash_log_index_key UNIQUE (tx_hash, log_index);
 
 
 --
@@ -1409,6 +1494,20 @@ CREATE INDEX idx_contract_registry_active ON public.contract_registry USING btre
 --
 
 CREATE INDEX idx_creator_fee_claims_creator ON public.creator_fee_claims USING btree (creator_address, block_time DESC);
+
+
+--
+-- Name: idx_referral_bindings_referrer; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_referral_bindings_referrer ON public.referral_bindings USING btree (referrer_address, bound_at DESC);
+
+
+--
+-- Name: idx_referrer_fee_claims_referrer; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_referrer_fee_claims_referrer ON public.referrer_fee_claims USING btree (referrer_address, block_time DESC);
 
 
 --
@@ -1696,5 +1795,5 @@ ALTER TABLE ONLY public.user_positions
 -- PostgreSQL database dump complete
 --
 
-\unrestrict dFJphjeCOEsuOFQMpGEjbq2tX9izE3OIrMqL7zRgu6hwe7oAGFcR6MUXqMSpk4X
+\unrestrict fI938joxK2mAs6h9jReFibanJ3Bgdko75JShVYM1sAg2I9WjnxyY1TDOdIdM9Q3
 

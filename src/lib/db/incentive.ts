@@ -465,6 +465,51 @@ export async function setAdminLinkTaskActive(taskKey: string, isActive: boolean)
   return (result.rowCount ?? 0) > 0;
 }
 
+export async function deleteAdminLinkTask(taskKey: string): Promise<boolean> {
+  const db = getIncentivePool();
+  const client = await db.connect();
+
+  try {
+    await client.query("BEGIN");
+
+    const taskResult = await client.query(
+      `
+        SELECT task_key
+        FROM launchpad_tasks
+        WHERE task_key = $1 AND task_source = 'admin_link'
+        LIMIT 1
+      `,
+      [taskKey]
+    );
+
+    if ((taskResult.rowCount ?? 0) === 0) {
+      await client.query("ROLLBACK");
+      return false;
+    }
+
+    await client.query(
+      `DELETE FROM launchpad_user_task_completions WHERE task_key = $1`,
+      [taskKey]
+    );
+    await client.query(`DELETE FROM launchpad_points_sync_log WHERE task_key = $1`, [taskKey]);
+    await client.query(
+      `
+        DELETE FROM launchpad_tasks
+        WHERE task_key = $1 AND task_source = 'admin_link'
+      `,
+      [taskKey]
+    );
+
+    await client.query("COMMIT");
+    return true;
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 export type CompleteAdminLinkTaskResult = {
   status: "SYNCED" | "SKIPPED" | "NOT_FOUND";
   pointsAwarded: number;

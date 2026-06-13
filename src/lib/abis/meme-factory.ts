@@ -22,6 +22,28 @@ export const memeFactoryAbi = [
   },
   {
     type: "function",
+    name: "bondingCurveManager",
+    inputs: [],
+    outputs: [{ name: "", type: "address" }],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "setConfig",
+    inputs: [
+      { name: "treasury_", type: "address" },
+      { name: "bondingCurveManager_", type: "address" },
+      { name: "createFee_", type: "uint256" },
+      { name: "defaultTotalSupply_", type: "uint256" },
+      { name: "defaultTargetZug_", type: "uint256" },
+      { name: "defaultVirtualZugReserve_", type: "uint256" },
+      { name: "defaultVirtualTokenReserve_", type: "uint256" },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
     name: "createMeme",
     inputs: [
       { name: "name", type: "string" },

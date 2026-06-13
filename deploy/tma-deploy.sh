@@ -50,3 +50,11 @@ if [ "$health_ok" -ne 1 ]; then
 fi
 
 log "Deploy finished successfully"
+
+# Referral system (BondingCurveManager redeploy) — run separately BEFORE app deploy:
+# See deploy/REFERRAL_SYSTEM_DEPLOY.md
+# 1. forge script script/DeployBondingCurveReferral.s.sol --broadcast
+# 2. Update bsc-testnet-pump.json + contract_registry + INDEXER_START_BLOCK
+# 3. Apply db/migrations/005_referral_system.sql
+# 4. Update NEXT_PUBLIC_BONDING_CURVE_MANAGER in .env → tma-deploy.sh
+# Existing tokens stay on the old bonding contract until migrated / testnet reset.

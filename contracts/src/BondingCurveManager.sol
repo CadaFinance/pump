@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
-import {IERC20Minimal, IGraduationManager} from "./interfaces/ILaunchpad.sol";
+import {IERC20Minimal} from "./interfaces/ILaunchpad.sol";
 
-/// @notice Pre-graduation native ZUG <-> meme token bonding-curve trading.
+/// @notice Native BNB <-> meme token bonding-curve trading (BSC pump; no graduation).
 /// @dev MVP skeleton with virtual-reserve constant-product pricing.
 contract BondingCurveManager {
     struct CurveState {
@@ -14,22 +14,23 @@ contract BondingCurveManager {
         uint256 targetZug;
         uint256 virtualZugReserve;
         uint256 virtualTokenReserve;
-        bool graduationTriggered;
-        bool graduated;
         bool paused;
     }
 
     address public owner;
     address public factory;
     address public treasury;
-    IGraduationManager public graduationManager;
 
     uint256 public protocolFeeBps = 100; // 1%
     uint256 public creatorFeeShareBps = 2_000; // 20% of collected protocol fee
+    uint256 public referrerShareBps = 500; // 5% of collected protocol fee
     uint256 public constant BPS = 10_000;
 
     mapping(address => CurveState) public curves;
     mapping(address => uint256) public pendingCreatorFees;
+    mapping(address => uint256) public pendingReferrerFees;
+    mapping(address => address) public traderReferrer;
+    mapping(address => bool) public hasTraded;
 
     bool private locked;
 
@@ -51,11 +52,17 @@ contract BondingCurveManager {
         uint256 reserveZug,
         uint256 soldTokens
     );
-    event GraduationReady(address indexed token, uint256 reserveZug, uint256 soldTokens);
-    event GraduationReset(address indexed token, uint256 reserveZug, uint256 soldTokens);
-    event CurveGraduated(address indexed token, bytes32 indexed poolId, uint256 positionTokenId);
-    event FeeSplit(address indexed token, address indexed creator, uint256 creatorFee, uint256 treasuryFee);
+    event FeeSplit(
+        address indexed token,
+        address indexed creator,
+        address indexed trader,
+        uint256 creatorFee,
+        uint256 referrerFee,
+        uint256 treasuryFee
+    );
     event CreatorFeeClaimed(address indexed creator, uint256 amount);
+    event ReferrerSet(address indexed trader, address indexed referrer);
+    event ReferrerFeeClaimed(address indexed referrer, uint256 amount);
     event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
 
     error NotOwner();
@@ -64,10 +71,13 @@ contract BondingCurveManager {
     error ZeroAddress();
     error InvalidConfig();
     error UnknownToken();
-    error PausedOrGraduated();
+    error Paused();
     error Slippage();
     error TransferFailed();
     error InsufficientOutput();
+    error ReferrerAlreadySet();
+    error AlreadyTraded();
+    error SelfReferrer();
 
     modifier onlyOwner() {
         if (msg.sender != owner) revert NotOwner();
@@ -105,11 +115,6 @@ contract BondingCurveManager {
         factory = factory_;
     }
 
-    function setGraduationManager(address graduationManager_) external onlyOwner {
-        if (graduationManager_ == address(0)) revert ZeroAddress();
-        graduationManager = IGraduationManager(graduationManager_);
-    }
-
     function setProtocolFeeBps(uint256 feeBps) external onlyOwner {
         if (feeBps > 1_000) revert InvalidConfig(); // max 10%
         protocolFeeBps = feeBps;
@@ -117,7 +122,23 @@ contract BondingCurveManager {
 
     function setCreatorFeeShareBps(uint256 shareBps) external onlyOwner {
         if (shareBps > 5_000) revert InvalidConfig(); // creator can receive max 50% of protocol fee
+        if (shareBps + referrerShareBps > BPS) revert InvalidConfig();
         creatorFeeShareBps = shareBps;
+    }
+
+    function setReferrerShareBps(uint256 shareBps) external onlyOwner {
+        if (creatorFeeShareBps + shareBps > BPS) revert InvalidConfig();
+        referrerShareBps = shareBps;
+    }
+
+    function setReferrer(address referrer) external {
+        if (referrer == address(0)) revert ZeroAddress();
+        if (referrer == msg.sender) revert SelfReferrer();
+        if (hasTraded[msg.sender]) revert AlreadyTraded();
+        if (traderReferrer[msg.sender] != address(0)) revert ReferrerAlreadySet();
+
+        traderReferrer[msg.sender] = referrer;
+        emit ReferrerSet(msg.sender, referrer);
     }
 
     function registerToken(
@@ -144,8 +165,6 @@ contract BondingCurveManager {
             targetZug: targetZug,
             virtualZugReserve: virtualZugReserve,
             virtualTokenReserve: virtualTokenReserve,
-            graduationTriggered: false,
-            graduated: false,
             paused: false
         });
 
@@ -197,7 +216,7 @@ contract BondingCurveManager {
     function _buy(address token, address recipient, uint256 minTokenOut) internal returns (uint256 tokenOut) {
         CurveState storage c = curves[token];
         if (c.token == address(0)) revert UnknownToken();
-        if (c.paused || c.graduated) revert PausedOrGraduated();
+        if (c.paused) revert Paused();
 
         uint256 feeZug;
         (tokenOut, feeZug) = quoteBuy(token, msg.value);
@@ -208,21 +227,16 @@ contract BondingCurveManager {
         c.soldTokens += tokenOut;
 
         if (!IERC20Minimal(token).transfer(recipient, tokenOut)) revert TransferFailed();
-        _distributeFee(token, c.creator, feeZug);
+        hasTraded[recipient] = true;
+        _distributeFee(token, c.creator, recipient, feeZug);
 
         emit Trade(token, recipient, true, msg.value, tokenOut, feeZug, c.reserveZug, c.soldTokens);
-
-        if (c.reserveZug >= c.targetZug && !c.graduationTriggered) {
-            c.graduationTriggered = true;
-            c.paused = true;
-            emit GraduationReady(token, c.reserveZug, c.soldTokens);
-        }
     }
 
     function sell(address token, uint256 tokenIn, uint256 minZugOut) external nonReentrant returns (uint256 zugOut) {
         CurveState storage c = curves[token];
         if (c.token == address(0)) revert UnknownToken();
-        if (c.paused || c.graduated || c.graduationTriggered) revert PausedOrGraduated();
+        if (c.paused) revert Paused();
 
         uint256 feeZug;
         (zugOut, feeZug) = quoteSell(token, tokenIn);
@@ -235,46 +249,10 @@ contract BondingCurveManager {
         c.soldTokens -= tokenIn;
 
         _sendNative(payable(msg.sender), zugOut);
-        _distributeFee(token, c.creator, feeZug);
+        hasTraded[msg.sender] = true;
+        _distributeFee(token, c.creator, msg.sender, feeZug);
 
         emit Trade(token, msg.sender, false, zugOut + feeZug, tokenIn, feeZug, c.reserveZug, c.soldTokens);
-    }
-
-    function graduate(address token) external nonReentrant returns (bytes32 poolId, uint256 positionTokenId) {
-        CurveState storage c = curves[token];
-        if (c.token == address(0)) revert UnknownToken();
-        if (c.graduated) revert PausedOrGraduated();
-        if (c.reserveZug < c.targetZug) revert InvalidConfig();
-        if (address(graduationManager) == address(0)) revert ZeroAddress();
-
-        c.paused = true;
-        c.graduationTriggered = true;
-
-        uint256 tokenAmount = IERC20Minimal(token).balanceOf(address(this));
-        if (!IERC20Minimal(token).approve(address(graduationManager), tokenAmount)) revert TransferFailed();
-
-        (poolId, positionTokenId) = graduationManager.graduate{value: c.reserveZug}(
-            token,
-            c.creator,
-            c.reserveZug,
-            tokenAmount
-        );
-
-        c.graduated = true;
-        c.reserveZug = 0;
-        emit CurveGraduated(token, poolId, positionTokenId);
-    }
-
-    /// @notice Owner-controlled recovery if the keeper cannot graduate after threshold.
-    /// @dev Allows sells to reopen and reduce reserve below target; the next buy can trigger graduation again.
-    function resetGraduationTrigger(address token) external onlyOwner {
-        CurveState storage c = curves[token];
-        if (c.token == address(0)) revert UnknownToken();
-        if (c.graduated) revert PausedOrGraduated();
-
-        c.graduationTriggered = false;
-        c.paused = false;
-        emit GraduationReset(token, c.reserveZug, c.soldTokens);
     }
 
     function pauseToken(address token, bool paused) external onlyOwner {
@@ -289,21 +267,33 @@ contract BondingCurveManager {
         emit CreatorFeeClaimed(msg.sender, amount);
     }
 
+    function claimReferrerFees() external nonReentrant returns (uint256 amount) {
+        amount = pendingReferrerFees[msg.sender];
+        pendingReferrerFees[msg.sender] = 0;
+        _sendNative(payable(msg.sender), amount);
+        emit ReferrerFeeClaimed(msg.sender, amount);
+    }
+
     function _sendNative(address payable to, uint256 amount) internal {
         if (amount == 0) return;
         (bool ok, ) = to.call{value: amount}("");
         if (!ok) revert TransferFailed();
     }
 
-    function _distributeFee(address token, address creator, uint256 feeZug) internal {
+    function _distributeFee(address token, address creator, address trader, uint256 feeZug) internal {
         if (feeZug == 0) return;
 
         uint256 creatorFee = (feeZug * creatorFeeShareBps) / BPS;
-        uint256 treasuryFee = feeZug - creatorFee;
+        address referrer = traderReferrer[trader];
+        uint256 referrerFee = referrer != address(0) ? (feeZug * referrerShareBps) / BPS : 0;
+        uint256 treasuryFee = feeZug - creatorFee - referrerFee;
 
         pendingCreatorFees[creator] += creatorFee;
+        if (referrerFee > 0) {
+            pendingReferrerFees[referrer] += referrerFee;
+        }
         _sendNative(payable(treasury), treasuryFee);
 
-        emit FeeSplit(token, creator, creatorFee, treasuryFee);
+        emit FeeSplit(token, creator, trader, creatorFee, referrerFee, treasuryFee);
     }
 }

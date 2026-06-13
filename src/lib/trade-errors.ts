@@ -14,7 +14,7 @@ export function formatTradeError(err: unknown): string {
   if (lower.includes("insufficient funds")) {
     return "Insufficient BNB balance for this trade.";
   }
-  if (lower.includes("pausedorgraduated")) {
+  if (lower.includes("pausedorgraduated") || lower.includes("paused()")) {
     return "Trading is closed for this token.";
   }
   if (lower.includes("unknowntoken")) {

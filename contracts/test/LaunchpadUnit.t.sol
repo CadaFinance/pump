@@ -3,53 +3,100 @@ pragma solidity ^0.8.26;
 
 import {Test} from "forge-std/Test.sol";
 import {BondingCurveManager} from "../src/BondingCurveManager.sol";
-import {GraduationLocker} from "../src/GraduationLocker.sol";
 import {LaunchpadTreasury} from "../src/LaunchpadTreasury.sol";
 import {MemeFactory} from "../src/MemeFactory.sol";
 import {MemeTokenImplementation} from "../src/MemeTokenImplementation.sol";
-import {IERC20Minimal} from "../src/interfaces/ILaunchpad.sol";
-
-contract MockGraduationManager {
-    event MockGraduated(address indexed token, address indexed creator, uint256 zugAmount, uint256 tokenAmount);
-
-    function graduate(
-        address token,
-        address creator,
-        uint256 zugAmount,
-        uint256 tokenAmount
-    ) external payable returns (bytes32 poolId, uint256 positionTokenId) {
-        require(msg.value == zugAmount, "bad value");
-        require(IERC20Minimal(token).transferFrom(msg.sender, address(this), tokenAmount), "transfer failed");
-        emit MockGraduated(token, creator, zugAmount, tokenAmount);
-        return (bytes32(uint256(0x1234)), 77);
-    }
-}
 
 contract LaunchpadUnitTest is Test {
+    uint256 internal constant MAX_TARGET_ZUG = type(uint256).max;
+
     address internal owner = address(0xA11CE);
     address internal creator = address(0xC0FFEE);
     address internal trader = address(0xB0B);
+    address internal referrer = makeAddr("referrer");
     address internal treasuryOwner = address(0x7A);
 
     LaunchpadTreasury internal treasury;
     BondingCurveManager internal bonding;
     MemeFactory internal factory;
-    MockGraduationManager internal graduation;
 
     function setUp() public {
         treasury = new LaunchpadTreasury(treasuryOwner);
         bonding = new BondingCurveManager(owner, address(treasury));
         factory = new MemeFactory(owner, address(treasury), address(bonding));
-        graduation = new MockGraduationManager();
 
         vm.startPrank(owner);
         bonding.setFactory(address(factory));
-        bonding.setGraduationManager(address(graduation));
-        factory.setConfig(address(treasury), address(bonding), 0, 1_000_000 ether, 10 ether, 10 ether, 1_000_000 ether);
+        factory.setConfig(
+            address(treasury),
+            address(bonding),
+            0,
+            1_000_000 ether,
+            MAX_TARGET_ZUG,
+            10 ether,
+            1_000_000 ether
+        );
         vm.stopPrank();
 
         vm.deal(creator, 100 ether);
         vm.deal(trader, 100 ether);
+        vm.deal(referrer, 1 ether);
+    }
+
+    function testSetReferrerFeeSplitAndClaim() public {
+        vm.prank(creator);
+        address token = factory.createMeme("Zug Ref", "ZREF", "ipfs://zug-ref", 0);
+
+        vm.prank(trader);
+        bonding.setReferrer(referrer);
+
+        vm.prank(trader);
+        bonding.buy{value: 1 ether}(token, 1);
+
+        assertGt(bonding.pendingCreatorFees(creator), 0);
+        assertGt(bonding.pendingReferrerFees(referrer), 0);
+        assertTrue(bonding.hasTraded(trader));
+        assertEq(bonding.traderReferrer(trader), referrer);
+
+        uint256 referrerBalanceBefore = referrer.balance;
+        vm.prank(referrer);
+        uint256 claimed = bonding.claimReferrerFees();
+        assertGt(claimed, 0);
+        assertEq(referrer.balance, referrerBalanceBefore + claimed);
+    }
+
+    function testSetReferrerDuplicateRevert() public {
+        vm.prank(trader);
+        bonding.setReferrer(referrer);
+
+        vm.prank(trader);
+        vm.expectRevert(BondingCurveManager.ReferrerAlreadySet.selector);
+        bonding.setReferrer(address(0xDEAD));
+    }
+
+    function testSetReferrerAfterTradeRevert() public {
+        vm.prank(creator);
+        address token = factory.createMeme("Late Ref", "LREF", "ipfs://late-ref", 0);
+
+        vm.prank(trader);
+        bonding.buy{value: 1 ether}(token, 1);
+
+        vm.prank(trader);
+        vm.expectRevert(BondingCurveManager.AlreadyTraded.selector);
+        bonding.setReferrer(referrer);
+    }
+
+    function testSetReferrerSelfRevert() public {
+        vm.prank(trader);
+        vm.expectRevert(BondingCurveManager.SelfReferrer.selector);
+        bonding.setReferrer(trader);
+    }
+
+    function testReferrerShareBpsConstraint() public {
+        vm.startPrank(owner);
+        vm.expectRevert(BondingCurveManager.InvalidConfig.selector);
+        bonding.setReferrerShareBps(9_000);
+        vm.stopPrank();
     }
 
     function testCreateMemeDeploysFullTokenAndRegistersCurve() public {
@@ -61,12 +108,9 @@ contract LaunchpadUnitTest is Test {
         assertEq(MemeTokenImplementation(token).creator(), creator);
         assertEq(MemeTokenImplementation(token).balanceOf(address(bonding)), 1_000_000 ether);
 
-        (address curveToken, address curveCreator,,,,,, bool graduationTriggered, bool graduated, bool paused) =
-            bonding.curves(token);
+        (address curveToken, address curveCreator,,,,,, bool paused) = bonding.curves(token);
         assertEq(curveToken, token);
         assertEq(curveCreator, creator);
-        assertFalse(graduationTriggered);
-        assertFalse(graduated);
         assertFalse(paused);
     }
 
@@ -92,58 +136,21 @@ contract LaunchpadUnitTest is Test {
         assertEq(creator.balance, creatorBalanceBefore + claimed);
     }
 
-    function testGraduationThresholdAndRecoveryReset() public {
+    function testLargeBuyDoesNotPauseCurve() public {
         vm.prank(creator);
         address token = factory.createMeme("Zug Bull", "ZBULL", "ipfs://zug-bull", 0);
 
         vm.prank(trader);
         bonding.buy{value: 11 ether}(token, 1);
 
-        (,,,,,,, bool graduationTriggered,, bool paused) = bonding.curves(token);
-        assertTrue(graduationTriggered);
-        assertTrue(paused);
-
-        vm.prank(owner);
-        bonding.resetGraduationTrigger(token);
-
-        (,,,,,,, graduationTriggered,, paused) = bonding.curves(token);
-        assertFalse(graduationTriggered);
+        (,,,,,,, bool paused) = bonding.curves(token);
         assertFalse(paused);
-    }
-
-    function testGraduateMovesStateAfterSuccessfulMigration() public {
-        vm.prank(creator);
-        address token = factory.createMeme("Zug Moon", "ZMOON", "ipfs://zug-moon", 0);
-
-        vm.prank(trader);
-        bonding.buy{value: 11 ether}(token, 1);
-
-        (, uint256 positionTokenId) = bonding.graduate(token);
-        assertEq(positionTokenId, 77);
-
-        (,, uint256 reserveZug,,,,,, bool graduated, bool paused) = bonding.curves(token);
-        assertEq(reserveZug, 0);
-        assertTrue(graduated);
-        assertTrue(paused);
     }
 
     function testFactoryRequiresInitialBuySlippage() public {
         vm.expectRevert(MemeFactory.InvalidInput.selector);
         vm.prank(creator);
         factory.createMeme{value: 1 ether}("No Slippage", "NOSLIP", "ipfs://noslip", 0);
-    }
-
-    function testLockerOnlyAcceptsPositionManagerNft() public {
-        address positionManager = address(0xBEEF);
-        GraduationLocker locker = new GraduationLocker(positionManager);
-
-        vm.prank(address(0xBAD));
-        vm.expectRevert(GraduationLocker.NotPositionManager.selector);
-        locker.onERC721Received(address(this), address(this), 1, "");
-
-        vm.prank(positionManager);
-        bytes4 selector = locker.onERC721Received(address(this), address(this), 1, "locked");
-        assertEq(selector, locker.onERC721Received.selector);
     }
 
     function testOwnershipTransferLocksOldAdmin() public {
@@ -166,6 +173,14 @@ contract LaunchpadUnitTest is Test {
         assertEq(factory.owner(), newOwner);
 
         vm.prank(newOwner);
-        factory.setConfig(address(treasury), address(bonding), 0, 1_000_000 ether, 10 ether, 10 ether, 1_000_000 ether);
+        factory.setConfig(
+            address(treasury),
+            address(bonding),
+            0,
+            1_000_000 ether,
+            MAX_TARGET_ZUG,
+            10 ether,
+            1_000_000 ether
+        );
     }
 }

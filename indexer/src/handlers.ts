@@ -18,6 +18,7 @@ type ParsedLaunchpadLog = {
 
 type FeeSplit = {
   creatorFee: bigint;
+  referrerFee: bigint;
   treasuryFee: bigint;
 };
 
@@ -25,8 +26,6 @@ export type HandlerContext = {
   launchpadPool: pg.Pool;
   pointsBridge: PointsBridge;
   publicClient: PublicClient;
-  poolManagerAddress: string;
-  positionManagerAddress?: string;
 };
 
 export class LaunchpadEventHandlers {
@@ -46,20 +45,14 @@ export class LaunchpadEventHandlers {
       case "FeeSplit":
         this.handleFeeSplit(log);
         return;
-      case "GraduationReady":
-        await this.handleGraduationReady(log);
-        return;
-      case "LiquidityMigrated":
-        await this.handleLiquidityMigrated(log);
-        return;
-      case "Graduated":
-        await this.handleGraduated(log);
-        return;
-      case "CurveGraduated":
-        await this.handleCurveGraduated(log);
-        return;
       case "CreatorFeeClaimed":
         await this.handleCreatorFeeClaimed(log);
+        return;
+      case "ReferrerSet":
+        await this.handleReferrerSet(log);
+        return;
+      case "ReferrerFeeClaimed":
+        await this.handleReferrerFeeClaimed(log);
         return;
       case "AirdropCreated":
         await this.handleAirdropCreated(log);
@@ -167,6 +160,7 @@ export class LaunchpadEventHandlers {
     const feeZug = asBigInt(log.args.feeZug);
     const feeSplit = this.pendingFeeSplits.get(feeSplitKey(txHash, token)) ?? {
       creatorFee: 0n,
+      referrerFee: 0n,
       treasuryFee: 0n
     };
     this.pendingFeeSplits.delete(feeSplitKey(txHash, token));
@@ -190,11 +184,12 @@ export class LaunchpadEventHandlers {
               fee_zug,
               creator_fee_zug,
               treasury_fee_zug,
+              referrer_fee_zug,
               tx_hash,
               log_index,
               block_number,
               block_time
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
             ON CONFLICT (tx_hash, log_index) DO NOTHING
             RETURNING id
           )
@@ -211,6 +206,7 @@ export class LaunchpadEventHandlers {
           weiToDecimal(feeZug),
           weiToDecimal(feeSplit.creatorFee),
           weiToDecimal(feeSplit.treasuryFee),
+          weiToDecimal(feeSplit.referrerFee),
           txHash.toLowerCase(),
           logIndex,
           log.blockNumber.toString(),
@@ -313,126 +309,9 @@ export class LaunchpadEventHandlers {
 
     this.pendingFeeSplits.set(feeSplitKey(txHash, token), {
       creatorFee: asBigInt(log.args.creatorFee),
+      referrerFee: log.args.referrerFee != null ? asBigInt(log.args.referrerFee) : 0n,
       treasuryFee: asBigInt(log.args.treasuryFee)
     });
-  }
-
-  private async handleGraduationReady(log: ParsedLaunchpadLog): Promise<void> {
-    const token = dbAddress(asString(log.args.token));
-
-    await this.context.launchpadPool.query(
-      `
-        UPDATE tokens
-        SET status = 'GRADUATING',
-            updated_at = now()
-        WHERE address = $1
-          AND status <> 'GRADUATED'
-      `,
-      [token]
-    );
-  }
-
-  private async handleLiquidityMigrated(log: ParsedLaunchpadLog): Promise<void> {
-    const txHash = requiredTxHash(log);
-    const blockTime = await this.getBlockTime(log.blockNumber);
-    const token = dbAddress(asString(log.args.token));
-    const poolId = asString(log.args.poolId);
-
-    await this.context.launchpadPool.query(
-      `
-        INSERT INTO graduations (
-          token_address,
-          pool_id,
-          pool_manager,
-          position_manager,
-          token_amount_migrated,
-          zug_amount_migrated,
-          graduation_tx_hash,
-          graduation_block_number,
-          graduated_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-        ON CONFLICT (token_address) DO UPDATE
-        SET pool_id = EXCLUDED.pool_id,
-            token_amount_migrated = EXCLUDED.token_amount_migrated,
-            zug_amount_migrated = EXCLUDED.zug_amount_migrated,
-            graduation_tx_hash = EXCLUDED.graduation_tx_hash,
-            graduation_block_number = EXCLUDED.graduation_block_number,
-            graduated_at = EXCLUDED.graduated_at
-      `,
-      [
-        token,
-        poolId,
-        dbAddress(this.context.poolManagerAddress),
-        this.context.positionManagerAddress ? dbAddress(this.context.positionManagerAddress) : null,
-        weiToDecimal(asBigInt(log.args.tokenAmount)),
-        weiToDecimal(asBigInt(log.args.zugAmount)),
-        txHash.toLowerCase(),
-        log.blockNumber.toString(),
-        blockTime
-      ]
-    );
-  }
-
-  private async handleGraduated(log: ParsedLaunchpadLog): Promise<void> {
-    const txHash = requiredTxHash(log);
-    const blockTime = await this.getBlockTime(log.blockNumber);
-    const token = dbAddress(asString(log.args.token));
-    const poolId = asString(log.args.poolId);
-
-    await this.context.launchpadPool.query(
-      `
-        INSERT INTO graduations (
-          token_address,
-          pool_id,
-          pool_manager,
-          position_manager,
-          lp_token_id,
-          graduation_tx_hash,
-          graduation_block_number,
-          graduated_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-        ON CONFLICT (token_address) DO UPDATE
-        SET pool_id = EXCLUDED.pool_id,
-            lp_token_id = EXCLUDED.lp_token_id,
-            graduation_tx_hash = EXCLUDED.graduation_tx_hash,
-            graduation_block_number = EXCLUDED.graduation_block_number,
-            graduated_at = EXCLUDED.graduated_at
-      `,
-      [
-        token,
-        poolId,
-        dbAddress(this.context.poolManagerAddress),
-        this.context.positionManagerAddress ? dbAddress(this.context.positionManagerAddress) : null,
-        asBigInt(log.args.positionTokenId).toString(),
-        txHash.toLowerCase(),
-        log.blockNumber.toString(),
-        blockTime
-      ]
-    );
-
-    await this.context.launchpadPool.query(
-      `
-        UPDATE tokens
-        SET status = 'GRADUATED',
-            updated_at = now()
-        WHERE address = $1
-      `,
-      [token]
-    );
-  }
-
-  private async handleCurveGraduated(log: ParsedLaunchpadLog): Promise<void> {
-    const token = dbAddress(asString(log.args.token));
-
-    await this.context.launchpadPool.query(
-      `
-        UPDATE tokens
-        SET status = 'GRADUATED',
-            updated_at = now()
-        WHERE address = $1
-      `,
-      [token]
-    );
   }
 
   private async handleAirdropCreated(log: ParsedLaunchpadLog): Promise<void> {
@@ -587,6 +466,58 @@ export class LaunchpadEventHandlers {
       `,
       [
         creator,
+        amount,
+        txHash.toLowerCase(),
+        logIndex,
+        log.blockNumber.toString(),
+        blockTime
+      ]
+    );
+  }
+
+  private async handleReferrerSet(log: ParsedLaunchpadLog): Promise<void> {
+    const txHash = requiredTxHash(log);
+    const invitee = dbAddress(asString(log.args.trader));
+    const referrer = dbAddress(asString(log.args.referrer));
+
+    await this.context.launchpadPool.query(
+      `
+        INSERT INTO referral_bindings (
+          invitee_address,
+          referrer_address,
+          bound_tx_hash,
+          bound_at
+        ) VALUES ($1, $2, $3, now())
+        ON CONFLICT (invitee_address) DO NOTHING
+      `,
+      [invitee, referrer, txHash.toLowerCase()]
+    );
+  }
+
+  private async handleReferrerFeeClaimed(log: ParsedLaunchpadLog): Promise<void> {
+    const amountWei = asBigInt(log.args.amount);
+    if (amountWei <= 0n) return;
+
+    const txHash = requiredTxHash(log);
+    const logIndex = requiredLogIndex(log);
+    const blockTime = await this.getBlockTime(log.blockNumber);
+    const referrer = dbAddress(asString(log.args.referrer));
+    const amount = weiToDecimal(amountWei);
+
+    await this.context.launchpadPool.query(
+      `
+        INSERT INTO referrer_fee_claims (
+          referrer_address,
+          amount_bnb,
+          tx_hash,
+          log_index,
+          block_number,
+          block_time
+        ) VALUES ($1, $2, $3, $4, $5, $6)
+        ON CONFLICT (tx_hash, log_index) DO NOTHING
+      `,
+      [
+        referrer,
         amount,
         txHash.toLowerCase(),
         logIndex,

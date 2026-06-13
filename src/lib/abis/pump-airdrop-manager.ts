@@ -29,6 +29,13 @@ export const pumpAirdropManagerAbi = [
   },
   {
     type: "function",
+    name: "setCreateFee",
+    inputs: [{ name: "createFee_", type: "uint256" }],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
     name: "remainingBalance",
     inputs: [{ name: "airdropId", type: "uint256" }],
     outputs: [{ name: "", type: "uint256" }],

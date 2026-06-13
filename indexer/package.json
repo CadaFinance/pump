@@ -7,8 +7,6 @@
     "build": "tsc -p tsconfig.json",
     "indexer": "node dist/indexer.js",
     "indexer:dev": "tsx src/indexer.ts",
-    "graduation-keeper": "node dist/graduation-keeper.js",
-    "graduation-keeper:dev": "tsx src/graduation-keeper.ts",
     "airdrop-keeper": "node dist/airdrop-keeper.js",
     "airdrop-keeper:dev": "tsx src/airdrop-keeper.ts",
     "sync-king": "tsx src/sync-king.ts",

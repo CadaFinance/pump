@@ -9,6 +9,8 @@ import { useReadContract } from "wagmi";
 import { contracts, pumpChain } from "@/config/chain";
 import { bondingCurveManagerAbi } from "@/lib/bonding-curve";
 import { ClaimCreatorFeesModal } from "@/components/portfolio/ClaimCreatorFeesModal";
+import { ClaimReferrerFeesModal } from "@/components/portfolio/ClaimReferrerFeesModal";
+import { ReferralRewardsCard } from "@/components/referrals/ReferralRewardsCard";
 import { FollowNetworkModal } from "@/components/portfolio/FollowNetworkModal";
 import { AvatarPickerModal } from "@/components/user/AvatarPickerModal";
 import { UserAvatar } from "@/components/user/UserAvatar";
@@ -377,6 +379,27 @@ async function fetchDerivedLotsForWallet(
   return next;
 }
 
+type ReferralStats = {
+  inviteCount: number;
+  referralVolumeBnb: number;
+  referralFeesEarnedBnb: number;
+  claimedBnb: number;
+};
+
+async function fetchReferralStats(walletAddress: string): Promise<ReferralStats | null> {
+  try {
+    const response = await fetch(
+      `/api/referrals/stats?address=${encodeURIComponent(walletAddress)}`,
+      { cache: "no-store" }
+    );
+    const body = (await response.json()) as { data?: ReferralStats };
+    if (!response.ok || !body.data) return null;
+    return body.data;
+  } catch {
+    return null;
+  }
+}
+
 type VerifiedHoldingsSnapshot = {
   onChainBalances: Record<string, string>;
   walletHoldings: WalletLaunchpadHolding[];
@@ -409,6 +432,8 @@ export function PortfolioPanel() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [claimOpen, setClaimOpen] = useState(false);
+  const [referrerClaimOpen, setReferrerClaimOpen] = useState(false);
+  const [referralStats, setReferralStats] = useState<ReferralStats | null>(null);
   const [followModalOpen, setFollowModalOpen] = useState(false);
   const [followModalTab, setFollowModalTab] = useState<"following" | "followers">("following");
   const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
@@ -428,7 +453,16 @@ export function PortfolioPanel() {
     functionName: "pendingCreatorFees",
     args: address ? [address] : undefined,
     chainId: pumpChain.id,
-    query: { enabled: Boolean(address && isConnected) },
+    query: { enabled: Boolean(address), refetchInterval: 15_000 },
+  });
+
+  const { data: pendingReferrerWei, refetch: refetchReferrerPending } = useReadContract({
+    address: contracts.bondingCurveManager,
+    abi: bondingCurveManagerAbi,
+    functionName: "pendingReferrerFees",
+    args: address ? [address] : undefined,
+    chainId: pumpChain.id,
+    query: { enabled: Boolean(address), refetchInterval: 15_000 },
   });
 
   const loadPortfolio = useCallback(async (walletAddress: string) => {
@@ -493,6 +527,17 @@ export function PortfolioPanel() {
       }
     }
   }, []);
+
+  useEffect(() => {
+    if (!isConnected || !address) {
+      setReferralStats(null);
+      return;
+    }
+
+    void fetchReferralStats(address).then((stats) => {
+      setReferralStats(stats);
+    });
+  }, [address, isConnected]);
 
   useEffect(() => {
     if (!isConnected || !address) {
@@ -611,6 +656,18 @@ export function PortfolioPanel() {
         }}
       />
 
+      <ClaimReferrerFeesModal
+        open={referrerClaimOpen}
+        onClose={() => setReferrerClaimOpen(false)}
+        claimedBnb={referralStats?.claimedBnb ?? 0}
+        onClaimed={() => {
+          void refetchReferrerPending();
+          if (address) {
+            void fetchReferralStats(address).then((stats) => setReferralStats(stats));
+          }
+        }}
+      />
+
       <FollowNetworkModal
         open={followModalOpen}
         onClose={() => setFollowModalOpen(false)}
@@ -709,6 +766,17 @@ export function PortfolioPanel() {
                   </button>
                 </div>
               </div>
+            ) : null}
+            {address ? (
+              <ReferralRewardsCard
+                address={address}
+                claimedBnb={referralStats?.claimedBnb ?? 0}
+                pendingWei={pendingReferrerWei}
+                inviteCount={referralStats?.inviteCount ?? 0}
+                referralVolumeBnb={referralStats?.referralVolumeBnb ?? 0}
+                bnbUsd={bnbUsd}
+                onClaimClick={() => setReferrerClaimOpen(true)}
+              />
             ) : null}
           </dl>
         </section>

@@ -9,7 +9,6 @@ import {
 } from "./db.js";
 import {
   bondingCurveManagerAbi,
-  graduationManagerAbi,
   memeFactoryAbi,
   pumpAirdropManagerAbi
 } from "./abi.js";
@@ -50,22 +49,17 @@ async function main(): Promise<void> {
     { address: registry.memeFactory, abi: memeFactoryAbi },
     { address: registry.bondingCurveManager, abi: bondingCurveManagerAbi }
   ];
-  if (registry.graduationManager) {
-    contracts.push({ address: registry.graduationManager, abi: graduationManagerAbi });
-  }
   if (registry.pumpAirdropManager) {
     contracts.push({ address: registry.pumpAirdropManager, abi: pumpAirdropManagerAbi });
   }
   const handlers = new LaunchpadEventHandlers({
     launchpadPool: pools.launchpad,
     pointsBridge: new PointsBridge(pools.vm1),
-    publicClient,
-    poolManagerAddress: config.poolManagerAddress,
-    positionManagerAddress: config.positionManagerAddress
+    publicClient
   });
 
   console.log(
-    `launchpad indexer ready: chain=${config.chainId}, rpc=${config.rpcUrls.join(" | ")}, graduation=${registry.graduationManager ?? "disabled"}, airdrop=${registry.pumpAirdropManager ?? "disabled"}, contracts=${contracts
+    `launchpad indexer ready: chain=${config.chainId}, rpc=${config.rpcUrls.join(" | ")}, airdrop=${registry.pumpAirdropManager ?? "disabled"}, contracts=${contracts
       .map((contract) => contract.address)
       .join(", ")}`
   );

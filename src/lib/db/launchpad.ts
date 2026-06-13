@@ -1041,6 +1041,88 @@ export async function recordCreatorFeeClaim(input: {
   );
 }
 
+export type ReferralStats = {
+  inviteCount: number;
+  referralVolumeBnb: number;
+  referralFeesEarnedBnb: number;
+  claimedBnb: number;
+};
+
+export async function getReferralStats(address: string): Promise<ReferralStats> {
+  const db = getLaunchpadPool();
+  const normalized = address.toLowerCase();
+
+  const result = await db.query<{
+    invite_count: string;
+    referral_volume_bnb: string;
+    referral_fees_earned_bnb: string;
+    claimed_bnb: string;
+  }>(
+    `
+    SELECT
+      (SELECT COUNT(*)::text FROM referral_bindings WHERE referrer_address = $1) AS invite_count,
+      (
+        SELECT COALESCE(SUM(t.zug_amount), 0)::text
+        FROM trades t
+        INNER JOIN referral_bindings rb ON rb.invitee_address = t.trader_address
+        WHERE rb.referrer_address = $1
+      ) AS referral_volume_bnb,
+      (
+        SELECT COALESCE(SUM(t.referrer_fee_zug), 0)::text
+        FROM trades t
+        INNER JOIN referral_bindings rb ON rb.invitee_address = t.trader_address
+        WHERE rb.referrer_address = $1
+      ) AS referral_fees_earned_bnb,
+      (
+        SELECT COALESCE(SUM(amount_bnb), 0)::text
+        FROM referrer_fee_claims
+        WHERE referrer_address = $1
+      ) AS claimed_bnb
+    `,
+    [normalized]
+  );
+
+  const row = result.rows[0];
+  return {
+    inviteCount: Number(row?.invite_count ?? 0),
+    referralVolumeBnb: Number(row?.referral_volume_bnb ?? 0),
+    referralFeesEarnedBnb: Number(row?.referral_fees_earned_bnb ?? 0),
+    claimedBnb: Number(row?.claimed_bnb ?? 0),
+  };
+}
+
+export async function recordReferrerFeeClaim(input: {
+  referrerAddress: string;
+  amountBnb: string;
+  txHash: string;
+  logIndex: number;
+  blockNumber: string;
+  blockTime: Date;
+}): Promise<void> {
+  const db = getLaunchpadPool();
+  await db.query(
+    `
+    INSERT INTO referrer_fee_claims (
+      referrer_address,
+      amount_bnb,
+      tx_hash,
+      log_index,
+      block_number,
+      block_time
+    ) VALUES ($1, $2, $3, $4, $5, $6)
+    ON CONFLICT (tx_hash, log_index) DO NOTHING
+    `,
+    [
+      input.referrerAddress.toLowerCase(),
+      input.amountBnb,
+      input.txHash.toLowerCase(),
+      input.logIndex,
+      input.blockNumber,
+      input.blockTime,
+    ]
+  );
+}
+
 /** @deprecated Use getCreatorFeesClaimedBnb — trade fees ≠ claimable balance. */
 export async function getCreatorFeesAccruedBnb(address: string): Promise<number> {
   return getCreatorFeesClaimedBnb(address);

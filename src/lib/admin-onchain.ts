@@ -59,6 +59,8 @@ export async function getAdminProtocolSnapshot() {
     curveTreasury,
     curveOwner,
     curveProtocolFeeBps,
+    curveCreatorFeeShareBps,
+    curveReferrerShareBps,
     airdropAdmin,
     airdropTreasury,
     airdropCreateFee,
@@ -94,6 +96,16 @@ export async function getAdminProtocolSnapshot() {
       address: bonding,
       abi: bondingCurveManagerAbi,
       functionName: "protocolFeeBps",
+    }),
+    publicClient.readContract({
+      address: bonding,
+      abi: bondingCurveManagerAbi,
+      functionName: "creatorFeeShareBps",
+    }),
+    publicClient.readContract({
+      address: bonding,
+      abi: bondingCurveManagerAbi,
+      functionName: "referrerShareBps",
     }),
     manager
       ? publicClient.readContract({
@@ -142,6 +154,8 @@ export async function getAdminProtocolSnapshot() {
       owner: curveOwner as Address,
       treasury: curveTreasury as Address,
       protocolFeeBps: Number(curveProtocolFeeBps),
+      creatorFeeShareBps: Number(curveCreatorFeeShareBps),
+      referrerShareBps: Number(curveReferrerShareBps),
       contractBalanceBnb: formatEther(curveBalance),
     },
     airdropManager: manager

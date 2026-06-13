@@ -15,8 +15,6 @@ contract LaunchpadLens {
         uint256 targetZug;
         uint256 virtualZugReserve;
         uint256 virtualTokenReserve;
-        bool graduationTriggered;
-        bool graduated;
         bool paused;
         uint256 progressBps;
     }
@@ -34,8 +32,6 @@ contract LaunchpadLens {
             uint256 targetZug,
             uint256 virtualZugReserve,
             uint256 virtualTokenReserve,
-            bool graduationTriggered,
-            bool graduated,
             bool paused
         ) = bondingCurveManager.curves(token);
 
@@ -50,8 +46,6 @@ contract LaunchpadLens {
             targetZug: targetZug,
             virtualZugReserve: virtualZugReserve,
             virtualTokenReserve: virtualTokenReserve,
-            graduationTriggered: graduationTriggered,
-            graduated: graduated,
             paused: paused,
             progressBps: progressBps
         });

@@ -34,12 +34,3 @@ interface IBondingCurveManager {
         uint256 minTokenOut
     ) external payable returns (uint256 tokenOut);
 }
-
-interface IGraduationManager {
-    function graduate(
-        address token,
-        address creator,
-        uint256 zugAmount,
-        uint256 tokenAmount
-    ) external payable returns (bytes32 poolId, uint256 positionTokenId);
-}

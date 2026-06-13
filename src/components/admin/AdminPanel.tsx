@@ -21,8 +21,20 @@ import {
   formatQualifyDateTime,
 } from "@/lib/airdrop-board-format";
 import { TokenAvatar } from "@/components/token/TokenAvatar";
+import { AdminAirdropCreateFeeModal } from "@/components/admin/AdminAirdropCreateFeeModal";
+import { AdminCreatorShareModal } from "@/components/admin/AdminCreatorShareModal";
+import { AdminReferrerShareModal } from "@/components/admin/AdminReferrerShareModal";
+import { AdminMemeCreateFeeModal } from "@/components/admin/AdminMemeCreateFeeModal";
+import { AdminProtocolFeeModal } from "@/components/admin/AdminProtocolFeeModal";
 import { useBnbUsdPrice } from "@/hooks/useBnbUsdPrice";
 import { bnbToUsd, formatBnbWithUsd, formatUsdReadable } from "@/lib/format-usd";
+import {
+  creatorShareBpsToPercent,
+  effectiveTradeFeePercent,
+  protocolFeeBpsToPercent,
+  referrerShareBpsToPercent,
+  treasurySharePercentFromSplit,
+} from "@/lib/trade-fee-config";
 
 type ProtocolSnapshot = {
   memeFactory: { address: string; owner: string; treasury: string; createFeeBnb: string };
@@ -31,6 +43,8 @@ type ProtocolSnapshot = {
     owner: string;
     treasury: string;
     protocolFeeBps: number;
+    creatorFeeShareBps: number;
+    referrerShareBps: number;
     contractBalanceBnb: string;
   };
   airdropManager: {
@@ -220,7 +234,12 @@ export function AdminPanel() {
   const [promoDescription, setPromoDescription] = useState("");
   const [promoPoints, setPromoPoints] = useState("");
   const [promoUrl, setPromoUrl] = useState("");
-  const [deactivatingKey, setDeactivatingKey] = useState<string | null>(null);
+  const [deletingKey, setDeletingKey] = useState<string | null>(null);
+  const [protocolFeeModalOpen, setProtocolFeeModalOpen] = useState(false);
+  const [creatorShareModalOpen, setCreatorShareModalOpen] = useState(false);
+  const [referrerShareModalOpen, setReferrerShareModalOpen] = useState(false);
+  const [memeCreateFeeModalOpen, setMemeCreateFeeModalOpen] = useState(false);
+  const [airdropCreateFeeModalOpen, setAirdropCreateFeeModalOpen] = useState(false);
 
   const isAdmin = isAdminWallet(address);
   const treasuryContract = protocol?.treasury.address as `0x${string}` | undefined;
@@ -231,6 +250,25 @@ export function AdminPanel() {
     Boolean(treasuryContract) &&
     treasuryOwner != null &&
     address!.toLowerCase() === treasuryOwner.toLowerCase();
+
+  const bondingOwner = protocol?.bondingCurveManager.owner;
+  const memeFactoryOwner = protocol?.memeFactory.owner;
+  const airdropAdmin = protocol?.airdropManager?.admin;
+  const canEditBondingFees =
+    isAdmin &&
+    Boolean(address) &&
+    bondingOwner != null &&
+    address!.toLowerCase() === bondingOwner.toLowerCase();
+  const canEditMemeCreateFee =
+    isAdmin &&
+    Boolean(address) &&
+    memeFactoryOwner != null &&
+    address!.toLowerCase() === memeFactoryOwner.toLowerCase();
+  const canEditAirdropCreateFee =
+    isAdmin &&
+    Boolean(address) &&
+    airdropAdmin != null &&
+    address!.toLowerCase() === airdropAdmin.toLowerCase();
 
   const { data: treasuryLiveBalance, refetch: refetchTreasuryBalance } = useBalance({
     address: treasuryContract,
@@ -440,23 +478,25 @@ export function AdminPanel() {
     }
   }
 
-  async function onDeactivatePromoTask(taskKey: string) {
+  async function onDeletePromoTask(taskKey: string, title: string) {
     if (!address) return;
-    setDeactivatingKey(taskKey);
+    if (!window.confirm(`Delete "${title}"? Users keep any points already earned.`)) return;
+
+    setDeletingKey(taskKey);
     setError(null);
     try {
       const res = await fetch(`/api/admin/tasks?address=${address}`, {
-        method: "PATCH",
+        method: "DELETE",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ taskKey, isActive: false }),
+        body: JSON.stringify({ taskKey }),
       });
       const json = (await res.json()) as { error?: string };
-      if (!res.ok) throw new Error(json.error ?? "Failed to deactivate task");
+      if (!res.ok) throw new Error(json.error ?? "Failed to delete task");
       await loadPromoTasks();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to deactivate task");
+      setError(err instanceof Error ? err.message : "Failed to delete task");
     } finally {
-      setDeactivatingKey(null);
+      setDeletingKey(null);
     }
   }
 
@@ -493,9 +533,57 @@ export function AdminPanel() {
   const escrowBnb = protocol?.airdropManager?.contractBalanceBnb ?? "0";
   const memeFeeUsd = bnbToUsd(Number(protocol?.memeFactory.createFeeBnb ?? 0), bnbUsd);
   const airdropFeeUsd = bnbToUsd(Number(protocol?.airdropManager?.createFeeBnb ?? 0), bnbUsd);
+  const protocolFeeBps = protocol?.bondingCurveManager.protocolFeeBps ?? 0;
+  const creatorFeeShareBps = protocol?.bondingCurveManager.creatorFeeShareBps ?? 0;
+  const referrerShareBps = protocol?.bondingCurveManager.referrerShareBps ?? 0;
+  const treasuryFeeSharePct = treasurySharePercentFromSplit(creatorFeeShareBps, referrerShareBps);
+  const creatorEffectivePct = effectiveTradeFeePercent(protocolFeeBps, creatorFeeShareBps);
+  const referrerEffectivePct = effectiveTradeFeePercent(protocolFeeBps, referrerShareBps);
+  const treasuryEffectivePct = effectiveTradeFeePercent(
+    protocolFeeBps,
+    10_000 - creatorFeeShareBps - referrerShareBps
+  );
 
   return (
     <div className="space-y-4 md:space-y-5">
+      <AdminProtocolFeeModal
+        open={protocolFeeModalOpen}
+        onClose={() => setProtocolFeeModalOpen(false)}
+        currentProtocolFeeBps={protocolFeeBps}
+        bondingOwner={bondingOwner ?? ADMIN_ADDRESS}
+        onUpdated={() => void load()}
+      />
+      <AdminCreatorShareModal
+        open={creatorShareModalOpen}
+        onClose={() => setCreatorShareModalOpen(false)}
+        currentCreatorShareBps={creatorFeeShareBps}
+        protocolFeeBps={protocolFeeBps}
+        bondingOwner={bondingOwner ?? ADMIN_ADDRESS}
+        onUpdated={() => void load()}
+      />
+      <AdminReferrerShareModal
+        open={referrerShareModalOpen}
+        onClose={() => setReferrerShareModalOpen(false)}
+        currentReferrerShareBps={referrerShareBps}
+        creatorFeeShareBps={creatorFeeShareBps}
+        protocolFeeBps={protocolFeeBps}
+        bondingOwner={bondingOwner ?? ADMIN_ADDRESS}
+        onUpdated={() => void load()}
+      />
+      <AdminMemeCreateFeeModal
+        open={memeCreateFeeModalOpen}
+        onClose={() => setMemeCreateFeeModalOpen(false)}
+        currentFeeBnb={protocol?.memeFactory.createFeeBnb ?? "0"}
+        memeFactoryOwner={memeFactoryOwner ?? ADMIN_ADDRESS}
+        onUpdated={() => void load()}
+      />
+      <AdminAirdropCreateFeeModal
+        open={airdropCreateFeeModalOpen}
+        onClose={() => setAirdropCreateFeeModalOpen(false)}
+        currentFeeBnb={protocol?.airdropManager?.createFeeBnb ?? "0"}
+        airdropAdmin={airdropAdmin ?? ADMIN_ADDRESS}
+        onUpdated={() => void load()}
+      />
       {error ? (
         <div className="notice-error rounded-lg border border-pump-danger/30 bg-pump-danger/5 px-3 py-2 text-body-sm">
           {error}
@@ -640,16 +728,14 @@ export function AdminPanel() {
                     {task.completionCount === 1 ? "" : "s"}
                   </p>
                 </div>
-                {task.isActive ? (
-                  <button
-                    type="button"
-                    className="chip-button shrink-0"
-                    disabled={deactivatingKey === task.taskKey}
-                    onClick={() => void onDeactivatePromoTask(task.taskKey)}
-                  >
-                    {deactivatingKey === task.taskKey ? "…" : "Deactivate"}
-                  </button>
-                ) : null}
+                <button
+                  type="button"
+                  className="chip-button shrink-0 border-pump-danger/30 text-pump-danger hover:bg-pump-danger/10"
+                  disabled={deletingKey === task.taskKey}
+                  onClick={() => void onDeletePromoTask(task.taskKey, task.title)}
+                >
+                  {deletingKey === task.taskKey ? "…" : "Delete"}
+                </button>
               </article>
             ))}
           </div>
@@ -696,7 +782,19 @@ export function AdminPanel() {
                   </p>
                   {memeFeeUsd != null ? (
                     <p className="text-caption text-pump-muted">
-                      {formatUsdReadable(memeFeeUsd, { compact: true })} / launch
+                      {formatUsdReadable(memeFeeUsd, { compact: true })} / launch · 100% → treasury
+                    </p>
+                  ) : null}
+                  <button
+                    type="button"
+                    className="chip-button mt-2"
+                    onClick={() => setMemeCreateFeeModalOpen(true)}
+                  >
+                    Edit launch fee
+                  </button>
+                  {!canEditMemeCreateFee && isAdmin ? (
+                    <p className="mt-1 text-caption text-pump-muted">
+                      MemeFactory owner: {shortAddress(memeFactoryOwner ?? ADMIN_ADDRESS)}
                     </p>
                   ) : null}
                 </>
@@ -707,11 +805,93 @@ export function AdminPanel() {
           </div>
           <div className="rounded-md border border-pump-border/15 bg-pump-surface/35 px-3 py-2.5">
             <dt className="section-label text-[10px]">Trade protocol fee</dt>
-            <dd className="mt-1 text-body-sm text-pump-text">
-              {protocol
-                ? `${(protocol.bondingCurveManager.protocolFeeBps / 100).toFixed(2)}% · 80% → treasury`
-                : "—"}
+            <dd className="mt-1">
+              {protocol ? (
+                <>
+                  <p className="financial-value text-body-sm font-semibold text-pump-text">
+                    {protocolFeeBpsToPercent(protocolFeeBps).toFixed(2)}% per trade
+                  </p>
+                  <p className="text-caption text-pump-muted">
+                    Creator {creatorShareBpsToPercent(creatorFeeShareBps).toFixed(2)}% · Referrer{" "}
+                    {referrerShareBpsToPercent(referrerShareBps).toFixed(2)}% · Treasury{" "}
+                    {treasuryFeeSharePct.toFixed(2)}% of fee
+                  </p>
+                  <p className="text-caption text-pump-muted">
+                    Effective ~{creatorEffectivePct.toFixed(3)}% creator · ~
+                    {referrerEffectivePct.toFixed(3)}% referrer · ~
+                    {treasuryEffectivePct.toFixed(3)}% treasury on trade volume
+                  </p>
+                  <button
+                    type="button"
+                    className="chip-button mt-2"
+                    onClick={() => setProtocolFeeModalOpen(true)}
+                  >
+                    Edit protocol fee
+                  </button>
+                </>
+              ) : (
+                "—"
+              )}
             </dd>
+          </div>
+          <div className="rounded-md border border-pump-border/15 bg-pump-surface/35 px-3 py-2.5">
+            <dt className="section-label text-[10px]">Creator fee share</dt>
+            <dd className="mt-1">
+              {protocol ? (
+                <>
+                  <p className="financial-value text-body-sm font-semibold text-pump-text">
+                    {creatorShareBpsToPercent(creatorFeeShareBps).toFixed(2)}% of protocol fee
+                  </p>
+                  <p className="text-caption text-pump-muted">
+                    Treasury auto-receives the remaining {treasuryFeeSharePct.toFixed(2)}%
+                  </p>
+                  <button
+                    type="button"
+                    className="chip-button mt-2"
+                    onClick={() => setCreatorShareModalOpen(true)}
+                  >
+                    Edit creator share
+                  </button>
+                </>
+              ) : (
+                "—"
+              )}
+            </dd>
+          </div>
+          <div className="rounded-md border border-pump-border/15 bg-pump-surface/35 px-3 py-2.5">
+            <dt className="section-label text-[10px]">Referrer fee share</dt>
+            <dd className="mt-1">
+              {protocol ? (
+                <>
+                  <p className="financial-value text-body-sm font-semibold text-pump-text">
+                    {referrerShareBpsToPercent(referrerShareBps).toFixed(2)}% of protocol fee
+                  </p>
+                  <p className="text-caption text-pump-muted">
+                    Paid to invitee&apos;s referrer when bound before first trade
+                  </p>
+                  <button
+                    type="button"
+                    className="chip-button mt-2"
+                    onClick={() => setReferrerShareModalOpen(true)}
+                  >
+                    Edit referrer share
+                  </button>
+                </>
+              ) : (
+                "—"
+              )}
+            </dd>
+          </div>
+          <div className="rounded-md border border-pump-border/15 bg-pump-surface/35 px-3 py-2.5 sm:col-span-2 lg:col-span-1">
+            <dt className="section-label text-[10px]">Bonding curve owner</dt>
+            <dd className="mt-1 text-body-sm font-medium text-pump-text">
+              {bondingOwner ? shortAddress(bondingOwner) : shortAddress(ADMIN_ADDRESS)}
+            </dd>
+            {!canEditBondingFees && isAdmin ? (
+              <p className="mt-1 text-caption text-pump-muted">
+                Connect owner wallet to change fees on-chain.
+              </p>
+            ) : null}
           </div>
           <div className="rounded-md border border-pump-border/15 bg-pump-surface/35 px-3 py-2.5">
             <dt className="section-label text-[10px]">Airdrop create fee</dt>
@@ -724,6 +904,18 @@ export function AdminPanel() {
                   {airdropFeeUsd != null ? (
                     <p className="text-caption text-pump-muted">
                       {formatUsdReadable(airdropFeeUsd, { compact: true })} → treasury
+                    </p>
+                  ) : null}
+                  <button
+                    type="button"
+                    className="chip-button mt-2"
+                    onClick={() => setAirdropCreateFeeModalOpen(true)}
+                  >
+                    Edit airdrop fee
+                  </button>
+                  {!canEditAirdropCreateFee && isAdmin && protocol?.airdropManager ? (
+                    <p className="mt-1 text-caption text-pump-muted">
+                      Airdrop admin: {shortAddress(airdropAdmin ?? ADMIN_ADDRESS)}
                     </p>
                   ) : null}
                 </>
@@ -759,7 +951,7 @@ export function AdminPanel() {
             <p className="section-label">Claim protocol fees</p>
             <p className="mt-1 field-hint">
               Withdraw accumulated fees from LaunchpadTreasury — meme launch fees, trade treasury
-              share (80%), and airdrop create fees.
+              share ({treasuryFeeSharePct.toFixed(0)}% of protocol fee), and airdrop create fees.
             </p>
 
             <div className="mt-3 flex flex-wrap gap-2">

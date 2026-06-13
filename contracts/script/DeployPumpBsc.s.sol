@@ -10,7 +10,7 @@ import {LaunchpadTreasury} from "../src/LaunchpadTreasury.sol";
 import {MemeFactory} from "../src/MemeFactory.sol";
 import {MemeTokenImplementation} from "../src/MemeTokenImplementation.sol";
 
-/// @notice BSC Testnet pump deploy — no GraduationManager, targetZug = max (never graduates).
+/// @notice BSC Testnet pump deploy — targetZug = max (bonding curve never caps out).
 contract DeployPumpBsc is Script {
     uint256 internal constant BSC_TESTNET_ID = 97;
     uint256 internal constant MAX_TARGET_ZUG = type(uint256).max;
@@ -102,7 +102,7 @@ contract DeployPumpBsc is Script {
         console2.log(" BondingCurveManager:", d.bondingCurveManager);
         console2.log(" LaunchpadLens:", d.launchpadLens);
         console2.log(" Create fee:", CREATE_FEE);
-        console2.log(" Target ZUG: MAX (no graduation)");
+        console2.log(" Target ZUG: MAX");
         console2.log("========================================");
     }
 }

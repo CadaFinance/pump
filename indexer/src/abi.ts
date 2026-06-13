@@ -44,5 +44,4 @@ function readArtifactAbi(relativePath: string): Abi {
 
 export const memeFactoryAbi = readArtifactAbi("MemeFactory.sol/MemeFactory.json");
 export const bondingCurveManagerAbi = readArtifactAbi("BondingCurveManager.sol/BondingCurveManager.json");
-export const graduationManagerAbi = readArtifactAbi("GraduationManager.sol/GraduationManager.json");
 export const pumpAirdropManagerAbi = readArtifactAbi("PumpAirdropManager.sol/PumpAirdropManager.json");

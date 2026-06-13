@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { isAdminWallet } from "@/config/admin";
 import {
   createAdminLinkTask,
+  deleteAdminLinkTask,
   listAdminLinkTasks,
   setAdminLinkTaskActive,
 } from "@/lib/db/incentive";
@@ -75,6 +76,30 @@ export async function PATCH(request: NextRequest) {
     }
 
     return NextResponse.json({ data: { taskKey, isActive } });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  if (!requireAdmin(request)) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+
+  try {
+    const body = (await request.json()) as { taskKey?: string };
+    const taskKey = body.taskKey?.trim();
+    if (!taskKey) {
+      return NextResponse.json({ error: "taskKey is required" }, { status: 400 });
+    }
+
+    const deleted = await deleteAdminLinkTask(taskKey);
+    if (!deleted) {
+      return NextResponse.json({ error: "Task not found" }, { status: 404 });
+    }
+
+    return NextResponse.json({ data: { taskKey, deleted: true } });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
     return NextResponse.json({ error: message }, { status: 500 });

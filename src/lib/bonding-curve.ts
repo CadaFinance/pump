@@ -17,9 +17,37 @@ export const bondingCurveManagerAbi = [
   },
   {
     type: "event",
+    name: "FeeSplit",
+    inputs: [
+      { name: "token", type: "address", indexed: true },
+      { name: "creator", type: "address", indexed: true },
+      { name: "trader", type: "address", indexed: true },
+      { name: "creatorFee", type: "uint256", indexed: false },
+      { name: "referrerFee", type: "uint256", indexed: false },
+      { name: "treasuryFee", type: "uint256", indexed: false },
+    ],
+  },
+  {
+    type: "event",
     name: "CreatorFeeClaimed",
     inputs: [
       { name: "creator", type: "address", indexed: true },
+      { name: "amount", type: "uint256", indexed: false },
+    ],
+  },
+  {
+    type: "event",
+    name: "ReferrerSet",
+    inputs: [
+      { name: "trader", type: "address", indexed: true },
+      { name: "referrer", type: "address", indexed: true },
+    ],
+  },
+  {
+    type: "event",
+    name: "ReferrerFeeClaimed",
+    inputs: [
+      { name: "referrer", type: "address", indexed: true },
       { name: "amount", type: "uint256", indexed: false },
     ],
   },
@@ -46,6 +74,48 @@ export const bondingCurveManagerAbi = [
   },
   {
     type: "function",
+    name: "creatorFeeShareBps",
+    inputs: [],
+    outputs: [{ name: "", type: "uint256" }],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "referrerShareBps",
+    inputs: [],
+    outputs: [{ name: "", type: "uint256" }],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "setProtocolFeeBps",
+    inputs: [{ name: "feeBps", type: "uint256" }],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "setCreatorFeeShareBps",
+    inputs: [{ name: "shareBps", type: "uint256" }],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "setReferrerShareBps",
+    inputs: [{ name: "shareBps", type: "uint256" }],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "setReferrer",
+    inputs: [{ name: "referrer", type: "address" }],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
     name: "curves",
     inputs: [{ name: "token", type: "address" }],
     outputs: [
@@ -56,8 +126,6 @@ export const bondingCurveManagerAbi = [
       { name: "targetZug", type: "uint256" },
       { name: "virtualZugReserve", type: "uint256" },
       { name: "virtualTokenReserve", type: "uint256" },
-      { name: "graduationTriggered", type: "bool" },
-      { name: "graduated", type: "bool" },
       { name: "paused", type: "bool" },
     ],
     stateMutability: "view",
@@ -118,7 +186,35 @@ export const bondingCurveManagerAbi = [
   },
   {
     type: "function",
+    name: "pendingReferrerFees",
+    inputs: [{ name: "referrer", type: "address" }],
+    outputs: [{ name: "", type: "uint256" }],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "traderReferrer",
+    inputs: [{ name: "trader", type: "address" }],
+    outputs: [{ name: "", type: "address" }],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "hasTraded",
+    inputs: [{ name: "trader", type: "address" }],
+    outputs: [{ name: "", type: "bool" }],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
     name: "claimCreatorFees",
+    inputs: [],
+    outputs: [{ name: "amount", type: "uint256" }],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "claimReferrerFees",
     inputs: [],
     outputs: [{ name: "amount", type: "uint256" }],
     stateMutability: "nonpayable",
@@ -200,21 +296,6 @@ export function impliedStartMarketCapZug(virtualZugReserve: bigint): number {
 
 export function impliedStartMarketCapBnb(virtualBnbReserve: bigint): number {
   return impliedStartMarketCapZug(virtualBnbReserve);
-}
-
-/** % of bonding supply sold when real reserve hits graduation target. */
-export function estimateSupplySoldAtGraduation(params: {
-  virtualZugReserve: bigint;
-  virtualTokenReserve: bigint;
-  targetZug: bigint;
-}): number {
-  const { virtualZugReserve, virtualTokenReserve, targetZug } = params;
-  if (virtualTokenReserve === 0n) return 0;
-
-  const xFinal = virtualZugReserve + targetZug;
-  const yFinal = (virtualZugReserve * virtualTokenReserve) / xFinal;
-  const sold = virtualTokenReserve - yFinal;
-  return Number((sold * 10000n) / virtualTokenReserve) / 100;
 }
 
 export function supplyPctForBuy(tokenOut: bigint, totalSupply: bigint): number {

@@ -7,8 +7,6 @@ const { Pool } = pg;
 export type ContractRegistry = {
   memeFactory: Address;
   bondingCurveManager: Address;
-  /** Absent on BSC pump (no graduation). */
-  graduationManager?: Address;
   pumpAirdropManager?: Address;
 };
 
@@ -64,7 +62,6 @@ export async function loadContractRegistry(pool: pg.Pool): Promise<ContractRegis
         AND contract_key IN (
           'meme_factory',
           'bonding_curve_manager',
-          'graduation_manager',
           'pump_airdrop_manager'
         )
     `
@@ -73,7 +70,6 @@ export async function loadContractRegistry(pool: pg.Pool): Promise<ContractRegis
   const registry = new Map(result.rows.map((row) => [row.contract_key, normalizeAddress(row.address)]));
   const memeFactory = registry.get("meme_factory");
   const bondingCurveManager = registry.get("bonding_curve_manager");
-  const graduationManager = registry.get("graduation_manager");
   const envAirdrop = process.env.PUMP_AIRDROP_MANAGER?.trim();
   const pumpAirdropManager =
     registry.get("pump_airdrop_manager") ??
@@ -86,7 +82,6 @@ export async function loadContractRegistry(pool: pg.Pool): Promise<ContractRegis
   return {
     memeFactory,
     bondingCurveManager,
-    graduationManager,
     pumpAirdropManager
   };
 }
