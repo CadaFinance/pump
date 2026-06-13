@@ -1,6 +1,6 @@
 -- Tüm uygulama verisini siler; şema (tablolar, index, trigger, MV tanımları, fonksiyonlar) aynen kalır.
 --
--- Korunan: contract_registry (kontrat adresleri — indexer/TMA için gerekli)
+-- Korunan: contract_registry, launchpad_tasks (sabit 5 system mission tanımı)
 --
 -- VM örnek:
 --   sudo -u postgres psql -d pump_db -f db/scripts/wipe_all_data.sql
@@ -29,7 +29,6 @@ TRUNCATE TABLE
   public.launchpad_points_sync_log,
   public.launchpad_user_daily_completions,
   public.launchpad_user_task_completions,
-  public.launchpad_tasks,
   public.points_audit_log,
   public.trades,
   public.token_favorites,
