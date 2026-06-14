@@ -27,6 +27,7 @@ import { AdminCreatorShareModal } from "@/components/admin/AdminCreatorShareModa
 import { AdminReferrerShareModal } from "@/components/admin/AdminReferrerShareModal";
 import { AdminMemeCreateFeeModal } from "@/components/admin/AdminMemeCreateFeeModal";
 import { AdminProtocolFeeModal } from "@/components/admin/AdminProtocolFeeModal";
+import { AdminSystemHealth } from "@/components/admin/AdminSystemHealth";
 import { useBnbUsdPrice } from "@/hooks/useBnbUsdPrice";
 import { bnbToUsd, formatBnbWithUsd, formatUsdReadable } from "@/lib/format-usd";
 import {
@@ -588,6 +589,8 @@ export function AdminPanel() {
           {error}
         </div>
       ) : null}
+
+      {address ? <AdminSystemHealth address={address} /> : null}
 
       <section className="panel-surface overflow-hidden">
         <div className="border-b border-pump-border/15 px-4 py-3.5 md:px-5">
