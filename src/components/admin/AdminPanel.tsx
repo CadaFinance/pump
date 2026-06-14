@@ -102,6 +102,28 @@ type AdminLinkTask = {
   completionCount: number;
 };
 
+type AdminPlatformStats = {
+  usersRegistered: number;
+  usersTraded: number;
+  totalTrades: number;
+  trades24h: number;
+  totalTokens: number;
+  tokensToday: number;
+  totalAirdrops: number;
+  airdropsToday: number;
+  treasuryShareFromTradesBnb: string;
+  creatorAllocatedBnb: string;
+  referrerAllocatedBnb: string;
+  claimedCreatorBnb: string;
+  claimedReferrerBnb: string;
+  pendingCreatorBnb: string;
+  pendingReferrerBnb: string;
+  claimedTotalBnb: string;
+  treasuryBalanceBnb: string;
+  availableTotalBnb: string;
+  feesNote: string;
+};
+
 function formatBnb(value: string): string {
   const n = Number(value);
   if (!Number.isFinite(n)) return value;
@@ -230,6 +252,8 @@ export function AdminPanel() {
   const [memeCreateFeeModalOpen, setMemeCreateFeeModalOpen] = useState(false);
   const [airdropCreateFeeModalOpen, setAirdropCreateFeeModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<AdminTabId>("dashboard");
+  const [stats, setStats] = useState<AdminPlatformStats | null>(null);
+  const [statsLoading, setStatsLoading] = useState(true);
 
   const isAdmin = isAdminWallet(address);
   const treasuryContract = protocol?.treasury.address as `0x${string}` | undefined;
@@ -287,6 +311,21 @@ export function AdminPanel() {
     }
   }, [address]);
 
+  const loadStats = useCallback(async () => {
+    if (!address) return;
+    setStatsLoading(true);
+    try {
+      const res = await fetch(`/api/admin/stats?address=${address}`, { cache: "no-store" });
+      const json = (await res.json()) as { data?: AdminPlatformStats; error?: string };
+      if (!res.ok) throw new Error(json.error ?? "Failed to load platform stats");
+      setStats(json.data ?? null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load platform stats");
+    } finally {
+      setStatsLoading(false);
+    }
+  }, [address]);
+
   const load = useCallback(async () => {
     setError(null);
     setLoading(true);
@@ -309,12 +348,13 @@ export function AdminPanel() {
 
   useEffect(() => {
     void load();
+    void loadStats();
     void loadPromoTasks();
-  }, [load, loadPromoTasks]);
+  }, [load, loadStats, loadPromoTasks]);
 
   const refreshAll = useCallback(async () => {
-    await Promise.all([load(), loadPromoTasks()]);
-  }, [load, loadPromoTasks]);
+    await Promise.all([load(), loadStats(), loadPromoTasks()]);
+  }, [load, loadStats, loadPromoTasks]);
 
   useEffect(() => {
     if (!adminTxDone) return;
@@ -331,10 +371,12 @@ export function AdminPanel() {
     void refetchTreasuryBalance();
     void refetchTreasuryTokenBalance();
     void load();
+    void loadStats();
   }, [
     adminTxDone,
     sweepingId,
     load,
+    loadStats,
     resetAdminTx,
     refetchTreasuryBalance,
     refetchTreasuryTokenBalance,
@@ -561,7 +603,7 @@ export function AdminPanel() {
       <AdminPageHeader
         address={address}
         onRefreshAll={() => void refreshAll()}
-        refreshing={loading || promoLoading}
+        refreshing={loading || statsLoading || promoLoading}
       />
 
       {error ? <AdminAlert>{error}</AdminAlert> : null}
@@ -571,7 +613,100 @@ export function AdminPanel() {
       <AdminTabPanel id="dashboard" active={activeTab}>
         {address ? <AdminSystemHealth address={address} /> : null}
 
-        <AdminBlock title="Overview">
+        <AdminBlock title="Platform">
+          <AdminDataTable>
+            <AdminDataRow label="Users (registered)" loading={statsLoading && !stats}>
+              <AdminNum>{stats?.usersRegistered ?? "—"}</AdminNum>
+              {stats ? <span className="admin-meta"> · app / points profile</span> : null}
+            </AdminDataRow>
+            <AdminDataRow label="Users (traded)" loading={statsLoading && !stats}>
+              <AdminNum>{stats?.usersTraded ?? "—"}</AdminNum>
+              {stats ? <span className="admin-meta"> · ≥1 trade indexed</span> : null}
+            </AdminDataRow>
+            <AdminDataRow label="Total trades" loading={statsLoading && !stats}>
+              <AdminNum>{stats?.totalTrades ?? "—"}</AdminNum>
+            </AdminDataRow>
+            <AdminDataRow label="Trades (24h)" loading={statsLoading && !stats}>
+              <AdminNum>{stats?.trades24h ?? "—"}</AdminNum>
+            </AdminDataRow>
+            <AdminDataRow label="Tokens launched (total)" loading={statsLoading && !stats}>
+              <AdminNum>{stats?.totalTokens ?? "—"}</AdminNum>
+            </AdminDataRow>
+            <AdminDataRow label="Tokens launched (today UTC)" loading={statsLoading && !stats}>
+              <AdminNum>{stats?.tokensToday ?? "—"}</AdminNum>
+            </AdminDataRow>
+            <AdminDataRow label="Airdrops launched (total)" loading={statsLoading && !stats}>
+              <AdminNum>{stats?.totalAirdrops ?? "—"}</AdminNum>
+            </AdminDataRow>
+            <AdminDataRow label="Airdrops launched (today UTC)" loading={statsLoading && !stats}>
+              <AdminNum>{stats?.airdropsToday ?? "—"}</AdminNum>
+            </AdminDataRow>
+          </AdminDataTable>
+        </AdminBlock>
+
+        <AdminBlock title="Fees">
+          <AdminDataTable>
+            <AdminDataRow label="Available (total est.)" loading={statsLoading && !stats}>
+              {stats ? (
+                <BnbAmountWithUsd bnb={stats.availableTotalBnb} bnbUsd={bnbUsd} inline />
+              ) : (
+                "—"
+              )}
+            </AdminDataRow>
+            <AdminDataRow label="Treasury balance" loading={statsLoading && !stats}>
+              {stats ? (
+                <BnbAmountWithUsd bnb={stats.treasuryBalanceBnb} bnbUsd={bnbUsd} inline />
+              ) : (
+                "—"
+              )}
+            </AdminDataRow>
+            <AdminDataRow label="Pending creator fees" loading={statsLoading && !stats}>
+              {stats ? (
+                <BnbAmountWithUsd bnb={stats.pendingCreatorBnb} bnbUsd={bnbUsd} inline />
+              ) : (
+                "—"
+              )}
+            </AdminDataRow>
+            <AdminDataRow label="Pending referrer fees" loading={statsLoading && !stats}>
+              {stats ? (
+                <BnbAmountWithUsd bnb={stats.pendingReferrerBnb} bnbUsd={bnbUsd} inline />
+              ) : (
+                "—"
+              )}
+            </AdminDataRow>
+            <AdminDataRow label="Claimed creator fees" loading={statsLoading && !stats}>
+              {stats ? (
+                <BnbAmountWithUsd bnb={stats.claimedCreatorBnb} bnbUsd={bnbUsd} inline />
+              ) : (
+                "—"
+              )}
+            </AdminDataRow>
+            <AdminDataRow label="Claimed referrer fees" loading={statsLoading && !stats}>
+              {stats ? (
+                <BnbAmountWithUsd bnb={stats.claimedReferrerBnb} bnbUsd={bnbUsd} inline />
+              ) : (
+                "—"
+              )}
+            </AdminDataRow>
+            <AdminDataRow label="Claimed (creator + referrer)" loading={statsLoading && !stats}>
+              {stats ? (
+                <BnbAmountWithUsd bnb={stats.claimedTotalBnb} bnbUsd={bnbUsd} inline />
+              ) : (
+                "—"
+              )}
+            </AdminDataRow>
+            <AdminDataRow label="Treasury share from trades" loading={statsLoading && !stats}>
+              {stats ? (
+                <BnbAmountWithUsd bnb={stats.treasuryShareFromTradesBnb} bnbUsd={bnbUsd} inline />
+              ) : (
+                "—"
+              )}
+            </AdminDataRow>
+          </AdminDataTable>
+          {stats?.feesNote ? <p className="admin-note">{stats.feesNote}</p> : null}
+        </AdminBlock>
+
+        <AdminBlock title="Treasury & escrow">
           <AdminDataTable>
             <AdminDataRow label="Treasury balance" loading={loading && !protocol}>
               <BnbAmountWithUsd bnb={treasuryBnb} bnbUsd={bnbUsd} inline />
