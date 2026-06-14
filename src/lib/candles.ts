@@ -1,5 +1,4 @@
 import type { TradeItem } from "@/lib/db/launchpad";
-import { DEFAULT_STARTING_SPOT_PRICE_BNB } from "@/lib/bonding-curve";
 
 export type CandleInterval = "15s" | "1m" | "5m" | "15m" | "1h" | "4h";
 
@@ -98,7 +97,8 @@ export function buildCandlesFromTrades(
     return { candles: [], volumes: [] };
   }
 
-  const genesisOpen = DEFAULT_STARTING_SPOT_PRICE_BNB * priceScale;
+  // First candle opens at 0 so launch + initial buy reads as a rise from nothing.
+  const genesisOpen = 0;
   let priorClose: number | null = null;
 
   const buckets = new Map<

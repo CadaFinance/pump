@@ -24,6 +24,7 @@ import { AdminAirdropCreateFeeModal } from "@/components/admin/AdminAirdropCreat
 import { AdminCreatorShareModal } from "@/components/admin/AdminCreatorShareModal";
 import { AdminReferrerShareModal } from "@/components/admin/AdminReferrerShareModal";
 import { AdminMemeCreateFeeModal } from "@/components/admin/AdminMemeCreateFeeModal";
+import { AdminMinInitialBuyModal } from "@/components/admin/AdminMinInitialBuyModal";
 import { AdminProtocolFeeModal } from "@/components/admin/AdminProtocolFeeModal";
 import { AdminSystemHealth } from "@/components/admin/AdminSystemHealth";
 import {
@@ -264,6 +265,9 @@ export function AdminPanel() {
   const [creatorShareModalOpen, setCreatorShareModalOpen] = useState(false);
   const [referrerShareModalOpen, setReferrerShareModalOpen] = useState(false);
   const [memeCreateFeeModalOpen, setMemeCreateFeeModalOpen] = useState(false);
+  const [minInitialBuyModalOpen, setMinInitialBuyModalOpen] = useState(false);
+  const [minInitialBuyBnb, setMinInitialBuyBnb] = useState("0.01");
+  const [platformSettingsLoading, setPlatformSettingsLoading] = useState(true);
   const [airdropCreateFeeModalOpen, setAirdropCreateFeeModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<AdminTabId>("dashboard");
   const [stats, setStats] = useState<AdminPlatformStats | null>(null);
@@ -340,6 +344,23 @@ export function AdminPanel() {
     }
   }, [address]);
 
+  const loadPlatformSettings = useCallback(async () => {
+    if (!address) return;
+    setPlatformSettingsLoading(true);
+    try {
+      const res = await fetch(`/api/admin/platform-settings?address=${address}`, {
+        cache: "no-store",
+      });
+      const json = (await res.json()) as { data?: { minInitialBuyBnb: string }; error?: string };
+      if (!res.ok) throw new Error(json.error ?? "Failed to load platform settings");
+      setMinInitialBuyBnb(json.data?.minInitialBuyBnb ?? "0.01");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load platform settings");
+    } finally {
+      setPlatformSettingsLoading(false);
+    }
+  }, [address]);
+
   const load = useCallback(async () => {
     setError(null);
     setLoading(true);
@@ -364,11 +385,12 @@ export function AdminPanel() {
     void load();
     void loadStats();
     void loadPromoTasks();
-  }, [load, loadStats, loadPromoTasks]);
+    void loadPlatformSettings();
+  }, [load, loadStats, loadPromoTasks, loadPlatformSettings]);
 
   const refreshAll = useCallback(async () => {
-    await Promise.all([load(), loadStats(), loadPromoTasks()]);
-  }, [load, loadStats, loadPromoTasks]);
+    await Promise.all([load(), loadStats(), loadPromoTasks(), loadPlatformSettings()]);
+  }, [load, loadStats, loadPromoTasks, loadPlatformSettings]);
 
   useEffect(() => {
     if (!adminTxDone) return;
@@ -606,6 +628,15 @@ export function AdminPanel() {
         memeFactoryOwner={memeFactoryOwner ?? ADMIN_ADDRESS}
         onUpdated={() => void load()}
       />
+      {address ? (
+        <AdminMinInitialBuyModal
+          open={minInitialBuyModalOpen}
+          onClose={() => setMinInitialBuyModalOpen(false)}
+          currentMinBnb={minInitialBuyBnb}
+          adminAddress={address}
+          onUpdated={() => void loadPlatformSettings()}
+        />
+      ) : null}
       <AdminAirdropCreateFeeModal
         open={airdropCreateFeeModalOpen}
         onClose={() => setAirdropCreateFeeModalOpen(false)}
@@ -816,6 +847,16 @@ export function AdminPanel() {
               ) : (
                 "—"
               )}
+            </AdminDataRow>
+            <AdminDataRow
+              label="Min initial buy"
+              loading={platformSettingsLoading}
+              action={
+                <AdminTextButton onClick={() => setMinInitialBuyModalOpen(true)}>Edit</AdminTextButton>
+              }
+            >
+              {formatBnb(minInitialBuyBnb)} BNB
+              <span className="admin-meta"> · off-chain create rule</span>
             </AdminDataRow>
             <AdminDataRow
               label="Airdrop create fee"

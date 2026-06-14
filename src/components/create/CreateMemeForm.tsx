@@ -20,7 +20,6 @@ import {
   minOutWithSlippage,
   quoteFreshBuy,
   SLIPPAGE_BPS,
-  supplyPctForBuy,
 } from "@/lib/bonding-curve";
 import { MISSION_KEYS, pushOptimisticActivity } from "@/lib/optimistic-activity";
 import { saveTokenMetadata } from "@/lib/save-token-metadata";
@@ -31,10 +30,7 @@ import {
   validateLogoFileClient,
 } from "@/lib/upload-token-logo";
 import { TokenAvatar } from "@/components/token/TokenAvatar";
-
-/** Minimum creator initial buy — empty launches show $0 price and dead charts. */
-const MIN_INITIAL_BUY_BNB = "0.01";
-const minInitialBuyWei = parseEther(MIN_INITIAL_BUY_BNB);
+import { DEFAULT_MIN_INITIAL_BUY_BNB } from "@/lib/platform-settings";
 
 /** Redirect after logo upload attempt (or skip if no file). */
 const REDIRECT_DELAY_MS = 400;
@@ -60,7 +56,8 @@ export function CreateMemeForm() {
   const [name, setName] = useState("");
   const [symbol, setSymbol] = useState("");
   const [description, setDescription] = useState("");
-  const [initialBuyBnb, setInitialBuyBnb] = useState("0.01");
+  const [minInitialBuyBnb, setMinInitialBuyBnb] = useState(DEFAULT_MIN_INITIAL_BUY_BNB);
+  const [initialBuyBnb, setInitialBuyBnb] = useState(DEFAULT_MIN_INITIAL_BUY_BNB);
   const [socialOpen, setSocialOpen] = useState(false);
   const [twitter, setTwitter] = useState("");
   const [website, setWebsite] = useState("");
@@ -76,6 +73,27 @@ export function CreateMemeForm() {
   logoPreviewRef.current = logoPreview;
   descriptionRef.current = description;
   socialLinksRef.current = { twitter, website, telegram, discord };
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch("/api/platform/settings", { cache: "no-store" });
+        const body = (await res.json()) as { data?: { minInitialBuyBnb?: string } };
+        if (!res.ok || cancelled) return;
+        const min = body.data?.minInitialBuyBnb ?? DEFAULT_MIN_INITIAL_BUY_BNB;
+        setMinInitialBuyBnb(min);
+        setInitialBuyBnb(min);
+      } catch {
+        // Keep defaults on transient errors.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const minInitialBuyWei = useMemo(() => parseEther(minInitialBuyBnb), [minInitialBuyBnb]);
 
   const contractsReady = Boolean(contracts.memeFactory && contracts.bondingCurveManager);
 
@@ -97,13 +115,6 @@ export function CreateMemeForm() {
     address: contracts.memeFactory,
     abi: memeFactoryAbi,
     functionName: "defaultVirtualTokenReserve",
-    chainId: pumpChain.id,
-  });
-
-  const { data: defaultTotalSupply } = useReadContract({
-    address: contracts.memeFactory,
-    abi: memeFactoryAbi,
-    functionName: "defaultTotalSupply",
     chainId: pumpChain.id,
   });
 
@@ -220,7 +231,6 @@ export function CreateMemeForm() {
 
   const resolvedVirtualBnb = virtualBnbReserveOnChain ?? DEFAULT_VIRTUAL_BNB_RESERVE;
   const resolvedVirtualToken = virtualTokenReserve ?? DEFAULT_VIRTUAL_TOKEN_RESERVE;
-  const resolvedTotalSupply = defaultTotalSupply ?? DEFAULT_VIRTUAL_TOKEN_RESERVE;
 
   const estimatedTokens = useMemo(() => {
     if (initialBuyWei <= 0n || protocolFeeBps === undefined) {
@@ -237,9 +247,7 @@ export function CreateMemeForm() {
 
   const minInitialBuyTokens = minOutWithSlippage(estimatedTokens, SLIPPAGE_BPS);
   const totalValue = feeWei + initialBuyWei;
-
-  const initialBuySupplyPct =
-    estimatedTokens > 0n ? supplyPctForBuy(estimatedTokens, resolvedTotalSupply) : 0;
+  const showReceivePreview = initialBuyWei > 0n && estimatedTokens > 0n && protocolFeeBps !== undefined;
 
   function onLogoChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -280,7 +288,7 @@ export function CreateMemeForm() {
       return;
     }
     if (initialBuyWei < minInitialBuyWei) {
-      setError(`Initial buy is required (minimum ${MIN_INITIAL_BUY_BNB} BNB).`);
+      setError(`Initial buy is required (minimum ${minInitialBuyBnb} BNB).`);
       return;
     }
     if (minInitialBuyTokens === 0n) {
@@ -414,19 +422,33 @@ export function CreateMemeForm() {
               required
               value={initialBuyBnb}
               onChange={(e) => setInitialBuyBnb(e.target.value)}
-              placeholder={MIN_INITIAL_BUY_BNB}
+              placeholder={minInitialBuyBnb}
               className="field-input financial-value max-w-xs"
             />
             <p className="mt-1.5 field-hint">
-              Minimum {MIN_INITIAL_BUY_BNB} BNB — sets the first trade and starting price on the curve.
+              Minimum {minInitialBuyBnb} BNB. A larger initial buy launches your coin at a higher
+              starting price.
             </p>
           </div>
 
-          {initialBuyWei > 0n && estimatedTokens > 0n ? (
-            <p className="mt-3 field-hint">
-              Est. ~{formatTokenAmountCompact(estimatedTokens)} tokens (
-              {initialBuySupplyPct.toFixed(2)}% of supply · 5% slippage min applied)
-            </p>
+          {showReceivePreview ? (
+            <div className="mt-4 rounded-lg border border-pump-border/15 bg-pump-surface/35 p-4">
+              <p className="section-label">You will receive</p>
+              <div className="mt-3 flex items-center gap-3">
+                <TokenAvatar
+                  address="0x0000000000000000000000000000000000000000"
+                  symbol={displaySymbol}
+                  previewUrl={logoPreview}
+                  size={44}
+                />
+                <div className="min-w-0">
+                  <p className="financial-value text-h3 font-semibold text-pump-text">
+                    {formatTokenAmountCompact(estimatedTokens)}
+                  </p>
+                  <p className="text-body-sm text-pump-muted">${displaySymbol}</p>
+                </div>
+              </div>
+            </div>
           ) : null}
         </section>
 
@@ -535,6 +557,22 @@ export function CreateMemeForm() {
                 <dt className="text-pump-muted">Initial buy</dt>
                 <dd className="financial-value font-medium text-pump-text">
                   {formatEther(initialBuyWei)} BNB
+                </dd>
+              </div>
+            ) : null}
+            {showReceivePreview ? (
+              <div className="flex items-center justify-between gap-3 text-body-sm">
+                <dt className="text-pump-muted">You receive</dt>
+                <dd className="flex min-w-0 items-center gap-2">
+                  <TokenAvatar
+                    address="0x0000000000000000000000000000000000000000"
+                    symbol={displaySymbol}
+                    previewUrl={logoPreview}
+                    size={24}
+                  />
+                  <span className="financial-value truncate font-medium text-pump-text">
+                    {formatTokenAmountCompact(estimatedTokens)} ${displaySymbol}
+                  </span>
                 </dd>
               </div>
             ) : null}
