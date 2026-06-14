@@ -42,6 +42,7 @@ import {
 import { AirdropDetailSkeleton } from "@/components/airdrops/AirdropsSkeleton";
 import { CreatorProfileModal } from "@/components/creators/CreatorProfileModal";
 import { TokenAvatar } from "@/components/token/TokenAvatar";
+import { BnbLogo } from "@/components/token/BnbLogo";
 import { UserAvatarForAddress } from "@/components/user/UserAvatarForAddress";
 import { useBnbUsdPrice } from "@/hooks/useBnbUsdPrice";
 import { formatUsdReadable, tokenAmountUsd } from "@/lib/format-usd";
@@ -134,15 +135,7 @@ function TokenSymbolInline({
 }
 
 function BnbRewardIcon({ size = 18 }: { size?: number }) {
-  const fontSize = size <= 16 ? 7 : 8;
-  return (
-    <span
-      className="inline-flex shrink-0 items-center justify-center rounded-full bg-pump-warning/15 font-bold leading-none text-pump-warning"
-      style={{ width: size, height: size, fontSize }}
-    >
-      BNB
-    </span>
-  );
+  return <BnbLogo size={size} />;
 }
 
 function RewardPoolStat({ detail, bnbUsd }: { detail: AirdropDetail; bnbUsd: number | null }) {

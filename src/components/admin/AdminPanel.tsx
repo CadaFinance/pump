@@ -21,6 +21,7 @@ import {
   formatQualifyDateTime,
 } from "@/lib/airdrop-board-format";
 import { TokenAvatar } from "@/components/token/TokenAvatar";
+import { BnbLogo } from "@/components/token/BnbLogo";
 import { AdminAirdropCreateFeeModal } from "@/components/admin/AdminAirdropCreateFeeModal";
 import { AdminCreatorShareModal } from "@/components/admin/AdminCreatorShareModal";
 import { AdminReferrerShareModal } from "@/components/admin/AdminReferrerShareModal";
@@ -190,9 +191,7 @@ function RewardAmountWithUsd({
   return (
     <div className="flex min-w-0 items-center gap-1.5">
       {isBnb ? (
-        <span className="inline-flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full bg-pump-warning/15 text-[7px] font-bold text-pump-warning">
-          BNB
-        </span>
+        <BnbLogo size={compact ? 16 : 18} />
       ) : (
         <TokenAvatar
           address={rewardToken}

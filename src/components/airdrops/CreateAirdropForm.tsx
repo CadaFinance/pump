@@ -13,6 +13,11 @@ import {
 } from "@/components/airdrops/AirdropSocialTasks";
 import { LaunchpadTokenPicker } from "@/components/airdrops/LaunchpadTokenPicker";
 import {
+  BNB_REWARD_ASSET,
+  isBnbRewardAsset,
+  RewardAssetPicker,
+} from "@/components/airdrops/RewardAssetPicker";
+import {
   createDefaultSocialTasks,
   normalizeSocialTaskTarget,
   socialTaskLabel,
@@ -84,9 +89,8 @@ export function CreateAirdropForm() {
   const [linkedToken, setLinkedToken] = useState("");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [rewardType, setRewardType] = useState<"bnb" | "token">("bnb");
-  const [rewardToken, setRewardToken] = useState("");
-  const [rewardAmount, setRewardAmount] = useState("0.1");
+  const [rewardAsset, setRewardAsset] = useState(BNB_REWARD_ASSET);
+  const [rewardSliderPct, setRewardSliderPct] = useState(25);
   const [minHoldTokens, setMinHoldTokens] = useState("");
   const [minBuyBnb, setMinBuyBnb] = useState("0.01");
   const [qualifyStartLocal, setQualifyStartLocal] = useState(defaultQualifyStartLocal);
@@ -110,8 +114,11 @@ export function CreateAirdropForm() {
     query: { enabled: Boolean(contracts.airdropManager) },
   });
 
+  const isBnbReward = isBnbRewardAsset(rewardAsset);
+  const rewardToken = isBnbReward ? "" : rewardAsset;
+
   const rewardTokenAddress =
-    rewardType === "token" && rewardToken ? (rewardToken as `0x${string}`) : undefined;
+    !isBnbReward && rewardToken ? (rewardToken as `0x${string}`) : undefined;
 
   const { data: bnbBalance } = useBalance({
     address,
@@ -397,7 +404,7 @@ export function CreateAirdropForm() {
       setError("Set at least one on-chain rule (min hold or min buy)");
       return;
     }
-    if (rewardType === "token" && !rewardToken) {
+    if (!isBnbReward && !rewardToken) {
       setError("Select a reward token");
       return;
     }
@@ -418,14 +425,8 @@ export function CreateAirdropForm() {
       }
     }
 
-    let amount: bigint;
-    try {
-      amount = parseEther(rewardAmount);
-    } catch {
-      setError("Invalid reward amount");
-      return;
-    }
-    if (amount <= 0n) {
+    const amount = parsedRewardAmount;
+    if (!amount || amount <= 0n) {
       setError("Reward amount must be greater than zero");
       return;
     }
@@ -441,15 +442,15 @@ export function CreateAirdropForm() {
 
     const pending: PendingCreate = {
       linkedToken: linkedToken as `0x${string}`,
-      rewardToken: rewardType === "bnb" ? ZERO : (rewardToken as `0x${string}`),
+      rewardToken: isBnbReward ? ZERO : (rewardToken as `0x${string}`),
       rewardAmount: amount,
       rulesHash,
       qualifyStart,
       qualifyEnd,
-      value: rewardType === "bnb" ? amount + fee : fee,
+      value: isBnbReward ? amount + fee : fee,
     };
 
-    if (rewardType === "token") {
+    if (!isBnbReward) {
       const allowance = tokenAllowance ?? 0n;
       if (allowance < amount) {
         pendingCreateRef.current = pending;
@@ -500,14 +501,25 @@ export function CreateAirdropForm() {
     setQualifyEndLocal((prev) => endAfterStartOrDefault(value, prev));
   }
 
-  const parsedRewardAmount = useMemo(() => {
-    try {
-      const value = parseEther(rewardAmount);
-      return value > 0n ? value : null;
-    } catch {
-      return null;
+  const feeWei = createFee ?? 0n;
+
+  const maxRewardWei = useMemo(() => {
+    if (isBnbReward) {
+      const avail = bnbBalance?.value ?? 0n;
+      const overhead = feeWei + GAS_BUFFER_BNB;
+      return avail > overhead ? avail - overhead : 0n;
     }
-  }, [rewardAmount]);
+    return rewardTokenBalance ?? 0n;
+  }, [isBnbReward, bnbBalance?.value, feeWei, rewardTokenBalance]);
+
+  const parsedRewardAmount = useMemo(() => {
+    if (maxRewardWei === 0n || rewardSliderPct <= 0) return null;
+    const amount =
+      rewardSliderPct >= 100
+        ? maxRewardWei
+        : (maxRewardWei * BigInt(rewardSliderPct)) / 100n;
+    return amount > 0n ? amount : null;
+  }, [maxRewardWei, rewardSliderPct]);
 
   const selectedRewardSymbol = useMemo(
     () => allTokens.find((t) => t.address === rewardToken)?.symbol ?? "tokens",
@@ -519,16 +531,13 @@ export function CreateAirdropForm() {
     [allTokens, linkedToken]
   );
 
-  const selectedRewardTokenMeta = useMemo(
-    () => allTokens.find((t) => t.address.toLowerCase() === rewardToken.toLowerCase()) ?? null,
-    [allTokens, rewardToken]
-  );
-
-  const feeWei = createFee ?? 0n;
   const totalBnbCost = useMemo(() => {
     if (!parsedRewardAmount) return null;
-    return rewardType === "bnb" ? parsedRewardAmount + feeWei : feeWei;
-  }, [parsedRewardAmount, rewardType, feeWei]);
+    return isBnbReward ? parsedRewardAmount + feeWei : feeWei;
+  }, [parsedRewardAmount, isBnbReward, feeWei]);
+
+  const canUseRewardSlider = isConnected && maxRewardWei > 0n;
+  const rewardSliderFillPct = Math.max(0, Math.min(100, rewardSliderPct));
 
   const formValidation = useMemo(() => {
     const warnings: string[] = [];
@@ -544,13 +553,13 @@ export function CreateAirdropForm() {
       canSubmit = false;
     }
 
-    if (rewardType === "token" && !rewardToken) {
+    if (!isBnbReward && !rewardToken) {
       warnings.push("Select a reward token.");
       canSubmit = false;
     }
 
     if (!parsedRewardAmount) {
-      warnings.push("Enter a valid reward amount greater than zero.");
+      warnings.push("Set a reward amount greater than zero.");
       canSubmit = false;
     }
 
@@ -579,7 +588,7 @@ export function CreateAirdropForm() {
     if (isConnected && parsedRewardAmount) {
       const bnbAvail = bnbBalance?.value ?? 0n;
 
-      if (rewardType === "bnb") {
+      if (isBnbReward) {
         const neededBnb = parsedRewardAmount + fee + GAS_BUFFER_BNB;
         if (bnbAvail < neededBnb) {
           warnings.push(
@@ -611,7 +620,8 @@ export function CreateAirdropForm() {
     linkedToken,
     rules.onchain?.minHoldWei,
     rules.onchain?.minBuyBnbWei,
-    rewardType,
+    rewardAsset,
+    isBnbReward,
     rewardToken,
     parsedRewardAmount,
     qualifyStartLocal,
@@ -751,101 +761,98 @@ export function CreateAirdropForm() {
           </p>
 
           <div className="mt-4 space-y-4">
-            <div>
-              <span className="field-label">Reward asset</span>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  className={
-                    rewardType === "bnb" ? "chip-button chip-button-active" : "chip-button"
-                  }
-                  onClick={() => setRewardType("bnb")}
-                >
-                  BNB
-                </button>
-                <button
-                  type="button"
-                  className={
-                    rewardType === "token" ? "chip-button chip-button-active" : "chip-button"
-                  }
-                  onClick={() => setRewardType("token")}
-                >
-                  Platform token
-                </button>
-              </div>
-            </div>
+            <RewardAssetPicker
+              id="rewardAsset"
+              modalTitle="Select reward asset"
+              label={
+                <>
+                  Reward token <span className="text-pump-accent">*</span>
+                </>
+              }
+              value={rewardAsset}
+              onChange={setRewardAsset}
+              tokens={tokens}
+              priorityTokens={createdTokens}
+              tokenBalances={creatorBalanceMap}
+              bnbBalance={
+                bnbBalance != null ? formatEther(bnbBalance.value) : isConnected ? "0" : null
+              }
+              loading={tokensLoading}
+              placeholder="Select reward asset"
+              hint={
+                !isConnected ? (
+                  <p className="field-hint">Connect wallet to see BNB and token balances.</p>
+                ) : !isBnbReward ? (
+                  <p className="field-hint">
+                    Token rewards require a one-time approval, plus{" "}
+                    {createFee !== undefined ? formatEther(createFee) : "…"} BNB create fee.
+                  </p>
+                ) : null
+              }
+            />
 
-            <div className="grid gap-4 sm:grid-cols-2">
-              {rewardType === "token" ? (
-                <div className="sm:col-span-2">
-                  <LaunchpadTokenPicker
-                    id="rewardToken"
-                    modalTitle="Select reward token"
-                    label={
-                      <>
-                        Reward token <span className="text-pump-accent">*</span>
-                      </>
-                    }
-                    value={rewardToken}
-                    onChange={setRewardToken}
-                    tokens={tokens}
-                    priorityTokens={createdTokens}
-                    balances={creatorBalanceMap}
-                    loading={tokensLoading}
-                    placeholder="Select reward token"
-                    hint={
-                      !isConnected ? (
-                        <p className="field-hint">
-                          Connect wallet to see your launched tokens with balances at the top.
-                        </p>
-                      ) : createdTokens.length === 0 ? (
-                        <p className="field-hint">
-                          Your launched tokens appear first when you have created coins on the
-                          launchpad.
-                        </p>
-                      ) : null
+            <div>
+              <div className="flex items-baseline justify-between gap-2">
+                <label className="field-label" htmlFor="rewardAmountSlider">
+                  Total reward amount <span className="text-pump-accent">*</span>
+                </label>
+                <p className="financial-value text-body-sm font-semibold text-pump-text">
+                  {parsedRewardAmount
+                    ? `${formatEther(parsedRewardAmount)} ${isBnbReward ? "BNB" : selectedRewardSymbol}`
+                    : "—"}
+                </p>
+              </div>
+
+              <div className="mt-3 flex items-center gap-2.5">
+                <div className="relative min-w-0 flex-1 pt-1">
+                  <div
+                    className="pointer-events-none absolute top-1/2 h-1 w-full -translate-y-1/2 rounded-full bg-pump-border/25"
+                    aria-hidden
+                  />
+                  <div
+                    className="pointer-events-none absolute top-1/2 h-1 -translate-y-1/2 rounded-full bg-pump-accent/70 transition-[width] duration-75"
+                    style={{ width: `${rewardSliderFillPct}%` }}
+                    aria-hidden
+                  />
+                  <input
+                    id="rewardAmountSlider"
+                    type="range"
+                    min={0}
+                    max={100}
+                    step={1}
+                    value={rewardSliderPct}
+                    onChange={(e) => setRewardSliderPct(Number(e.target.value))}
+                    disabled={!canUseRewardSlider}
+                    className="trade-amount-slider relative z-[1] w-full disabled:opacity-40"
+                    aria-label="Reward amount slider"
+                    aria-valuetext={
+                      rewardSliderPct >= 100
+                        ? "Max"
+                        : `${rewardSliderPct}% of available ${isBnbReward ? "BNB" : selectedRewardSymbol}`
                     }
                   />
                 </div>
-              ) : null}
-              <div className="sm:col-span-2">
-                <label className="field-label" htmlFor="rewardAmount">
-                  Total reward amount{" "}
-                  <span className="text-pump-accent">*</span>
-                  <span className="font-normal text-pump-muted">
-                    {" "}
-                    ({rewardType === "bnb" ? "BNB" : selectedRewardSymbol})
-                  </span>
-                </label>
-                <input
-                  id="rewardAmount"
-                  inputMode="decimal"
-                  className="field-input financial-value"
-                  value={rewardAmount}
-                  onChange={(e) => setRewardAmount(e.target.value)}
-                  placeholder={rewardType === "bnb" ? "0.1" : "10000"}
-                />
+                <button
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()}
+                  disabled={!canUseRewardSlider}
+                  onClick={() => setRewardSliderPct(100)}
+                  className="chip-button shrink-0 px-2.5 py-1 text-caption disabled:opacity-40"
+                >
+                  Max
+                </button>
               </div>
-            </div>
 
-            {isConnected && bnbBalance ? (
-              <div className="rounded-md border border-pump-border/15 bg-pump-surface/35 px-3 py-2.5">
-                <p className="section-label text-[10px]">Wallet balance</p>
-                <p className="mt-1 financial-value text-body-sm text-pump-text">
-                  {formatEther(bnbBalance.value)} BNB
-                  {rewardType === "token" && rewardTokenBalance !== undefined && rewardToken
-                    ? ` · ${formatEther(rewardTokenBalance)} ${selectedRewardSymbol}`
-                    : ""}
-                </p>
-              </div>
-            ) : null}
-
-            {rewardType === "token" ? (
-              <p className="field-hint">
-                Token rewards require a one-time approval, plus{" "}
-                {createFee !== undefined ? formatEther(createFee) : "…"} BNB create fee.
+              <p className="mt-1.5 field-hint">
+                {canUseRewardSlider
+                  ? `${rewardSliderPct}% of available balance${
+                      isBnbReward ? " (after fee & gas reserve)" : ""
+                    }`
+                  : isConnected
+                    ? "Insufficient balance for a reward pool."
+                    : "Connect wallet to set reward amount."}
               </p>
-            ) : null}
+            </div>
           </div>
         </section>
 
@@ -968,7 +975,7 @@ export function CreateAirdropForm() {
 
         <AirdropRewardSplitPreview
           totalReward={parsedRewardAmount}
-          assetLabel={rewardType === "bnb" ? "BNB" : selectedRewardSymbol}
+          assetLabel={isBnbReward ? "BNB" : selectedRewardSymbol}
         />
 
         <section className="panel-surface p-3 md:p-4">
@@ -978,7 +985,7 @@ export function CreateAirdropForm() {
               <dt className="text-pump-muted">Reward pool</dt>
               <dd className="financial-value font-medium text-pump-text">
                 {parsedRewardAmount
-                  ? `${formatEther(parsedRewardAmount)} ${rewardType === "bnb" ? "BNB" : selectedRewardSymbol}`
+                  ? `${formatEther(parsedRewardAmount)} ${isBnbReward ? "BNB" : selectedRewardSymbol}`
                   : "—"}
               </dd>
             </div>
@@ -988,7 +995,7 @@ export function CreateAirdropForm() {
                 {createFee !== undefined ? `${formatEther(createFee)} BNB` : "…"}
               </dd>
             </div>
-            {rewardType === "token" && parsedRewardAmount ? (
+            {!isBnbReward && parsedRewardAmount ? (
               <div className="flex items-center justify-between gap-2">
                 <dt className="text-pump-muted">Token escrow</dt>
                 <dd className="financial-value font-medium text-pump-text">

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import type { TokenHolderSnapshot, TradeItem } from "@/lib/db/launchpad";
 import { explorerTxUrl, shortAddress } from "@/config/chain";
 import { UserAvatarForAddress } from "@/components/user/UserAvatarForAddress";
-import { DEFAULT_TOKEN_TOTAL_SUPPLY, formatUsdReadable } from "@/lib/format-usd";
+import { DEFAULT_TOKEN_TOTAL_SUPPLY, bnbToUsd, formatUsdReadable } from "@/lib/format-usd";
 import {
   ON_CHAIN_BALANCE_EPSILON,
   resolveVerifiedTokenBalance,
@@ -45,14 +45,6 @@ function formatTokenAmount(value: number): string {
   if (value >= 1_000) return `${(value / 1_000).toFixed(2)}K`;
   if (value >= 1) return value.toFixed(2);
   if (value > 0) return value.toFixed(4);
-  return "0";
-}
-
-function formatBnb(value: number): string {
-  if (!Number.isFinite(value)) return "—";
-  if (value >= 1_000) return `${value.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
-  if (value >= 1) return value.toFixed(4);
-  if (value > 0) return value.toFixed(6);
   return "0";
 }
 
@@ -298,7 +290,7 @@ export function TradeTape({
                   <tr>
                     <th className="section-label px-4 py-3">Account</th>
                     <th className="section-label px-4 py-3">Side</th>
-                    <th className="section-label px-4 py-3">BNB</th>
+                    <th className="section-label px-4 py-3">Amount</th>
                     <th className="section-label px-4 py-3">Tokens</th>
                     <th className="section-label px-4 py-3">Price</th>
                     <th className="section-label px-4 py-3">Time</th>
@@ -311,6 +303,7 @@ export function TradeTape({
                     const isOptimistic = trade.id.startsWith("optimistic:");
                     const tradePriceUsd =
                       bnbUsd != null ? Number(trade.priceBnb) * bnbUsd : null;
+                    const tradeNetUsd = bnbToUsd(tradeNetBnb(trade), bnbUsd);
                     return (
                       <tr
                         key={trade.id}
@@ -336,7 +329,7 @@ export function TradeTape({
                           ) : null}
                         </td>
                         <td className="px-4 py-3 financial-value text-pump-text">
-                          {formatBnb(tradeNetBnb(trade))}
+                          {formatUsdReadable(tradeNetUsd)}
                         </td>
                         <td className="px-4 py-3 financial-value text-pump-text">
                           {formatTokenAmount(Number(trade.tokenAmount))}

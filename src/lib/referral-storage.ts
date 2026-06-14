@@ -1,7 +1,6 @@
 import { isAddress } from "viem";
 
 export const REFERRAL_STORAGE_KEY = "pump-referral-ref";
-export const REFERRAL_DISMISS_STORAGE_KEY = "pump-referral-banner-dismissed";
 
 export function normalizeReferrer(value: string | null): string | null {
   if (!value) return null;
@@ -23,7 +22,6 @@ export function clearStoredReferrer(): void {
   if (typeof window === "undefined") return;
   try {
     sessionStorage.removeItem(REFERRAL_STORAGE_KEY);
-    sessionStorage.removeItem(REFERRAL_DISMISS_STORAGE_KEY);
   } catch {
     // ignore
   }
