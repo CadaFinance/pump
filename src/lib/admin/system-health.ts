@@ -63,7 +63,7 @@ const SCRIPT_TIMEOUT_MS = Number(process.env.SYSTEM_HEALTH_TIMEOUT_MS ?? 45_000)
 
 async function scriptExists(path: string): Promise<boolean> {
   try {
-    await access(path, constants.X_OK);
+    await access(path, constants.R_OK);
     return true;
   } catch {
     return false;
@@ -85,7 +85,7 @@ export async function collectSystemHealth(): Promise<SystemHealthReport> {
           summary: "Health script not found on this host",
           probe: scriptPath,
           detail:
-            "Runs on production VM only. Deploy deploy/vm/system-health.sh and chmod +x.",
+            "Missing deploy/vm/system-health.sh on this host. Push to main and run tma-deploy.sh.",
         },
       ],
     };
