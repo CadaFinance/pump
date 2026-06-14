@@ -78,8 +78,8 @@ function TokenPickerRow({
         className="shrink-0"
       />
       <div className="min-w-0 flex-1">
-        <p className="truncate text-body-sm font-medium">{token.name}</p>
-        <p className="truncate text-caption text-pump-muted">${token.symbol}</p>
+        <p className="truncate text-body-sm font-medium text-pump-text">{token.name}</p>
+        <p className="truncate text-caption font-medium text-pump-muted">${token.symbol}</p>
       </div>
       {showBalance ? (
         <div className="shrink-0 text-right">
@@ -216,12 +216,16 @@ export function LaunchpadTokenPicker({
               size={28}
               className="shrink-0"
             />
-            <span className="min-w-0 flex-1 truncate text-body-sm">
-              <span className="font-medium text-pump-text">{selectedToken.name}</span>
-              <span className="text-pump-muted"> · ${selectedToken.symbol}</span>
-            </span>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-body-sm font-medium text-pump-text">
+                {selectedToken.name}
+              </p>
+              <p className="truncate text-caption font-medium text-pump-muted">
+                ${selectedToken.symbol}
+              </p>
+            </div>
             {balances[selectedToken.address.toLowerCase()] ? (
-              <span className="financial-value shrink-0 text-caption text-pump-muted">
+              <span className="financial-value shrink-0 text-caption tabular-nums text-pump-muted">
                 {formatTokenBalance(balances[selectedToken.address.toLowerCase()]!)}
               </span>
             ) : null}

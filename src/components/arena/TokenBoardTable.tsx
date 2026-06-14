@@ -1,6 +1,8 @@
 import Link from "next/link";
 import type { TokenListItem } from "@/lib/db/launchpad";
 import { TokenAvatar } from "@/components/token/TokenAvatar";
+import { TableHeaderLabel } from "@/components/ui/IconLabel";
+import { MetricIcons } from "@/lib/metric-icons";
 import { bnbToUsd, formatUsdReadable } from "@/lib/format-usd";
 import {
   formatAge,
@@ -61,18 +63,18 @@ export function TokenBoardTable({
           <tr>
             {isArena ? <th /> : null}
             <th>Coin</th>
-            <th>Graph</th>
-            <th>MCAP</th>
-            <th>ATH</th>
-            <th>Age</th>
-            <th>TXNS</th>
-            <th>24H VOL</th>
+            <th><TableHeaderLabel icon={MetricIcons.graph}>Graph</TableHeaderLabel></th>
+            <th><TableHeaderLabel icon={MetricIcons.mcap}>MCAP</TableHeaderLabel></th>
+            <th><TableHeaderLabel icon={MetricIcons.ath}>ATH</TableHeaderLabel></th>
+            <th><TableHeaderLabel icon={MetricIcons.age}>Age</TableHeaderLabel></th>
+            <th><TableHeaderLabel icon={MetricIcons.txns}>TXNS</TableHeaderLabel></th>
+            <th><TableHeaderLabel icon={MetricIcons.vol24h}>24H VOL</TableHeaderLabel></th>
             {isArena ? (
               <>
-                <th>TRADERS</th>
-                <th>1H</th>
-                <th>6H</th>
-                <th>24H</th>
+                <th><TableHeaderLabel icon={MetricIcons.traders}>TRADERS</TableHeaderLabel></th>
+                <th><TableHeaderLabel icon={MetricIcons.change1h}>1H</TableHeaderLabel></th>
+                <th><TableHeaderLabel icon={MetricIcons.change6h}>6H</TableHeaderLabel></th>
+                <th><TableHeaderLabel icon={MetricIcons.change24h}>24H</TableHeaderLabel></th>
               </>
             ) : null}
           </tr>

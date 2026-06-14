@@ -2,8 +2,14 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { Plus } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import type { KothSummary, TokenListItem } from "@/lib/db/launchpad";
 import { ArenaSkeleton } from "@/components/arena/ArenaSkeleton";
+import { FieldSearchInput } from "@/components/ui/FieldSearchInput";
+import { IconLabel, SectionHeadingIcon, TableHeaderLabel } from "@/components/ui/IconLabel";
+import { ICON_STROKE } from "@/lib/icons";
+import { MetricIcons } from "@/lib/metric-icons";
 import { useFavorites } from "@/components/favorites/FavoritesProvider";
 import { TokenAvatar } from "@/components/token/TokenAvatar";
 import { useBnbUsdPrice } from "@/hooks/useBnbUsdPrice";
@@ -16,6 +22,7 @@ import {
 } from "@/lib/arena-board-format";
 import { useLiveChannel, resolveLivePollDelay } from "@/hooks/useLiveChannel";
 import { useLiveBoardAnimations } from "@/hooks/useLiveBoardAnimations";
+import { RECENT_STRIP_DESKTOP, RECENT_STRIP_MOBILE } from "@/lib/recent-strip-limits";
 
 type FlashTone = "up" | "down";
 type BoardFilter = "all" | "new" | "highVol" | "movers" | "kothContenders" | "favorites";
@@ -58,17 +65,26 @@ function HighlightStatCard({
   href,
   label,
   token,
+  icon,
 }: {
   href: string;
   label: string;
   token: TokenListItem;
+  icon: LucideIcon;
 }) {
   return (
     <Link
       href={href}
       className="panel-interactive flex min-w-0 flex-col gap-2 p-2.5 md:flex-row md:flex-nowrap md:items-center md:justify-between md:gap-3 md:px-3 md:py-3"
     >
-      <p className="section-label shrink-0 text-[10px] md:text-[inherit]">{label}</p>
+      <IconLabel
+        icon={icon}
+        hideIconMobile
+        className="section-label shrink-0 text-[10px] md:text-[inherit]"
+        iconClassName="h-3 w-3 shrink-0 opacity-75 md:h-3.5 md:w-3.5"
+      >
+        {label}
+      </IconLabel>
       <div className="flex min-w-0 shrink-0 items-center gap-1.5">
         <TokenAvatar address={token.address} symbol={token.symbol} logoUrl={token.logoUrl} size={22} className="md:hidden" />
         <TokenAvatar address={token.address} symbol={token.symbol} logoUrl={token.logoUrl} size={18} className="hidden md:block" />
@@ -572,7 +588,13 @@ export function ArenaListClient() {
               <div className="flex min-w-0 flex-col gap-1">
                 <dt className="section-label whitespace-nowrap text-[10px] md:hidden">MCAP</dt>
                 <dd className="m-0 border border-pump-border/45 bg-pump-border/4 px-3 py-2 md:flex md:flex-nowrap md:items-center md:justify-between md:gap-2">
-                  <span className="section-label hidden shrink-0 whitespace-nowrap md:inline">MCAP</span>
+                  <IconLabel
+                    icon={MetricIcons.mcap}
+                    hideIconMobile
+                    className="section-label hidden shrink-0 whitespace-nowrap md:inline-flex"
+                  >
+                    MCAP
+                  </IconLabel>
                   <MetricValueWith24hChange
                     compact
                     value={formatCapForBoard(bnbToUsd(Number(kothToken.marketCapBnb), bnbUsd))}
@@ -583,7 +605,13 @@ export function ArenaListClient() {
               <div className="flex min-w-0 flex-col gap-1">
                 <dt className="section-label whitespace-nowrap text-[10px] md:hidden">24H VOL</dt>
                 <dd className="m-0 border border-pump-border/45 bg-pump-border/4 px-3 py-2 md:flex md:flex-nowrap md:items-center md:justify-between md:gap-2">
-                  <span className="section-label hidden shrink-0 whitespace-nowrap md:inline">24H VOL</span>
+                  <IconLabel
+                    icon={MetricIcons.vol24h}
+                    hideIconMobile
+                    className="section-label hidden shrink-0 whitespace-nowrap md:inline-flex"
+                  >
+                    24H VOL
+                  </IconLabel>
                   <MetricValueWith24hChange
                     compact
                     value={formatUsdReadable(
@@ -598,7 +626,12 @@ export function ArenaListClient() {
               </div>
               <div className="hidden min-w-0 md:block">
                 <dd className="m-0 border border-pump-border/45 bg-pump-border/4 px-3 py-2 md:flex md:flex-nowrap md:items-center md:justify-between md:gap-2">
-                  <span className="section-label shrink-0 whitespace-nowrap">TIME AS KING</span>
+                  <IconLabel
+                    icon={MetricIcons.timeAsKing}
+                    className="section-label shrink-0 whitespace-nowrap"
+                  >
+                    TIME AS KING
+                  </IconLabel>
                   <span className="financial-value shrink-0 text-body-sm font-semibold text-pump-text">
                     {formatDurationSince(kothCrownedAt)}
                   </span>
@@ -609,12 +642,18 @@ export function ArenaListClient() {
 
           {kothSummary?.recent?.length ? (
             <div className="flex items-center gap-2 overflow-x-auto pb-0.5 md:flex-wrap md:overflow-visible">
-              <span className="section-label shrink-0 text-[10px] md:text-[inherit]">Recent</span>
-              {kothSummary.recent.slice(0, 4).map((item) => (
+              <IconLabel
+                icon={MetricIcons.recent}
+                hideIconMobile
+                className="section-label shrink-0 text-[10px] md:text-[inherit]"
+              >
+                Recent
+              </IconLabel>
+              {kothSummary.recent.slice(0, RECENT_STRIP_DESKTOP).map((item, index) => (
                 <Link
                   key={`${item.tokenAddress}:${item.crownedAt}`}
                   href={`/token/${item.tokenAddress}`}
-                  className="inline-flex shrink-0 items-center gap-1.5 border border-pump-border/45 bg-pump-border/4 px-2 py-0.5 text-caption text-pump-muted hover:text-pump-text md:gap-2 md:px-2.5 md:py-1"
+                  className={`inline-flex shrink-0 items-center gap-1.5 border border-pump-border/45 bg-pump-border/4 px-2 py-0.5 text-caption text-pump-muted hover:text-pump-text md:gap-2 md:px-2.5 md:py-1${index >= RECENT_STRIP_MOBILE ? " hidden md:inline-flex" : ""}`}
                 >
                   <TokenAvatar
                     address={item.tokenAddress}
@@ -644,10 +683,17 @@ export function ArenaListClient() {
             href={`/token/${topGainer24h.address}`}
             label="Top gainer"
             token={topGainer24h}
+            icon={MetricIcons.topGainer}
           />
         ) : (
           <div className="panel-surface flex flex-col gap-2 p-2.5 md:flex-row md:flex-nowrap md:items-center md:justify-between md:gap-3 md:px-3 md:py-3">
-            <p className="section-label shrink-0 text-[10px] md:text-[inherit]">Top gainer</p>
+            <IconLabel
+              icon={MetricIcons.topGainer}
+              hideIconMobile
+              className="section-label shrink-0 text-[10px] md:text-[inherit]"
+            >
+              Top gainer
+            </IconLabel>
             <p className="shrink-0 text-body-sm text-pump-muted md:mt-0 md:text-right">—</p>
           </div>
         )}
@@ -657,10 +703,17 @@ export function ArenaListClient() {
             href={`/token/${topVolume24h.address}`}
             label="Top volume"
             token={topVolume24h}
+            icon={MetricIcons.topVolume}
           />
         ) : (
           <div className="panel-surface flex flex-col gap-2 p-2.5 md:flex-row md:flex-nowrap md:items-center md:justify-between md:gap-3 md:px-3 md:py-3">
-            <p className="section-label shrink-0 text-[10px] md:text-[inherit]">Top volume</p>
+            <IconLabel
+              icon={MetricIcons.topVolume}
+              hideIconMobile
+              className="section-label shrink-0 text-[10px] md:text-[inherit]"
+            >
+              Top volume
+            </IconLabel>
             <p className="shrink-0 text-body-sm text-pump-muted md:mt-0 md:text-right">—</p>
           </div>
         )}
@@ -670,10 +723,17 @@ export function ArenaListClient() {
             href={`/token/${mostTrades.address}`}
             label="Most trades"
             token={mostTrades}
+            icon={MetricIcons.mostTrades}
           />
         ) : (
           <div className="panel-surface flex flex-col gap-2 p-2.5 md:flex-row md:flex-nowrap md:items-center md:justify-between md:gap-3 md:px-3 md:py-3">
-            <p className="section-label shrink-0 text-[10px] md:text-[inherit]">Most trades</p>
+            <IconLabel
+              icon={MetricIcons.mostTrades}
+              hideIconMobile
+              className="section-label shrink-0 text-[10px] md:text-[inherit]"
+            >
+              Most trades
+            </IconLabel>
             <p className="shrink-0 text-body-sm text-pump-muted md:mt-0 md:text-right">—</p>
           </div>
         )}
@@ -681,24 +741,22 @@ export function ArenaListClient() {
 
       <div className="space-y-2 md:space-y-3">
         <div className="flex items-center justify-between gap-3">
-          <h2 className="section-heading">Explore coins</h2>
+          <SectionHeadingIcon icon={MetricIcons.exploreCoins}>Explore coins</SectionHeadingIcon>
           <Link
             href="/create"
             prefetch={true}
-            className="toolbar-btn toolbar-btn-accent shrink-0 md:hidden"
+            className="toolbar-btn toolbar-btn-accent inline-flex shrink-0 items-center gap-1.5 md:hidden"
           >
-            <svg viewBox="0 0 24 24" aria-hidden className="h-3.5 w-3.5 shrink-0 fill-none stroke-current">
-              <path d="M12 5v14M5 12h14" strokeWidth="2" strokeLinecap="round" />
-            </svg>
+            <Plus className="h-3.5 w-3.5 shrink-0" strokeWidth={ICON_STROKE} aria-hidden />
             Create
           </Link>
         </div>
         <div className="flex flex-col gap-2">
-          <input
+          <FieldSearchInput
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search coin or symbol"
-            className="field-input h-9 w-full bg-pump-surface/75 md:max-w-xs"
+            className="md:max-w-xs"
           />
           <div className="sheet-tabs -mx-2 overflow-x-auto px-2 md:mx-0 md:px-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {(
@@ -827,15 +885,15 @@ export function ArenaListClient() {
               <th />
               <th>Coin</th>
               <th>Graph</th>
-              <th><button type="button" onClick={() => onSort("mcap")} className={sortHeadClass("mcap")}>MCAP {sortLabel("mcap")}</button></th>
-              <th><button type="button" onClick={() => onSort("ath")} className={sortHeadClass("ath")}>ATH {sortLabel("ath")}</button></th>
-              <th><button type="button" onClick={() => onSort("age")} className={sortHeadClass("age")}>Age {sortLabel("age")}</button></th>
-              <th><button type="button" onClick={() => onSort("txns")} className={sortHeadClass("txns")}>TXNS {sortLabel("txns")}</button></th>
-              <th><button type="button" onClick={() => onSort("vol24h")} className={sortHeadClass("vol24h")}>24H VOL {sortLabel("vol24h")}</button></th>
-              <th><button type="button" onClick={() => onSort("traders")} className={sortHeadClass("traders")}>TRADERS {sortLabel("traders")}</button></th>
-              <th><button type="button" onClick={() => onSort("h1")} className={sortHeadClass("h1")}>1H {sortLabel("h1")}</button></th>
-              <th><button type="button" onClick={() => onSort("h6")} className={sortHeadClass("h6")}>6H {sortLabel("h6")}</button></th>
-              <th><button type="button" onClick={() => onSort("h24")} className={sortHeadClass("h24")}>24H {sortLabel("h24")}</button></th>
+              <th><button type="button" onClick={() => onSort("mcap")} className={sortHeadClass("mcap")}><TableHeaderLabel icon={MetricIcons.mcap}>MCAP</TableHeaderLabel> {sortLabel("mcap")}</button></th>
+              <th><button type="button" onClick={() => onSort("ath")} className={sortHeadClass("ath")}><TableHeaderLabel icon={MetricIcons.ath}>ATH</TableHeaderLabel> {sortLabel("ath")}</button></th>
+              <th><button type="button" onClick={() => onSort("age")} className={sortHeadClass("age")}><TableHeaderLabel icon={MetricIcons.age}>Age</TableHeaderLabel> {sortLabel("age")}</button></th>
+              <th><button type="button" onClick={() => onSort("txns")} className={sortHeadClass("txns")}><TableHeaderLabel icon={MetricIcons.txns}>TXNS</TableHeaderLabel> {sortLabel("txns")}</button></th>
+              <th><button type="button" onClick={() => onSort("vol24h")} className={sortHeadClass("vol24h")}><TableHeaderLabel icon={MetricIcons.vol24h}>24H VOL</TableHeaderLabel> {sortLabel("vol24h")}</button></th>
+              <th><button type="button" onClick={() => onSort("traders")} className={sortHeadClass("traders")}><TableHeaderLabel icon={MetricIcons.traders}>TRADERS</TableHeaderLabel> {sortLabel("traders")}</button></th>
+              <th><button type="button" onClick={() => onSort("h1")} className={sortHeadClass("h1")}><TableHeaderLabel icon={MetricIcons.change1h}>1H</TableHeaderLabel> {sortLabel("h1")}</button></th>
+              <th><button type="button" onClick={() => onSort("h6")} className={sortHeadClass("h6")}><TableHeaderLabel icon={MetricIcons.change6h}>6H</TableHeaderLabel> {sortLabel("h6")}</button></th>
+              <th><button type="button" onClick={() => onSort("h24")} className={sortHeadClass("h24")}><TableHeaderLabel icon={MetricIcons.change24h}>24H</TableHeaderLabel> {sortLabel("h24")}</button></th>
             </tr>
           </thead>
           <tbody>

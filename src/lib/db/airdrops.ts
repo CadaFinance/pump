@@ -646,6 +646,83 @@ export async function getAirdropProof(
   return { amount: row.amount, proof: row.proof_path };
 }
 
+export async function listSavedAirdropIds(userAddress: string): Promise<string[]> {
+  const pool = getLaunchpadPool();
+  const normalized = userAddress.toLowerCase();
+  const result = await pool.query<{ airdrop_id: string }>(
+    `
+      SELECT airdrop_id::text
+      FROM airdrop_saves
+      WHERE user_address = $1
+      ORDER BY created_at DESC
+    `,
+    [normalized]
+  );
+  return result.rows.map((row) => row.airdrop_id);
+}
+
+export async function toggleAirdropSave(
+  userAddress: string,
+  airdropId: string
+): Promise<boolean> {
+  const pool = getLaunchpadPool();
+  const user = userAddress.toLowerCase();
+
+  const existing = await pool.query(
+    `SELECT 1 FROM airdrop_saves WHERE user_address = $1 AND airdrop_id = $2::bigint`,
+    [user, airdropId]
+  );
+
+  if (existing.rows.length > 0) {
+    await pool.query(
+      `DELETE FROM airdrop_saves WHERE user_address = $1 AND airdrop_id = $2::bigint`,
+      [user, airdropId]
+    );
+    return false;
+  }
+
+  const airdropExists = await pool.query(`SELECT 1 FROM airdrops WHERE id = $1::bigint`, [
+    airdropId,
+  ]);
+  if (airdropExists.rows.length === 0) {
+    throw new Error("Airdrop not found");
+  }
+
+  await pool.query(
+    `INSERT INTO airdrop_saves (user_address, airdrop_id) VALUES ($1, $2::bigint)`,
+    [user, airdropId]
+  );
+  return true;
+}
+
+/** Campaigns the wallet meaningfully joined (on-chain buy during qualify, or allocated). */
+export async function listMyAirdropIds(userAddress: string): Promise<string[]> {
+  const pool = getLaunchpadPool();
+  const normalized = userAddress.toLowerCase();
+  const result = await pool.query<{ airdrop_id: string }>(
+    `
+      SELECT airdrop_id::text
+      FROM (
+        SELECT airdrop_id, MAX(sort_at) AS sort_at
+        FROM (
+          SELECT p.airdrop_id, GREATEST(p.updated_at, p.first_onchain_at) AS sort_at
+          FROM airdrop_participants p
+          WHERE p.address = $1
+            AND p.first_onchain_at IS NOT NULL
+          UNION ALL
+          SELECT aa.airdrop_id, aa.created_at AS sort_at
+          FROM airdrop_allocations aa
+          WHERE aa.address = $1
+        ) raw
+        GROUP BY airdrop_id
+      ) joined
+      ORDER BY sort_at DESC
+    `,
+    [normalized]
+  );
+  return result.rows.map((row) => row.airdrop_id);
+}
+
 function weiStringToDecimal(wei: string): string {
   if (!wei || wei === "0") return "0";
   const value = BigInt(wei);

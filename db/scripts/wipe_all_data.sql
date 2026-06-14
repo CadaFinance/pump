@@ -14,6 +14,7 @@ BEGIN;
 
 TRUNCATE TABLE
   public.airdrop_task_completions,
+  public.airdrop_saves,
   public.airdrop_claims,
   public.airdrop_allocations,
   public.airdrop_participants,

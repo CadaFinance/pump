@@ -10,6 +10,8 @@ import {
 } from "@/lib/optimistic-activity";
 import { getMissionHref, isAdminLinkMission } from "@/lib/mission-routes";
 import { MissionsPanelSkeleton } from "@/components/missions/MissionsPanelSkeleton";
+import { IconLabel } from "@/components/ui/IconLabel";
+import { MetricIcons } from "@/lib/metric-icons";
 
 type MissionProgress = {
   current: number;
@@ -355,7 +357,9 @@ export function MissionsPanel() {
           <section className="rounded-lg border border-pump-border/15 bg-pump-card/80 p-3 md:p-4">
             <div className="flex items-end justify-between gap-3">
               <div>
-                <p className="section-label leading-none">Pump Points</p>
+                <IconLabel icon={MetricIcons.pumpPoints} hideIconMobile className="section-label leading-none">
+                  Pump Points
+                </IconLabel>
                 <p className="financial-value mt-1 text-[1.75rem] font-semibold leading-none text-pump-accent md:text-display">
                   {data.totalPoints.toLocaleString()}
                 </p>

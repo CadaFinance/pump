@@ -624,6 +624,7 @@ export function TokenDetailLive({
             <TradeTape
               tokenAddress={tokenAddress}
               creatorAddress={liveToken.creatorAddress}
+              symbol={liveToken.symbol}
               trades={trades}
               wsConnected={wsConnected}
               currentPriceBnb={displayPrice}

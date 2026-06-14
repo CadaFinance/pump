@@ -2,10 +2,11 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { formatEther, parseEther, parseEventLogs } from "viem";
+import { parseEther, parseEventLogs } from "viem";
 import { useConnectModal } from "@rainbow-me/rainbowkit";
 import {
   useAccount,
+  useBalance,
   useReadContract,
   useWaitForTransactionReceipt,
   useWriteContract,
@@ -30,10 +31,28 @@ import {
   validateLogoFileClient,
 } from "@/lib/upload-token-logo";
 import { TokenAvatar } from "@/components/token/TokenAvatar";
+import { BnbLogo } from "@/components/token/BnbLogo";
+import {
+  BnbAmountDisplay,
+  BnbAmountLabel,
+  TokenAmountDisplay,
+} from "@/components/token/AssetAmountDisplay";
+import { TokenLaunchSuccessModal } from "@/components/create/TokenLaunchSuccessModal";
 import { DEFAULT_MIN_INITIAL_BUY_BNB } from "@/lib/platform-settings";
+import { formatCampaignAmount, formatCampaignAmountInput } from "@/lib/airdrop-board-format";
 
-/** Redirect after logo upload attempt (or skip if no file). */
-const REDIRECT_DELAY_MS = 400;
+type LaunchSuccess = {
+  tokenAddress: string;
+  tokenName: string;
+  tokenSymbol: string;
+  logoPreviewUrl?: string;
+};
+
+/** Headroom for create + initial-buy tx gas on top of fee + buy amount. */
+const CREATE_GAS_BUFFER_BNB = parseEther("0.003");
+
+/** Slider ceiling when wallet is not connected yet. */
+const DEFAULT_SLIDER_MAX_BNB = parseEther("1");
 
 async function fileToDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -66,8 +85,9 @@ export function CreateMemeForm() {
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [awaitingRedirect, setAwaitingRedirect] = useState(false);
+  const [launchFinalizing, setLaunchFinalizing] = useState(false);
   const [uploadStatus, setUploadStatus] = useState<string | null>(null);
+  const [launchSuccess, setLaunchSuccess] = useState<LaunchSuccess | null>(null);
 
   logoFileRef.current = logoFile;
   logoPreviewRef.current = logoPreview;
@@ -130,6 +150,12 @@ export function CreateMemeForm() {
     hash: txHash,
   });
 
+  const { data: bnbBalance } = useBalance({
+    address,
+    chainId: pumpChain.id,
+    query: { enabled: Boolean(address) },
+  });
+
   useEffect(() => {
     if (!receipt) return;
     if (handledReceiptRef.current === receipt.transactionHash) return;
@@ -178,7 +204,7 @@ export function CreateMemeForm() {
           missionKeys: [MISSION_KEYS.deployMeme, MISSION_KEYS.dailySwap],
         });
 
-        setAwaitingRedirect(true);
+        setLaunchFinalizing(true);
 
         setUploadStatus("Saving profile…");
         try {
@@ -209,11 +235,16 @@ export function CreateMemeForm() {
           setUploadStatus("Profile saved");
         }
 
-      setTimeout(() => {
-        router.push(`/token/${token}`);
-      }, REDIRECT_DELAY_MS);
+      setLaunchSuccess({
+        tokenAddress: token,
+        tokenName: created?.name ?? (name.trim() || "Token"),
+        tokenSymbol: created?.symbol ?? (symbol.trim() || "TOKEN"),
+        logoPreviewUrl,
+      });
+      setLaunchFinalizing(false);
+      setUploadStatus(null);
     })();
-  }, [receipt, router, reset, address]);
+  }, [receipt, reset, address, name, symbol]);
 
   const wrongChain = isConnected && chain?.id !== pumpChain.id;
   const feeWei = createFee ?? 0n;
@@ -248,6 +279,50 @@ export function CreateMemeForm() {
   const minInitialBuyTokens = minOutWithSlippage(estimatedTokens, SLIPPAGE_BPS);
   const totalValue = feeWei + initialBuyWei;
   const showReceivePreview = initialBuyWei > 0n && estimatedTokens > 0n && protocolFeeBps !== undefined;
+
+  const maxInitialBuyWei = useMemo(() => {
+    const overhead = feeWei + CREATE_GAS_BUFFER_BNB;
+    if (isConnected && bnbBalance !== undefined && bnbBalance.value > overhead) {
+      const afford = bnbBalance.value - overhead;
+      return afford > minInitialBuyWei ? afford : minInitialBuyWei;
+    }
+    const fallback =
+      DEFAULT_SLIDER_MAX_BNB > minInitialBuyWei ? DEFAULT_SLIDER_MAX_BNB : minInitialBuyWei;
+    return fallback;
+  }, [isConnected, bnbBalance, feeWei, minInitialBuyWei]);
+
+  const canUseInitialBuySlider = maxInitialBuyWei > minInitialBuyWei;
+
+  const initialBuySliderPct = useMemo(() => {
+    if (maxInitialBuyWei <= minInitialBuyWei) return 100;
+    const clamped =
+      initialBuyWei < minInitialBuyWei
+        ? minInitialBuyWei
+        : initialBuyWei > maxInitialBuyWei
+          ? maxInitialBuyWei
+          : initialBuyWei;
+    const range = maxInitialBuyWei - minInitialBuyWei;
+    const scaled = Number(((clamped - minInitialBuyWei) * 10000n) / range) / 100;
+    return Math.max(0, Math.min(100, scaled));
+  }, [initialBuyWei, minInitialBuyWei, maxInitialBuyWei]);
+
+  const initialBuySliderFillPct = initialBuySliderPct;
+  const maxInitialBuyLabel = formatCampaignAmount(maxInitialBuyWei);
+
+  function applyInitialBuySliderPct(pct: number) {
+    const clamped = Math.max(0, Math.min(100, pct));
+    if (maxInitialBuyWei <= minInitialBuyWei) {
+      setInitialBuyBnb(minInitialBuyBnb);
+      return;
+    }
+
+    const range = maxInitialBuyWei - minInitialBuyWei;
+    const wei =
+      clamped >= 100
+        ? maxInitialBuyWei
+        : minInitialBuyWei + (range * BigInt(clamped)) / 100n;
+    setInitialBuyBnb(formatCampaignAmountInput(wei));
+  }
 
   function onLogoChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -310,7 +385,22 @@ export function CreateMemeForm() {
     }
   }
 
-  const isBusy = isPending || isConfirming || awaitingRedirect;
+  const isBusy = isPending || isConfirming || launchFinalizing;
+
+  function goToAirdropCreate() {
+    if (!launchSuccess) return;
+    const params = new URLSearchParams({
+      token: launchSuccess.tokenAddress,
+      symbol: launchSuccess.tokenSymbol,
+      name: launchSuccess.tokenName,
+    });
+    router.push(`/airdrops/create?${params.toString()}`);
+  }
+
+  function goToTokenPage() {
+    if (!launchSuccess) return;
+    router.push(`/token/${launchSuccess.tokenAddress}`);
+  }
 
   const submitLabel = !isConnected
     ? "Connect wallet"
@@ -318,7 +408,7 @@ export function CreateMemeForm() {
       ? "Switch to BSC Testnet"
       : isBusy
         ? "Creating…"
-        : "Launch + buy";
+        : "Create + Launch";
 
   const submitDisabled = isConnected && (wrongChain || isBusy || !contractsReady);
 
@@ -414,20 +504,80 @@ export function CreateMemeForm() {
 
           <div className="mt-4">
             <label className="field-label" htmlFor="initialBuy">
-              Initial buy (BNB) <span className="text-pump-accent">*</span>
+              Initial buy <span className="text-pump-accent">*</span>
             </label>
-            <input
-              id="initialBuy"
-              inputMode="decimal"
-              required
-              value={initialBuyBnb}
-              onChange={(e) => setInitialBuyBnb(e.target.value)}
-              placeholder={minInitialBuyBnb}
-              className="field-input financial-value max-w-xs"
-            />
+            <div className="relative max-w-xs">
+              <div className="pointer-events-none absolute inset-y-0 left-3 flex items-center">
+                <BnbLogo size={20} />
+              </div>
+              <input
+                id="initialBuy"
+                inputMode="decimal"
+                required
+                value={initialBuyBnb}
+                onChange={(e) => setInitialBuyBnb(e.target.value)}
+                placeholder={minInitialBuyBnb}
+                className="field-input financial-value w-full pl-11 pr-14"
+              />
+              <div className="pointer-events-none absolute inset-y-0 right-3 flex items-center">
+                <span className="text-caption font-medium text-pump-muted">BNB</span>
+              </div>
+            </div>
+
+            <div className="mt-3 max-w-sm">
+              <div className="flex items-center gap-2.5">
+                <div className="relative min-w-0 flex-1 pt-1">
+                  <div
+                    className="pointer-events-none absolute top-1/2 h-1 w-full -translate-y-1/2 rounded-full bg-pump-border/25"
+                    aria-hidden
+                  />
+                  <div
+                    className="pointer-events-none absolute top-1/2 h-1 -translate-y-1/2 rounded-full bg-pump-accent/70 transition-[width] duration-75"
+                    style={{ width: `${initialBuySliderFillPct}%` }}
+                    aria-hidden
+                  />
+                  <input
+                    id="initialBuySlider"
+                    type="range"
+                    min={0}
+                    max={100}
+                    step={1}
+                    value={initialBuySliderPct}
+                    onChange={(e) => applyInitialBuySliderPct(Number(e.target.value))}
+                    disabled={!canUseInitialBuySlider}
+                    className="trade-amount-slider relative z-[1] w-full disabled:opacity-40"
+                    aria-label="Initial buy amount slider"
+                    aria-valuetext={
+                      initialBuySliderPct >= 100
+                        ? `Max (${maxInitialBuyLabel} BNB)`
+                        : `${initialBuySliderPct}% between ${minInitialBuyBnb} and ${maxInitialBuyLabel} BNB`
+                    }
+                  />
+                </div>
+                <button
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()}
+                  disabled={!canUseInitialBuySlider}
+                  onClick={() => applyInitialBuySliderPct(100)}
+                  className="chip-button shrink-0 px-2.5 py-1 text-caption disabled:opacity-40"
+                >
+                  Max
+                </button>
+              </div>
+              <div className="mt-1.5 flex items-center justify-between gap-2 text-caption text-pump-muted">
+                <BnbAmountLabel amount={minInitialBuyBnb} />
+                <BnbAmountLabel amount={maxInitialBuyLabel} />
+              </div>
+            </div>
+
             <p className="mt-1.5 field-hint">
               Minimum {minInitialBuyBnb} BNB. A larger initial buy launches your coin at a higher
               starting price.
+              {isConnected && !canUseInitialBuySlider ? (
+                <span className="block text-pump-warning">
+                  Not enough BNB for a higher amount after fees and gas.
+                </span>
+              ) : null}
             </p>
           </div>
         </section>
@@ -528,38 +678,39 @@ export function CreateMemeForm() {
           <dl className="mt-4 space-y-3">
             <div className="flex items-center justify-between gap-3 text-body-sm">
               <dt className="text-pump-muted">Create fee</dt>
-              <dd className="financial-value font-medium text-pump-text">
-                {formatEther(feeWei)} BNB
+              <dd className="min-w-0 text-right">
+                <BnbAmountDisplay amount={formatCampaignAmount(feeWei)} />
               </dd>
             </div>
             {initialBuyWei > 0n ? (
               <div className="flex items-center justify-between gap-3 text-body-sm">
                 <dt className="text-pump-muted">Initial buy</dt>
-                <dd className="financial-value font-medium text-pump-text">
-                  {formatEther(initialBuyWei)} BNB
+                <dd className="min-w-0 text-right">
+                  <BnbAmountDisplay amount={formatCampaignAmount(initialBuyWei)} />
                 </dd>
               </div>
             ) : null}
             {showReceivePreview ? (
               <div className="flex items-center justify-between gap-3 text-body-sm">
                 <dt className="text-pump-muted">You receive</dt>
-                <dd className="flex min-w-0 items-center gap-2">
-                  <TokenAvatar
-                    address="0x0000000000000000000000000000000000000000"
+                <dd className="min-w-0 text-right">
+                  <TokenAmountDisplay
+                    amount={formatTokenAmountCompact(estimatedTokens)}
                     symbol={displaySymbol}
                     previewUrl={logoPreview}
-                    size={24}
                   />
-                  <span className="financial-value truncate font-medium text-pump-text">
-                    {formatTokenAmountCompact(estimatedTokens)} ${displaySymbol}
-                  </span>
                 </dd>
               </div>
             ) : null}
             <div className="flex items-center justify-between gap-3 border-t border-pump-border/15 pt-3 text-body-sm">
               <dt className="font-medium text-pump-text">Total</dt>
-              <dd className="financial-value text-h3 font-semibold text-pump-text">
-                {formatEther(totalValue)} BNB
+              <dd className="min-w-0 text-right">
+                <BnbAmountDisplay
+                  amount={formatCampaignAmount(totalValue)}
+                  logoSize={20}
+                  amountClassName="financial-value text-h3 font-semibold tabular-nums text-pump-text"
+                  symbolClassName="text-body-sm font-medium text-pump-muted"
+                />
               </dd>
             </div>
           </dl>
@@ -573,8 +724,8 @@ export function CreateMemeForm() {
                 ? " — confirming…"
                 : uploadStatus
                   ? ` — ${uploadStatus}`
-                  : awaitingRedirect
-                    ? " — confirmed, opening token…"
+                  : launchSuccess
+                    ? " — confirmed"
                     : null}
             </p>
           ) : null}
@@ -592,6 +743,16 @@ export function CreateMemeForm() {
           ) : null}
         </section>
       </aside>
+      <TokenLaunchSuccessModal
+        open={launchSuccess !== null}
+        tokenAddress={launchSuccess?.tokenAddress ?? ""}
+        tokenName={launchSuccess?.tokenName ?? ""}
+        tokenSymbol={launchSuccess?.tokenSymbol ?? ""}
+        logoPreviewUrl={launchSuccess?.logoPreviewUrl}
+        onCreateAirdrop={goToAirdropCreate}
+        onViewToken={goToTokenPage}
+        onDismiss={() => setLaunchSuccess(null)}
+      />
     </form>
   );
 }

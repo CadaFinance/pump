@@ -1,9 +1,12 @@
 "use client";
 
 import type { ReactNode } from "react";
+import type { LucideIcon } from "lucide-react";
+import { IconLabel } from "@/components/ui/IconLabel";
 
 type PortfolioMetricBoxProps = {
   label: string;
+  icon?: LucideIcon;
   value: ReactNode;
   valueClassName?: string;
   actions?: ReactNode;
@@ -13,6 +16,7 @@ type PortfolioMetricBoxProps = {
 
 export function PortfolioMetricBox({
   label,
+  icon,
   value,
   valueClassName = "financial-value text-body-sm font-semibold text-pump-text",
   actions,
@@ -25,7 +29,18 @@ export function PortfolioMetricBox({
         className={`portfolio-metric-box ${actions ? "portfolio-metric-box--with-actions" : ""}`}
       >
         <div className="portfolio-metric-box-main">
-          <span className="section-label portfolio-metric-box-label">{label}</span>
+          {icon ? (
+            <IconLabel
+              icon={icon}
+              hideIconMobile
+              className="section-label portfolio-metric-box-label"
+              iconClassName="h-3.5 w-3.5 shrink-0 opacity-75"
+            >
+              {label}
+            </IconLabel>
+          ) : (
+            <span className="section-label portfolio-metric-box-label">{label}</span>
+          )}
           <span className={valueClassName}>{value}</span>
         </div>
         {actions ? (

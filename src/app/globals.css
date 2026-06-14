@@ -21,9 +21,9 @@ html[data-theme="light"] {
   --tracking-heading: -0.02em;
   --tracking-label: 0.06em;
 
-  /* Fixed mobile chrome — keep trade dock flush with bottom nav */
+  /* Fixed mobile chrome — icon tab bar + safe area */
   --mobile-nav-height: calc(
-    1.25rem + var(--text-caption) * var(--leading-caption) + env(safe-area-inset-bottom, 0px)
+    3.5rem + env(safe-area-inset-bottom, 0px)
   );
   --mobile-trade-dock-height: calc(
     1.25rem + 1.5rem + var(--text-body-sm) * var(--leading-body)
@@ -813,8 +813,84 @@ code,
     background: rgb(var(--pump-border) / 0.55);
   }
 
+  /* Mobile bottom tab bar */
+  .bottom-nav {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 40;
+    border-top: 1px solid rgb(var(--pump-border) / 0.45);
+    background: rgb(var(--pump-card) / 0.94);
+    backdrop-filter: blur(20px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  .bottom-nav-inner {
+    display: flex;
+    align-items: stretch;
+    justify-content: space-around;
+  }
+
+  .bottom-nav-item {
+    position: relative;
+    display: flex;
+    flex: 1;
+    min-width: 0;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.125rem;
+    padding: 0.375rem 0.25rem 0.5rem;
+    color: rgb(var(--pump-muted));
+    transition: color 0.15s ease;
+  }
+
+  .bottom-nav-item:hover {
+    color: rgb(var(--pump-text));
+  }
+
+  .bottom-nav-item-active {
+    color: rgb(var(--pump-accent));
+  }
+
+  .bottom-nav-item-active:hover {
+    color: rgb(var(--pump-accent-strong));
+  }
+
+  .bottom-nav-indicator {
+    position: absolute;
+    top: 0;
+    left: 50%;
+    width: 1.75rem;
+    height: 2px;
+    transform: translateX(-50%);
+    border-radius: 999px;
+    background: rgb(var(--pump-accent));
+  }
+
+  .bottom-nav-icon {
+    width: 1.375rem;
+    height: 1.375rem;
+    flex-shrink: 0;
+  }
+
+  .bottom-nav-label {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.625rem;
+    font-weight: 600;
+    line-height: 1;
+    letter-spacing: 0.01em;
+  }
+
   /* Header — single-row toolbar */
   .header-nav-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
     padding: 8px 12px;
     font-size: var(--text-caption);
     font-weight: 500;
@@ -1033,6 +1109,117 @@ code,
     will-change: transform;
   }
 
+  .hourglass-icon {
+    color: rgb(var(--pump-accent));
+  }
+
+  .hourglass-icon-svg {
+    transform-origin: center center;
+    animation: hourglass-flip 3s ease-in-out infinite;
+  }
+
+  .hourglass-sand-top {
+    transform-origin: 12px 10.5px;
+    animation: hourglass-sand-top 3s ease-in-out infinite;
+  }
+
+  .hourglass-sand-stream {
+    transform-origin: center center;
+    animation: hourglass-sand-stream 3s ease-in-out infinite;
+  }
+
+  .hourglass-sand-bottom {
+    transform-origin: 12px 16px;
+    animation: hourglass-sand-bottom 3s ease-in-out infinite;
+  }
+
+  @keyframes hourglass-flip {
+    0%,
+    42% {
+      transform: rotate(0deg);
+    }
+    50%,
+    92% {
+      transform: rotate(180deg);
+    }
+    100% {
+      transform: rotate(360deg);
+    }
+  }
+
+  @keyframes hourglass-sand-top {
+    0%,
+    8% {
+      opacity: 1;
+      transform: scaleY(1);
+    }
+    42%,
+    50% {
+      opacity: 0.15;
+      transform: scaleY(0.05);
+    }
+    50%,
+    58% {
+      opacity: 0;
+      transform: scaleY(0);
+    }
+    58%,
+    100% {
+      opacity: 1;
+      transform: scaleY(1);
+    }
+  }
+
+  @keyframes hourglass-sand-stream {
+    0%,
+    8% {
+      opacity: 0.35;
+      transform: scaleY(0.2);
+    }
+    20%,
+    42% {
+      opacity: 1;
+      transform: scaleY(1);
+    }
+    50%,
+    58% {
+      opacity: 0;
+      transform: scaleY(0);
+    }
+    66%,
+    88% {
+      opacity: 1;
+      transform: scaleY(1);
+    }
+    100% {
+      opacity: 0.35;
+      transform: scaleY(0.2);
+    }
+  }
+
+  @keyframes hourglass-sand-bottom {
+    0%,
+    8% {
+      opacity: 0.2;
+      transform: scaleY(0.15);
+    }
+    42%,
+    50% {
+      opacity: 1;
+      transform: scaleY(1);
+    }
+    50%,
+    58% {
+      opacity: 1;
+      transform: scaleY(1);
+    }
+    58%,
+    100% {
+      opacity: 0.2;
+      transform: scaleY(0.15);
+    }
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .live-land-in,
     .live-rank-up,
@@ -1044,6 +1231,10 @@ code,
     .live-trade-land-buy,
     .live-trade-land-sell,
     .live-trade-pending,
+    .hourglass-icon-svg,
+    .hourglass-sand-top,
+    .hourglass-sand-stream,
+    .hourglass-sand-bottom,
     [data-board-key] {
       animation: none !important;
       transition: none !important;

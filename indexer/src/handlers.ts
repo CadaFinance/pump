@@ -247,6 +247,23 @@ export class LaunchpadEventHandlers {
       await this.updateUserAggregates(client, token, trader, isBuy, zugAmount, tokenAmount);
       await this.updateHolderCountIncremental(client, token, trader, oldBalance);
 
+      if (isBuy) {
+        await client.query(
+          `
+            INSERT INTO airdrop_participants (airdrop_id, address, first_onchain_at, updated_at)
+            SELECT a.id, $2, $3, now()
+            FROM airdrops a
+            WHERE a.linked_token = $1
+              AND a.qualify_start <= $3::timestamptz
+              AND a.qualify_end >= $3::timestamptz
+            ON CONFLICT (airdrop_id, address) DO UPDATE
+            SET first_onchain_at = COALESCE(airdrop_participants.first_onchain_at, EXCLUDED.first_onchain_at),
+                updated_at = now()
+          `,
+          [token, trader, blockTime]
+        );
+      }
+
       const bonding = await client.query<{
         reserve_zug: string;
         market_cap_zug: string;

@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import type { TokenHolderSnapshot, TradeItem } from "@/lib/db/launchpad";
 import { explorerTxUrl, shortAddress } from "@/config/chain";
 import { UserAvatarForAddress } from "@/components/user/UserAvatarForAddress";
+import { SectionHeadingIcon } from "@/components/ui/IconLabel";
+import { MetricIcons } from "@/lib/metric-icons";
 import { DEFAULT_TOKEN_TOTAL_SUPPLY, bnbToUsd, formatUsdReadable } from "@/lib/format-usd";
 import {
   ON_CHAIN_BALANCE_EPSILON,
@@ -133,6 +135,7 @@ function IdentityPill({
 export function TradeTape({
   tokenAddress,
   creatorAddress,
+  symbol,
   trades,
   wsConnected = false,
   currentPriceBnb,
@@ -141,6 +144,7 @@ export function TradeTape({
 }: {
   tokenAddress: string;
   creatorAddress: string;
+  symbol: string;
   trades: TradeItem[];
   wsConnected?: boolean;
   currentPriceBnb: number;
@@ -193,7 +197,7 @@ export function TradeTape({
 
   return (
     <section className="space-y-3">
-      <h2 className="section-heading">Activity</h2>
+      <SectionHeadingIcon icon={MetricIcons.activity}>Activity</SectionHeadingIcon>
 
       <div className="rounded-lg border border-pump-border/15 bg-transparent">
         <div className="flex flex-wrap items-center gap-2 border-b border-pump-border/15 p-3">
@@ -298,7 +302,7 @@ export function TradeTape({
                   <th className="w-px whitespace-nowrap">Account</th>
                   <th className="w-px whitespace-nowrap">Side</th>
                   <th>Amount</th>
-                  <th>Tokens</th>
+                  <th>${symbol}</th>
                   <th>Price</th>
                   <th>Time</th>
                   <th className="text-right">Txn</th>

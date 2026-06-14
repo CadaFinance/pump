@@ -27,6 +27,18 @@ export function airdropRewardUsd(
   return amount * priceBnb * bnbUsd;
 }
 
+/** Max fractional digits for sub-K/M/B reward amounts (board + create preview). */
+export const AIRDROP_REWARD_MAX_DECIMALS = 4;
+
+const WEI_PER_ETHER = 10n ** 18n;
+
+/** Floor wei to input precision so parseEther(input) never exceeds the wallet balance. */
+export function floorCampaignAmountWei(wei: bigint): bigint {
+  if (wei <= 0n) return 0n;
+  const truncFactor = WEI_PER_ETHER / 10n ** BigInt(AIRDROP_REWARD_MAX_DECIMALS);
+  return (wei / truncFactor) * truncFactor;
+}
+
 export function formatAirdropReward(
   value: string,
   opts: { isBnb: boolean; symbol?: string | null }
@@ -37,51 +49,85 @@ export function formatAirdropReward(
   return `${compact} tokens`;
 }
 
-export function formatAirdropRewardCompact(value: string): string {
-  const n = Number(value);
-  if (!Number.isFinite(n)) return value;
+export function formatAirdropRewardCompact(value: string | number): string {
+  const n = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(n)) return typeof value === "string" ? value : "—";
+  if (n <= 0) return "0";
   if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(2)}B`;
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`;
   if (n >= 1_000) return `${(n / 1_000).toFixed(2)}K`;
-  return n.toLocaleString(undefined, { maximumFractionDigits: 2 });
+  return trimTrailingZeros(n.toFixed(AIRDROP_REWARD_MAX_DECIMALS));
 }
 
-/** Human-readable BNB / token amount from wei (create campaign UI). */
+function trimTrailingZeros(formatted: string): string {
+  if (!formatted.includes(".")) return formatted;
+  return formatted.replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "");
+}
+
+/** Human-readable BNB / token amount from wei (create campaign UI). Matches board display. */
 export function formatCampaignAmount(wei: bigint): string {
   const n = Number(formatEther(wei));
   if (!Number.isFinite(n) || n <= 0) return "0";
-  if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(2)}B`;
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`;
-  if (n >= 100_000) return `${(n / 1_000).toFixed(2)}K`;
-  if (n >= 1) return n.toFixed(4);
-  if (n >= 0.001) return n.toFixed(6);
-  return n.toFixed(8);
+  return formatAirdropRewardCompact(n);
+}
+
+/** Parseable decimal for amount inputs + sliders (never K/M/B compact). */
+export function formatCampaignAmountInput(wei: bigint): string {
+  const floored = floorCampaignAmountWei(wei);
+  if (floored <= 0n) return "0";
+  return trimTrailingZeros(formatEther(floored));
 }
 
 export function formatCampaignAmountLabel(wei: bigint, assetLabel: string): string {
   return `${formatCampaignAmount(wei)} ${assetLabel}`;
 }
 
+/** Adaptive countdown: ≥1w → w d h, ≥1d → d h m, ≥1h → h m, else m s. */
+export function formatCountdownMs(ms: number): string {
+  if (!Number.isFinite(ms) || ms <= 0) return "0s";
+
+  const totalSec = Math.floor(ms / 1000);
+  const weeks = Math.floor(totalSec / (7 * 24 * 3600));
+  const days = Math.floor((totalSec % (7 * 24 * 3600)) / (24 * 3600));
+  const hours = Math.floor((totalSec % (24 * 3600)) / 3600);
+  const mins = Math.floor((totalSec % 3600) / 60);
+  const secs = totalSec % 60;
+
+  if (weeks > 0) {
+    const parts = [`${weeks}w`];
+    if (days > 0) parts.push(`${days}d`);
+    if (hours > 0) parts.push(`${hours}h`);
+    return parts.join(" ");
+  }
+
+  if (days > 0) {
+    const parts = [`${days}d`];
+    if (hours > 0) parts.push(`${hours}h`);
+    if (mins > 0) parts.push(`${mins}m`);
+    return parts.join(" ");
+  }
+
+  if (hours > 0) {
+    return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
+  }
+
+  if (mins > 0) {
+    return secs > 0 ? `${mins}m ${secs}s` : `${mins}m`;
+  }
+
+  return `${Math.max(secs, 1)}s`;
+}
+
 export function formatTimeRemaining(endIso: string): string {
   const ms = new Date(endIso).getTime() - Date.now();
   if (!Number.isFinite(ms) || ms <= 0) return "Ended";
-  const min = Math.floor(ms / 60_000);
-  if (min < 60) return `${min}m left`;
-  const h = Math.floor(min / 60);
-  if (h < 24) return `${h}h ${min % 60}m`;
-  const d = Math.floor(h / 24);
-  return `${d}d ${h % 24}h`;
+  return formatCountdownMs(ms);
 }
 
 export function formatDurationUntil(startIso: string): string {
   const ms = new Date(startIso).getTime() - Date.now();
   if (!Number.isFinite(ms) || ms <= 0) return "Started";
-  const min = Math.floor(ms / 60_000);
-  if (min < 60) return `in ${min}m`;
-  const h = Math.floor(min / 60);
-  if (h < 24) return `in ${h}h ${min % 60}m`;
-  const d = Math.floor(h / 24);
-  return `in ${d}d ${h % 24}h`;
+  return formatCountdownMs(ms);
 }
 
 export function qualifyWindowProgress(startIso: string, endIso: string): number {

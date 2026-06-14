@@ -1,0 +1,137 @@
+"use client";
+
+import type { AirdropListItem, AirdropDetail } from "@/lib/db/airdrops";
+import { TokenAvatar } from "@/components/token/TokenAvatar";
+import { BnbLogo } from "@/components/token/BnbLogo";
+import { HourglassIcon } from "@/components/ui/HourglassIcon";
+import { airdropRewardUsd, formatAirdropReward } from "@/lib/airdrop-board-format";
+import { formatUsdReadable } from "@/lib/format-usd";
+import {
+  airdropStatusBadgeClass,
+  formatAirdropDisplayStatus,
+  type AirdropDisplayStatus,
+} from "@/lib/airdrop-status";
+
+type RewardPoolMetricProps = {
+  rewardToken: string | null;
+  rewardSymbol?: string | null;
+  totalFunded: string;
+  bnbUsd: number | null;
+};
+
+export function AirdropRewardPoolMetric({
+  rewardToken,
+  rewardSymbol,
+  totalFunded,
+  bnbUsd,
+}: RewardPoolMetricProps) {
+  const isBnb = !rewardToken;
+  const usd = airdropRewardUsd(
+    { rewardToken, rewardSymbol, totalFunded },
+    bnbUsd
+  );
+
+  return (
+    <div className="flex min-w-0 items-center gap-1.5">
+      {isBnb ? (
+        <BnbLogo size={18} />
+      ) : (
+        <TokenAvatar
+          address={rewardToken}
+          symbol={rewardSymbol ?? "?"}
+          size={18}
+        />
+      )}
+      <div className="min-w-0 leading-tight">
+        <p className="financial-value truncate text-caption font-semibold text-pump-text">
+          {formatAirdropReward(totalFunded, { isBnb, symbol: rewardSymbol })}
+        </p>
+        {usd != null ? (
+          <p className="truncate text-[11px] text-pump-muted">
+            {formatUsdReadable(usd, { compact: true })}
+          </p>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+export function AirdropPoolTokenMetric({
+  tokenAddress,
+  symbol,
+}: {
+  tokenAddress: string;
+  symbol: string;
+}) {
+  return (
+    <div className="flex min-w-0 items-center gap-1.5">
+      <TokenAvatar address={tokenAddress} symbol={symbol} size={18} />
+      <span className="financial-value truncate text-caption font-semibold text-pump-text">
+        ${symbol}
+      </span>
+    </div>
+  );
+}
+
+export function AirdropProgressMetric({
+  timeLabel,
+  progressPct,
+  showBar = true,
+}: {
+  timeLabel: string;
+  progressPct?: number;
+  showBar?: boolean;
+}) {
+  const pct =
+    progressPct != null ? Math.max(0, Math.min(100, Math.round(progressPct))) : null;
+
+  return (
+    <div className={showBar && pct != null ? "space-y-1" : undefined}>
+      <div className="flex items-center justify-between gap-2">
+        <span className="flex min-w-0 items-center gap-1 financial-value text-caption font-semibold tabular-nums text-pump-text">
+          <HourglassIcon size={13} />
+          <span className="truncate">{timeLabel}</span>
+        </span>
+        {pct != null ? (
+          <span className="shrink-0 text-[11px] tabular-nums text-pump-muted">{pct}%</span>
+        ) : null}
+      </div>
+      {showBar && pct != null ? (
+        <div className="h-1 overflow-hidden rounded-full bg-pump-border/20">
+          <div
+            className="h-full rounded-full bg-pump-accent transition-[width] duration-500"
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+export function AirdropStatusMetric({ status }: { status: AirdropDisplayStatus }) {
+  return (
+    <span
+      className={`inline-flex text-[11px] font-semibold leading-none ${airdropStatusBadgeClass(status)}`}
+    >
+      {formatAirdropDisplayStatus(status)}
+    </span>
+  );
+}
+
+export function airdropListRewardProps(item: AirdropListItem, bnbUsd: number | null) {
+  return {
+    rewardToken: item.rewardToken,
+    rewardSymbol: item.rewardSymbol,
+    totalFunded: item.totalFunded,
+    bnbUsd,
+  };
+}
+
+export function airdropDetailRewardProps(detail: AirdropDetail, bnbUsd: number | null) {
+  return {
+    rewardToken: detail.rewardToken,
+    rewardSymbol: detail.rewardSymbol,
+    totalFunded: detail.totalFunded,
+    bnbUsd,
+  };
+}

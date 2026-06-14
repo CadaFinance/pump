@@ -11,6 +11,9 @@ import { bondingCurveManagerAbi } from "@/lib/bonding-curve";
 import { ClaimCreatorFeesModal } from "@/components/portfolio/ClaimCreatorFeesModal";
 import { CreatorFeesCard } from "@/components/portfolio/CreatorFeesCard";
 import { PortfolioMetricBox } from "@/components/portfolio/PortfolioMetricBox";
+import type { LucideIcon } from "lucide-react";
+import { MetricIcons } from "@/lib/metric-icons";
+import { ICON_STROKE } from "@/lib/icons";
 import { ClaimReferrerFeesModal } from "@/components/portfolio/ClaimReferrerFeesModal";
 import { ReferralRewardsCard } from "@/components/referrals/ReferralRewardsCard";
 import { FollowNetworkModal } from "@/components/portfolio/FollowNetworkModal";
@@ -155,12 +158,14 @@ function formatTokenBalance(value: number): string {
 
 function PortfolioStatBox({
   label,
+  icon,
   value,
   sub,
   valueClassName = "financial-value text-body-sm font-semibold text-pump-text",
   className = "",
 }: {
   label: string;
+  icon?: LucideIcon;
   value: ReactNode;
   sub?: ReactNode;
   valueClassName?: string;
@@ -169,6 +174,7 @@ function PortfolioStatBox({
   return (
     <PortfolioMetricBox
       label={label}
+      icon={icon}
       value={
         <>
           {value}
@@ -849,6 +855,7 @@ export function PortfolioPanel() {
           <dl className="mt-3 grid grid-cols-2 items-stretch gap-2 md:mt-4 lg:grid-cols-4">
             <PortfolioStatBox
               label="Portfolio value"
+              icon={MetricIcons.portfolioValue}
               value={
                 <>
                   <span>{formatUsdReadable(totalEstimatedUsd, { compact: true })}</span>
@@ -863,6 +870,7 @@ export function PortfolioPanel() {
             />
             <PortfolioStatBox
               label="Net PnL"
+              icon={MetricIcons.netPnl}
               value={formatUsdReadable(totalNetPnlUsd, { compact: true, signed: true })}
               valueClassName={`financial-value text-body-sm font-semibold ${pnlTone(totalNetPnl)}`}
             />
@@ -888,7 +896,14 @@ export function PortfolioPanel() {
         {data && !error ? (
           <>
             <div className="space-y-2 md:space-y-3">
-              <h3 className="section-heading text-h3">Holdings ({holdingsCount})</h3>
+              <h3 className="section-heading text-h3 inline-flex items-center gap-2">
+                <MetricIcons.holdings
+                  className="hidden h-[1.05em] w-[1.05em] shrink-0 text-pump-accent sm:block"
+                  strokeWidth={ICON_STROKE}
+                  aria-hidden
+                />
+                Holdings ({holdingsCount})
+              </h3>
               {holdingsCount > 0 ? <HoldingsSwipeHint /> : null}
               {holdingsCount === 0 ? (
                 <p className="panel-surface p-6 text-center text-body-sm text-pump-muted">

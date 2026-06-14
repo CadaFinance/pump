@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { CreatorFollowsProvider } from "@/components/creators/CreatorFollowsProvider";
 import { FavoritesProvider } from "@/components/favorites/FavoritesProvider";
+import { AirdropSavesProvider } from "@/components/airdrops/AirdropSavesProvider";
 import { UserAvatarProvider } from "@/components/user/UserAvatarProvider";
 import { ReferralCaptureProvider } from "@/components/referrals/ReferralCaptureProvider";
 import { RouteWarmup } from "@/components/layout/RouteWarmup";
@@ -39,6 +40,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <ThemeProvider>
           <Web3Provider>
             <FavoritesProvider>
+              <AirdropSavesProvider>
               <CreatorFollowsProvider>
                 <UserAvatarProvider>
                   <ReferralCaptureProvider>
@@ -47,6 +49,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                   </ReferralCaptureProvider>
                 </UserAvatarProvider>
               </CreatorFollowsProvider>
+              </AirdropSavesProvider>
             </FavoritesProvider>
           </Web3Provider>
         </ThemeProvider>

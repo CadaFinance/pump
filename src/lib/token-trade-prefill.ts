@@ -1,3 +1,5 @@
+import { safeReturnPath } from "@/lib/safe-return-path";
+
 export type TradePrefillConfig = {
   side: "buy" | "sell";
   buyMode?: "bnb" | "token" | "usd";
@@ -28,7 +30,12 @@ export function remainingRuleAmount(current: string, target: string): string | u
 
 export function buildTokenTradeUrl(
   tokenAddress: string,
-  opts?: { buyMode: "bnb" | "token"; amount?: string; met?: boolean }
+  opts?: {
+    buyMode: "bnb" | "token";
+    amount?: string;
+    met?: boolean;
+    returnTo?: string;
+  }
 ): string {
   const base = `/token/${tokenAddress.toLowerCase()}`;
   const params = new URLSearchParams({ trade: "buy" });
@@ -37,6 +44,9 @@ export function buildTokenTradeUrl(
     params.set("mode", opts.buyMode);
     if (opts.amount) params.set("amount", opts.amount);
   }
+
+  const returnTo = safeReturnPath(opts?.returnTo);
+  if (returnTo) params.set("returnTo", returnTo);
 
   return `${base}?${params.toString()}`;
 }

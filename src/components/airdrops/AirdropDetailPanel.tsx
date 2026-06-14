@@ -1,6 +1,17 @@
 "use client";
 
 import Link from "next/link";
+import { HourglassIcon } from "@/components/ui/HourglassIcon";
+import {
+  AirdropMetricsStrip,
+} from "@/components/airdrops/AirdropMetricsStrip";
+import {
+  AirdropPoolTokenMetric,
+  AirdropProgressMetric,
+  AirdropRewardPoolMetric,
+  AirdropStatusMetric,
+  airdropDetailRewardProps,
+} from "@/components/airdrops/AirdropMetricCells";
 import { type ReactNode, useCallback, useEffect, useState } from "react";
 import { parseEther } from "viem";
 import { useConnectModal } from "@rainbow-me/rainbowkit";
@@ -23,8 +34,6 @@ import {
 } from "@/lib/airdrop-status";
 import {
   airdropRewardAmountUsd,
-  airdropRewardUsd,
-  formatAirdropReward,
   formatAirdropRewardCompact,
   formatDurationUntil,
   formatQualifyDate,
@@ -50,6 +59,9 @@ import {
   buildTokenTradeUrl,
   remainingRuleAmount,
 } from "@/lib/token-trade-prefill";
+import { Bookmark } from "lucide-react";
+import { useAirdropSaves } from "@/components/airdrops/AirdropSavesProvider";
+import { ICON_STROKE } from "@/lib/icons";
 
 function formatAmount(value: string): string {
   const n = Number(value);
@@ -85,17 +97,6 @@ function timeLeftLabel(status: AirdropDisplayStatus, detail: AirdropDetail): str
     case "CLOSED":
       return "Ended";
   }
-}
-
-function StatCell({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className="flex min-w-0 flex-col gap-1">
-      <dt className="section-label md:text-[inherit]">{label}</dt>
-      <dd className="m-0 rounded-md border border-pump-border/15 bg-pump-surface/35 px-2.5 py-2 md:px-3">
-        {children}
-      </dd>
-    </div>
-  );
 }
 
 function SectionHeader({
@@ -138,36 +139,6 @@ function BnbRewardIcon({ size = 18 }: { size?: number }) {
   return <BnbLogo size={size} />;
 }
 
-function RewardPoolStat({ detail, bnbUsd }: { detail: AirdropDetail; bnbUsd: number | null }) {
-  const isBnb = !detail.rewardToken;
-  const usd = airdropRewardUsd(detail, bnbUsd);
-
-  return (
-    <div className="flex min-w-0 items-center gap-1.5">
-      {isBnb ? (
-        <BnbRewardIcon size={18} />
-      ) : (
-        <TokenAvatar
-          address={detail.rewardToken!}
-          symbol={detail.rewardSymbol ?? "?"}
-          size={18}
-        />
-      )}
-      <div className="min-w-0">
-        <p className="financial-value truncate text-body-sm font-semibold text-pump-text">
-          {formatAirdropReward(detail.totalFunded, {
-            isBnb,
-            symbol: detail.rewardSymbol,
-          })}
-        </p>
-        {usd != null ? (
-          <p className="text-caption text-pump-muted">{formatUsdReadable(usd, { compact: true })}</p>
-        ) : null}
-      </div>
-    </div>
-  );
-}
-
 function StepBadge({
   step,
   label,
@@ -202,12 +173,14 @@ function RuleProgressRow({
   unit,
   tokenAddress,
   buyMode,
+  returnTo,
 }: {
   label: ReactNode;
   rule: { current: string; target: string; met: boolean };
   unit: string;
   tokenAddress: string;
   buyMode: "bnb" | "token";
+  returnTo?: string;
 }) {
   const pct =
     Number(rule.target) > 0
@@ -220,6 +193,7 @@ function RuleProgressRow({
     buyMode,
     amount: rule.met ? undefined : remainingRuleAmount(rule.current, rule.target),
     met: rule.met,
+    returnTo,
   });
 
   return (
@@ -832,6 +806,7 @@ function OnchainRequirementsContent({
   progressError,
   progress,
   onConnect,
+  returnTo,
 }: {
   symbol: string;
   linkedToken: string;
@@ -842,12 +817,20 @@ function OnchainRequirementsContent({
   progressError: string | null;
   progress: AirdropProgress | null;
   onConnect: () => void;
+  returnTo?: string;
 }) {
   return (
     <>
       {!qualifyStarted ? (
-        <p className="text-body-sm text-pump-muted">
-          On-chain tracking opens {formatQualifyDateTime(qualifyStart)}.
+        <p className="flex flex-wrap items-center gap-x-1.5 text-body-sm text-pump-muted">
+          <HourglassIcon size={14} />
+          <span>
+            On-chain tracking opens in{" "}
+            <span className="font-medium tabular-nums text-pump-text">
+              {formatDurationUntil(qualifyStart)}
+            </span>
+            .
+          </span>
         </p>
       ) : !isConnected ? (
         <button type="button" className="primary-button w-full sm:w-auto" onClick={onConnect}>
@@ -871,6 +854,7 @@ function OnchainRequirementsContent({
               unit="tokens"
               tokenAddress={linkedToken}
               buyMode="token"
+              returnTo={returnTo}
             />
           ) : null}
           {progress.minBuy ? (
@@ -880,6 +864,7 @@ function OnchainRequirementsContent({
               unit="BNB"
               tokenAddress={linkedToken}
               buyMode="bnb"
+              returnTo={returnTo}
             />
           ) : null}
         </ul>
@@ -902,6 +887,7 @@ function OnchainRequirementsContent({
 export function AirdropDetailPanel({ airdropId }: { airdropId: string }) {
   const { openConnectModal } = useConnectModal();
   const { address, isConnected } = useAccount();
+  const { isSaved, toggleSave } = useAirdropSaves();
   const { bnbUsd } = useBnbUsdPrice();
   const [detail, setDetail] = useState<AirdropDetail | null>(null);
   const [progress, setProgress] = useState<AirdropProgress | null>(null);
@@ -913,6 +899,12 @@ export function AirdropDetailPanel({ airdropId }: { airdropId: string }) {
   const [claimInfo, setClaimInfo] = useState<{ amount: string; proof: string[] } | null>(null);
   const [completingTaskId, setCompletingTaskId] = useState<string | null>(null);
   const [profileAddress, setProfileAddress] = useState<string | null>(null);
+  const [nowTick, setNowTick] = useState(0);
+
+  useEffect(() => {
+    const id = window.setInterval(() => setNowTick((t) => t + 1), 1000);
+    return () => window.clearInterval(id);
+  }, []);
 
   const { writeContract, data: txHash, isPending } = useWriteContract();
   const { isSuccess: claimConfirmed } = useWaitForTransactionReceipt({ hash: txHash });
@@ -1146,6 +1138,9 @@ export function AirdropDetailPanel({ airdropId }: { airdropId: string }) {
       ? "active"
       : "idle";
 
+  const airdropReturnTo = `/airdrops/${airdropId}`;
+  const saved = isSaved(airdropId);
+
   return (
     <div className="space-y-4">
       {error ? (
@@ -1184,67 +1179,76 @@ export function AirdropDetailPanel({ airdropId }: { airdropId: string }) {
                 </p>
               </div>
             </div>
-            <span className={airdropStatusBadgeClass(displayStatus)}>
-              {formatAirdropDisplayStatus(displayStatus)}
-            </span>
+            <div className="flex shrink-0 items-center gap-2">
+              <button
+                type="button"
+                onClick={() => toggleSave(airdropId)}
+                className={`inline-flex h-8 w-8 items-center justify-center rounded-md border border-pump-border/40 transition ${
+                  saved
+                    ? "bg-pump-accent/10 text-pump-accent"
+                    : "bg-pump-surface/40 text-pump-muted hover:text-pump-text"
+                }`}
+                aria-label={saved ? "Remove from saved" : "Save campaign"}
+              >
+                <Bookmark
+                  className={`h-4 w-4 ${saved ? "fill-current" : ""}`}
+                  strokeWidth={ICON_STROKE}
+                  aria-hidden
+                />
+              </button>
+              <span className={airdropStatusBadgeClass(displayStatus)}>
+                {formatAirdropDisplayStatus(displayStatus)}
+              </span>
+            </div>
           </div>
         </div>
 
-        <dl className="grid grid-cols-2 gap-2 p-4 md:grid-cols-4 md:p-5">
-          <StatCell label="Reward pool">
-            <RewardPoolStat detail={detail} bnbUsd={bnbUsd} />
-          </StatCell>
-          <StatCell label={displayStatus === "UPCOMING" ? "Starts" : "Time left"}>
-            {displayStatus === "QUALIFYING" || displayStatus === "UPCOMING" ? (
+        <div className="p-4 md:p-5">
+          <AirdropMetricsStrip
+            reward={<AirdropRewardPoolMetric {...airdropDetailRewardProps(detail, bnbUsd)} />}
+            progress={
+              <AirdropProgressMetric
+                timeLabel={
+                  nowTick >= 0 ? timeLeftLabel(displayStatus, detail) : "—"
+                }
+                progressPct={
+                  displayStatus === "QUALIFYING" || displayStatus === "UPCOMING"
+                    ? qualifyProgress
+                    : undefined
+                }
+                showBar={
+                  displayStatus === "QUALIFYING" || displayStatus === "UPCOMING"
+                }
+              />
+            }
+            poolToken={
+              <AirdropPoolTokenMetric tokenAddress={detail.linkedToken} symbol={symbol} />
+            }
+            status={<AirdropStatusMetric status={displayStatus} />}
+            footer={
               <>
-                <div className="flex items-start justify-between gap-2">
-                  <p className="financial-value text-body-sm font-semibold text-pump-text">
-                    {timeLeftLabel(displayStatus, detail)}
-                  </p>
-                  <span className="financial-value shrink-0 text-caption text-pump-muted">
-                    {Math.round(qualifyProgress)}%
-                  </span>
-                </div>
-                <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-pump-surface/60">
-                  <div
-                    className="h-full rounded-full bg-pump-accent transition-all duration-500"
-                    style={{ width: `${qualifyProgress}%` }}
-                  />
-                </div>
+                Qualify window · {formatQualifyDate(detail.qualifyStart)} –{" "}
+                {formatQualifyDate(detail.qualifyEnd)}
               </>
-            ) : (
-              <p className="financial-value text-body-sm font-semibold text-pump-text">
-                {timeLeftLabel(displayStatus, detail)}
-              </p>
-            )}
-          </StatCell>
-          <StatCell label="Qualify window">
-            <p className="text-caption font-medium text-pump-text">
-              {formatQualifyDateTime(detail.qualifyStart)}
-            </p>
-            <p className="text-[10px] text-pump-muted">→ {formatQualifyDateTime(detail.qualifyEnd)}</p>
-          </StatCell>
-          <StatCell label={detail.merkleRoot ? "Claim until" : "Distribution"}>
-            <p className="text-caption font-medium text-pump-text">
-              {detail.merkleRoot
-                ? detail.claimEnd
-                  ? formatQualifyDateTime(detail.claimEnd)
-                  : "24h window"
-                : "TOP 100 split"}
-            </p>
-            <p className="text-[10px] text-pump-muted">
-              {detail.merkleRoot
-                ? "Winners claim on-chain"
-                : `Top 100 ranked by $${symbol} balance at qualify end`}
-            </p>
-          </StatCell>
-        </dl>
+            }
+          />
+        </div>
       </section>
 
       {displayStatus === "UPCOMING" ? (
-        <p className="rounded-lg border border-pump-border/25 bg-pump-surface/40 px-3 py-2.5 text-body-sm text-pump-muted">
-          Qualification starts {formatQualifyDateTime(detail.qualifyStart)}. Complete social tasks now;
-          on-chain tracking begins when qualify opens.
+        <p className="flex flex-wrap items-center gap-x-1.5 gap-y-1 rounded-lg border border-pump-border/25 bg-pump-surface/40 px-3 py-2.5 text-body-sm text-pump-muted">
+          <HourglassIcon size={15} className="self-center" />
+          <span>
+            Qualification opens in{" "}
+            <span className="font-medium tabular-nums text-pump-text" aria-live="polite">
+              {nowTick >= 0 ? formatDurationUntil(detail.qualifyStart) : null}
+            </span>
+            {hasSocialGate
+              ? ". Complete social tasks now; on-chain tracking begins when qualify opens."
+              : hasOnchainRules
+                ? ". On-chain tracking begins when qualify opens."
+                : "."}
+          </span>
         </p>
       ) : null}
 
@@ -1322,6 +1326,7 @@ export function AirdropDetailPanel({ airdropId }: { airdropId: string }) {
                     progressError={progressError}
                     progress={progress}
                     onConnect={() => openConnectModal?.()}
+                    returnTo={airdropReturnTo}
                   />
                 </section>
               </div>

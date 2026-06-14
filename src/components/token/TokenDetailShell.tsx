@@ -5,6 +5,7 @@ import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import type { TokenDetail, TradeItem } from "@/lib/db/launchpad";
 import { AppShell } from "@/components/layout/AppShell";
 import { TokenDetailLive } from "@/components/token/TokenDetailLive";
+import { TokenDetailBackLink } from "@/components/token/TokenDetailBackLink";
 import { TokenDetailBodySkeleton } from "@/components/token/TokenDetailBodySkeleton";
 import {
   buildOptimisticTokenDetail,
@@ -29,12 +30,18 @@ function TokenDetailView({
 }) {
   return (
     <>
-      <Link
-        href="/"
-        className="inline-flex items-center text-body-sm text-pump-muted transition hover:text-pump-accent"
+      <Suspense
+        fallback={
+          <Link
+            href="/"
+            className="inline-flex items-center text-body-sm text-pump-muted transition hover:text-pump-accent"
+          >
+            ← Arena
+          </Link>
+        }
       >
-        ← Arena
-      </Link>
+        <TokenDetailBackLink />
+      </Suspense>
 
       {indexerSyncing ? (
         <p className="notice-warning mt-4 text-xs">
