@@ -4,6 +4,10 @@ import { withTransaction } from "./db.js";
 import { dbAddress, eventId, ratioWeiToDecimal, weiToDecimal } from "./utils.js";
 import { PointsBridge, TASK_KEYS } from "./points.js";
 import { recomputeKingAfterTrade } from "./king.js";
+import {
+  markParticipantClaimedIndexer,
+  refreshParticipantSnapshotIndexer,
+} from "./airdrop-participant-snapshot.js";
 import { publishTrade } from "./redis-publish.js";
 import { FIRST_SMART_BUY_MIN_WEI, VOLUME_MONSTER_MIN_BNB } from "./mission-thresholds.js";
 
@@ -292,6 +296,26 @@ export class LaunchpadEventHandlers {
 
     if (!tradeResult) return;
 
+    if (isBuy) {
+      const activeAirdrops = await this.context.launchpadPool.query<{ id: string }>(
+        `
+          SELECT id::text
+          FROM airdrops
+          WHERE linked_token = $1
+            AND qualify_start <= $2::timestamptz
+            AND qualify_end >= $2::timestamptz
+        `,
+        [token, blockTime]
+      );
+      for (const row of activeAirdrops.rows) {
+        await refreshParticipantSnapshotIndexer(
+          this.context.launchpadPool,
+          row.id,
+          trader
+        ).catch(() => undefined);
+      }
+    }
+
     await this.awardTradeMissions(token, trader, isBuy, zugAmount, tradeEventId, txHash, blockTime);
     await recomputeKingAfterTrade(this.context, blockTime, txHash, token);
 
@@ -440,6 +464,13 @@ export class LaunchpadEventHandlers {
       `,
       [airdropId, claimant, amount, txHash.toLowerCase(), blockTime]
     );
+
+    await markParticipantClaimedIndexer(
+      this.context.launchpadPool,
+      airdropId,
+      claimant,
+      blockTime
+    ).catch(() => undefined);
   }
 
   private async handleAirdropRemainderSwept(log: ParsedLaunchpadLog): Promise<void> {

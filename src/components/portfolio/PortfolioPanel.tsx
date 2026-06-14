@@ -22,6 +22,7 @@ import { UserAvatar } from "@/components/user/UserAvatar";
 import { useUserAvatar } from "@/components/user/UserAvatarProvider";
 import { shortAddress } from "@/config/chain";
 import { TokenBoardTable } from "@/components/arena/TokenBoardTable";
+import { PortfolioAirdropsSection } from "@/components/portfolio/PortfolioAirdropsSection";
 import { PortfolioPanelSkeleton } from "@/components/portfolio/PortfolioPanelSkeleton";
 import { HoldingSwipeRow } from "@/components/portfolio/HoldingSwipeRow";
 import { HoldingsSwipeHint } from "@/components/portfolio/HoldingsSwipeHint";
@@ -892,6 +893,8 @@ export function PortfolioPanel() {
         </section>
 
         {error ? <div className="notice-error p-4">{error}</div> : null}
+
+        <PortfolioAirdropsSection address={address} />
 
         {data && !error ? (
           <>

@@ -471,9 +471,13 @@ export function AirdropsListClient() {
         const res = await fetch(`/api/airdrops/mine?address=${encodeURIComponent(address)}`, {
           cache: "no-store",
         });
-        const json = (await res.json()) as { data?: string[] };
+        const json = (await res.json()) as {
+          data?: Array<{ id: string } | string>;
+        };
         if (!cancelled && res.ok && Array.isArray(json.data)) {
-          setMineIds(new Set(json.data));
+          setMineIds(
+            new Set(json.data.map((entry) => (typeof entry === "string" ? entry : entry.id)))
+          );
         }
       } catch {
         if (!cancelled) setMineIds(new Set());

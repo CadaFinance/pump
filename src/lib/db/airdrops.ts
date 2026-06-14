@@ -1,5 +1,11 @@
 import type { AirdropRules, AirdropSocialTaskInput } from "@/lib/airdrop-rules";
 import { fetchLiveTokenBalance, fetchLiveTokenBalances } from "@/lib/airdrop-onchain";
+import {
+  computeParticipantProgress,
+  deriveAirdropNextAction,
+  type AirdropNextAction,
+} from "@/lib/airdrop-participant-snapshot";
+import { getAirdropDisplayStatus, type AirdropDisplayStatus } from "@/lib/airdrop-status";
 import { getLaunchpadPool } from "@/lib/db/launchpad";
 
 export type AirdropListItem = {
@@ -406,6 +412,10 @@ export async function completeSocialTask(
     }
 
     await client.query("COMMIT");
+
+    await refreshParticipantSnapshot(airdropId, address).catch(() => {
+      /* snapshot is best-effort */
+    });
   } catch (error) {
     await client.query("ROLLBACK");
     throw error;
@@ -646,6 +656,342 @@ export async function getAirdropProof(
   return { amount: row.amount, proof: row.proof_path };
 }
 
+export type MyAirdropParticipation = {
+  id: string;
+  title: string | null;
+  linkedToken: string;
+  linkedSymbol: string | null;
+  linkedName: string | null;
+  rewardToken: string | null;
+  rewardSymbol: string | null;
+  totalFunded: string;
+  status: string;
+  qualifyStart: string;
+  qualifyEnd: string;
+  claimEnd: string | null;
+  merkleRoot: string | null;
+  displayStatus: AirdropDisplayStatus;
+  socialTasksTotal: number;
+  socialTasksCompleted: number;
+  holdMet: boolean;
+  buyMet: boolean;
+  onchainQualified: boolean;
+  progressPct: number;
+  viewerRank: number | null;
+  claimableAmount: string | null;
+  claimedAt: string | null;
+  nextAction: AirdropNextAction;
+};
+
+async function queryParticipantHoldAndBuy(
+  linkedToken: string,
+  address: string,
+  qualifyStart: string,
+  qualifyEnd: string
+): Promise<{ holdCurrent: number; buyCurrent: number }> {
+  const pool = getLaunchpadPool();
+  const normalized = address.toLowerCase();
+
+  const [holdResult, buyResult] = await Promise.all([
+    pool.query<{ token_balance: string }>(
+      `
+        SELECT COALESCE(token_balance, 0)::text AS token_balance
+        FROM user_positions
+        WHERE token_address = $1 AND address = $2
+      `,
+      [linkedToken, normalized]
+    ),
+    pool.query<{ buy_volume: string }>(
+      `
+        SELECT COALESCE(SUM(zug_amount), 0)::text AS buy_volume
+        FROM trades
+        WHERE token_address = $1
+          AND trader_address = $2
+          AND side = 'BUY'
+          AND block_time >= $3::timestamptz
+          AND block_time <= $4::timestamptz
+      `,
+      [linkedToken, normalized, qualifyStart, qualifyEnd]
+    ),
+  ]);
+
+  return {
+    holdCurrent: Number(holdResult.rows[0]?.token_balance ?? 0),
+    buyCurrent: Number(buyResult.rows[0]?.buy_volume ?? 0),
+  };
+}
+
+/** Recompute and persist materialized progress for one wallet + campaign. */
+export async function refreshParticipantSnapshot(
+  airdropId: string,
+  address: string
+): Promise<void> {
+  const airdrop = await getAirdropById(airdropId, address);
+  if (!airdrop) return;
+
+  const pool = getLaunchpadPool();
+  const normalized = address.toLowerCase();
+
+  const requiredTasks = airdrop.socialTasks.filter((t) => t.isRequired);
+  const socialTasksTotal = requiredTasks.length;
+  const socialTasksCompleted = requiredTasks.filter((t) => t.completed).length;
+
+  const participant = await pool.query<{ social_gate_passed_at: Date | null }>(
+    `SELECT social_gate_passed_at FROM airdrop_participants WHERE airdrop_id = $1::bigint AND address = $2`,
+    [airdrop.id, normalized]
+  );
+
+  const socialGatePassed =
+    socialTasksTotal === 0 ||
+    socialTasksCompleted >= socialTasksTotal ||
+    participant.rows[0]?.social_gate_passed_at != null;
+
+  const minHoldWei = airdrop.rules.onchain?.minHoldWei;
+  const minBuyWei = airdrop.rules.onchain?.minBuyBnbWei;
+  const hasHoldRule = Boolean(minHoldWei && minHoldWei !== "0");
+  const hasBuyRule = Boolean(minBuyWei && minBuyWei !== "0");
+
+  let holdCurrent = 0;
+  let buyCurrent = 0;
+
+  if (socialGatePassed && (hasHoldRule || hasBuyRule)) {
+    const indexed = await queryParticipantHoldAndBuy(
+      airdrop.linkedToken,
+      normalized,
+      airdrop.qualifyStart,
+      airdrop.qualifyEnd
+    );
+    holdCurrent = indexed.holdCurrent;
+    buyCurrent = indexed.buyCurrent;
+
+    if (hasHoldRule) {
+      const liveHold = await fetchLiveTokenBalance(airdrop.linkedToken, normalized);
+      holdCurrent = Math.max(holdCurrent, Number(liveHold));
+    }
+  }
+
+  const progress = computeParticipantProgress({
+    socialTasksTotal,
+    socialTasksCompleted,
+    socialGatePassed,
+    hasHoldRule,
+    hasBuyRule,
+    minHoldTarget: hasHoldRule ? Number(weiStringToDecimal(minHoldWei!)) : 0,
+    minBuyTarget: hasBuyRule ? Number(weiStringToDecimal(minBuyWei!)) : 0,
+    holdCurrent,
+    buyCurrent,
+  });
+
+  const allocation = await pool.query<{ rank: number; amount: string }>(
+    `
+      SELECT rank, amount::text
+      FROM airdrop_allocations
+      WHERE airdrop_id = $1::bigint AND address = $2
+      LIMIT 1
+    `,
+    [airdrop.id, normalized]
+  );
+
+  const claim = await pool.query<{ block_time: Date }>(
+    `
+      SELECT block_time
+      FROM airdrop_claims
+      WHERE airdrop_id = $1::bigint AND claimant = $2
+      LIMIT 1
+    `,
+    [airdrop.id, normalized]
+  );
+
+  const viewerRank = allocation.rows[0]?.rank ?? null;
+  const claimableAmount = allocation.rows[0]?.amount ?? null;
+  const claimedAt = claim.rows[0]?.block_time?.toISOString() ?? null;
+
+  const snapshotProgressPct =
+    viewerRank != null && !claimedAt ? 100 : progress.progressPct;
+
+  await pool.query(
+    `
+      INSERT INTO airdrop_participants (
+        airdrop_id,
+        address,
+        social_gate_passed_at,
+        social_tasks_total,
+        social_tasks_completed,
+        hold_met,
+        buy_met,
+        onchain_qualified,
+        progress_pct,
+        viewer_rank,
+        claimable_amount,
+        claimed_at,
+        updated_at
+      )
+      VALUES (
+        $1::bigint, $2,
+        CASE WHEN $3::boolean THEN now() ELSE NULL END,
+        $4, $5, $6, $7, $8, $9, $10, $11, $12, now()
+      )
+      ON CONFLICT (airdrop_id, address) DO UPDATE SET
+        social_gate_passed_at = COALESCE(
+          airdrop_participants.social_gate_passed_at,
+          CASE WHEN $3::boolean THEN now() ELSE NULL END
+        ),
+        social_tasks_total = EXCLUDED.social_tasks_total,
+        social_tasks_completed = EXCLUDED.social_tasks_completed,
+        hold_met = EXCLUDED.hold_met,
+        buy_met = EXCLUDED.buy_met,
+        onchain_qualified = EXCLUDED.onchain_qualified,
+        progress_pct = EXCLUDED.progress_pct,
+        viewer_rank = COALESCE(EXCLUDED.viewer_rank, airdrop_participants.viewer_rank),
+        claimable_amount = COALESCE(EXCLUDED.claimable_amount, airdrop_participants.claimable_amount),
+        claimed_at = COALESCE(EXCLUDED.claimed_at, airdrop_participants.claimed_at),
+        updated_at = now()
+    `,
+    [
+      airdrop.id,
+      normalized,
+      socialGatePassed,
+      socialTasksTotal,
+      socialTasksCompleted,
+      progress.holdMet,
+      progress.buyMet,
+      progress.onchainQualified,
+      snapshotProgressPct,
+      viewerRank,
+      claimableAmount,
+      claimedAt,
+    ]
+  );
+}
+
+export async function listMyAirdropParticipations(
+  userAddress: string,
+  limit = 20
+): Promise<MyAirdropParticipation[]> {
+  const pool = getLaunchpadPool();
+  const normalized = userAddress.toLowerCase();
+
+  const result = await pool.query<{
+    id: string;
+    rules_json: AirdropRules;
+    linked_token: string;
+    reward_token: string | null;
+    total_funded: string;
+    status: string;
+    qualify_start: Date;
+    qualify_end: Date;
+    claim_end: Date | null;
+    merkle_root: string | null;
+    symbol: string | null;
+    name: string | null;
+    reward_symbol: string | null;
+    social_tasks_total: number | null;
+    social_tasks_completed: number | null;
+    hold_met: boolean | null;
+    buy_met: boolean | null;
+    onchain_qualified: boolean | null;
+    progress_pct: number | null;
+    viewer_rank: number | null;
+    claimable_amount: string | null;
+    claimed_at: Date | null;
+  }>(
+    `
+      SELECT
+        a.id,
+        a.rules_json,
+        a.linked_token,
+        a.reward_token,
+        a.total_funded,
+        a.status,
+        a.qualify_start,
+        a.qualify_end,
+        a.claim_end,
+        a.merkle_root,
+        t.symbol,
+        t.name,
+        rt.symbol AS reward_symbol,
+        p.social_tasks_total,
+        p.social_tasks_completed,
+        p.hold_met,
+        p.buy_met,
+        p.onchain_qualified,
+        p.progress_pct,
+        COALESCE(p.viewer_rank, aa.rank) AS viewer_rank,
+        COALESCE(p.claimable_amount::text, aa.amount::text) AS claimable_amount,
+        COALESCE(p.claimed_at, ac.block_time) AS claimed_at
+      FROM (
+        SELECT airdrop_id, MAX(sort_at) AS sort_at
+        FROM (
+          SELECT p.airdrop_id, GREATEST(p.updated_at, COALESCE(p.first_onchain_at, p.updated_at)) AS sort_at
+          FROM airdrop_participants p
+          WHERE p.address = $1
+            AND (
+              p.first_onchain_at IS NOT NULL
+              OR p.onchain_qualified = true
+              OR p.viewer_rank IS NOT NULL
+            )
+          UNION ALL
+          SELECT aa.airdrop_id, aa.created_at AS sort_at
+          FROM airdrop_allocations aa
+          WHERE aa.address = $1
+        ) raw
+        GROUP BY airdrop_id
+      ) joined
+      JOIN airdrops a ON a.id = joined.airdrop_id
+      LEFT JOIN tokens t ON t.address = a.linked_token
+      LEFT JOIN tokens rt ON rt.address = a.reward_token
+      LEFT JOIN airdrop_participants p
+        ON p.airdrop_id = a.id AND p.address = $1
+      LEFT JOIN airdrop_allocations aa
+        ON aa.airdrop_id = a.id AND aa.address = $1
+      LEFT JOIN airdrop_claims ac
+        ON ac.airdrop_id = a.id AND ac.claimant = $1
+      ORDER BY joined.sort_at DESC
+      LIMIT $2
+    `,
+    [normalized, limit]
+  );
+
+  return result.rows.map((row) => {
+    const displayStatus = getAirdropDisplayStatus({
+      status: row.status,
+      qualifyStart: row.qualify_start.toISOString(),
+      qualifyEnd: row.qualify_end.toISOString(),
+      claimEnd: row.claim_end?.toISOString() ?? null,
+      merkleRoot: row.merkle_root,
+    });
+    const claimedAt = row.claimed_at?.toISOString() ?? null;
+    const viewerRank = row.viewer_rank ?? null;
+
+    return {
+      id: row.id,
+      title: row.rules_json?.title ?? null,
+      linkedToken: row.linked_token,
+      linkedSymbol: row.symbol,
+      linkedName: row.name,
+      rewardToken: row.reward_token,
+      rewardSymbol: row.reward_symbol,
+      totalFunded: row.total_funded,
+      status: row.status,
+      qualifyStart: row.qualify_start.toISOString(),
+      qualifyEnd: row.qualify_end.toISOString(),
+      claimEnd: row.claim_end?.toISOString() ?? null,
+      merkleRoot: row.merkle_root,
+      displayStatus,
+      socialTasksTotal: row.social_tasks_total ?? 0,
+      socialTasksCompleted: row.social_tasks_completed ?? 0,
+      holdMet: row.hold_met ?? false,
+      buyMet: row.buy_met ?? false,
+      onchainQualified: row.onchain_qualified ?? false,
+      progressPct: row.progress_pct ?? 0,
+      viewerRank,
+      claimableAmount: row.claimable_amount,
+      claimedAt,
+      nextAction: deriveAirdropNextAction(displayStatus, { viewerRank, claimedAt }),
+    };
+  });
+}
+
 export async function listSavedAirdropIds(userAddress: string): Promise<string[]> {
   const pool = getLaunchpadPool();
   const normalized = userAddress.toLowerCase();
@@ -695,32 +1041,10 @@ export async function toggleAirdropSave(
   return true;
 }
 
-/** Campaigns the wallet meaningfully joined (on-chain buy during qualify, or allocated). */
+/** @deprecated Use listMyAirdropParticipations — ids only helper */
 export async function listMyAirdropIds(userAddress: string): Promise<string[]> {
-  const pool = getLaunchpadPool();
-  const normalized = userAddress.toLowerCase();
-  const result = await pool.query<{ airdrop_id: string }>(
-    `
-      SELECT airdrop_id::text
-      FROM (
-        SELECT airdrop_id, MAX(sort_at) AS sort_at
-        FROM (
-          SELECT p.airdrop_id, GREATEST(p.updated_at, p.first_onchain_at) AS sort_at
-          FROM airdrop_participants p
-          WHERE p.address = $1
-            AND p.first_onchain_at IS NOT NULL
-          UNION ALL
-          SELECT aa.airdrop_id, aa.created_at AS sort_at
-          FROM airdrop_allocations aa
-          WHERE aa.address = $1
-        ) raw
-        GROUP BY airdrop_id
-      ) joined
-      ORDER BY sort_at DESC
-    `,
-    [normalized]
-  );
-  return result.rows.map((row) => row.airdrop_id);
+  const rows = await listMyAirdropParticipations(userAddress, 500);
+  return rows.map((row) => row.id);
 }
 
 function weiStringToDecimal(wei: string): string {

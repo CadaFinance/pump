@@ -13,6 +13,7 @@ import { buildWinnerAmounts, sumAmounts } from "./airdrop-distribution.js";
 import { buildAllocationsWithProofs } from "./airdrop-merkle.js";
 import { pumpAirdropManagerAbi } from "./abi.js";
 import { closePools, createPools, loadContractRegistry } from "./db.js";
+import { syncAllocationSnapshotsIndexer } from "./airdrop-participant-snapshot.js";
 
 type AirdropRules = {
   onchain?: {
@@ -236,6 +237,8 @@ async function finalizeOne(
       ]
     );
   }
+
+  await syncAllocationSnapshotsIndexer(pools.launchpad, airdrop.id).catch(() => undefined);
 
   console.log(
     `finalized airdrop ${airdrop.on_chain_id}: winners=${qualified.length}, root=${root}, tx=${hash}`

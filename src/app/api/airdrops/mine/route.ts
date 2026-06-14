@@ -1,7 +1,7 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { normalizeAddressParam } from "@/lib/address";
-import { listMyAirdropIds } from "@/lib/db/airdrops";
+import { listMyAirdropParticipations } from "@/lib/db/airdrops";
 
 export async function GET(request: NextRequest) {
   const address = normalizeAddressParam(request.nextUrl.searchParams.get("address"));
@@ -9,8 +9,11 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Valid address query param is required" }, { status: 400 });
   }
 
+  const limitRaw = request.nextUrl.searchParams.get("limit");
+  const limit = limitRaw ? Math.min(50, Math.max(1, Number(limitRaw) || 20)) : 20;
+
   try {
-    const data = await listMyAirdropIds(address);
+    const data = await listMyAirdropParticipations(address, limit);
     return NextResponse.json({ data });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
