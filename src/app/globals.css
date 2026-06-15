@@ -1861,10 +1861,14 @@ code,
     width: max-content;
     padding-inline: 0.75rem;
     will-change: transform;
+    transform: translate3d(0, 0, 0);
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
   }
 
   .mcap-ticker-track--ready {
     animation: mcap-ticker-scroll 40s linear infinite;
+    -webkit-animation: mcap-ticker-scroll 40s linear infinite;
   }
 
   .mcap-ticker-segment {
@@ -1929,6 +1933,17 @@ code,
       transform: translate3d(0, 0, 0);
     }
     100% {
+      transform: translate3d(var(--mcap-ticker-shift, -50%), 0, 0);
+    }
+  }
+
+  @-webkit-keyframes mcap-ticker-scroll {
+    0% {
+      -webkit-transform: translate3d(0, 0, 0);
+      transform: translate3d(0, 0, 0);
+    }
+    100% {
+      -webkit-transform: translate3d(var(--mcap-ticker-shift, -50%), 0, 0);
       transform: translate3d(var(--mcap-ticker-shift, -50%), 0, 0);
     }
   }

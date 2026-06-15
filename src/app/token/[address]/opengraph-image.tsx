@@ -10,6 +10,8 @@ type ImageProps = {
   params: Promise<{ address: string }>;
 };
 
+const flex = "flex" as const;
+
 function formatMcapBnb(value: string): string {
   const n = Number(value);
   if (!Number.isFinite(n) || n <= 0) return "—";
@@ -43,7 +45,7 @@ function notFoundImage(message: string) {
         style={{
           width: "100%",
           height: "100%",
-          display: "flex",
+          display: flex,
           alignItems: "center",
           justifyContent: "center",
           background: "#0f1729",
@@ -52,10 +54,19 @@ function notFoundImage(message: string) {
           fontFamily: "system-ui, sans-serif",
         }}
       >
-        {message}
+        <span>{message}</span>
       </div>
     ),
     { ...size }
+  );
+}
+
+function StatBlock({ label, value, valueColor }: { label: string; value: string; valueColor?: string }) {
+  return (
+    <div style={{ display: flex, flexDirection: "column" }}>
+      <span style={{ color: "#7a92b8", fontSize: 20, marginBottom: 6 }}>{label}</span>
+      <span style={{ fontWeight: 600, color: valueColor ?? "#f4f7fc" }}>{value}</span>
+    </div>
   );
 }
 
@@ -91,6 +102,40 @@ export default async function TokenOpenGraphImage({ params }: ImageProps) {
       : "#9eb4d8";
   const logoSrc = await loadLogoSrc(token.logoUrl);
   const initials = tokenInitials(token.symbol);
+  const symbolLabel = `$${token.symbol}`;
+  const mcapLabel = formatMcapBnb(token.marketCapBnb);
+
+  const logoNode = logoSrc ? (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={logoSrc}
+      alt=""
+      width={120}
+      height={120}
+      style={{
+        borderRadius: 4,
+        border: "2px solid #3d5a9a",
+        objectFit: "cover",
+      }}
+    />
+  ) : (
+    <div
+      style={{
+        width: 120,
+        height: 120,
+        display: flex,
+        alignItems: "center",
+        justifyContent: "center",
+        border: "2px solid #3d5a9a",
+        background: "rgba(61, 90, 154, 0.2)",
+        fontSize: 40,
+        fontWeight: 700,
+        color: "#9eb4d8",
+      }}
+    >
+      <span>{initials}</span>
+    </div>
+  );
 
   return new ImageResponse(
     (
@@ -98,7 +143,7 @@ export default async function TokenOpenGraphImage({ params }: ImageProps) {
         style={{
           width: "100%",
           height: "100%",
-          display: "flex",
+          display: flex,
           flexDirection: "column",
           justifyContent: "space-between",
           padding: 72,
@@ -107,81 +152,33 @@ export default async function TokenOpenGraphImage({ params }: ImageProps) {
           fontFamily: "system-ui, sans-serif",
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-          <div
-            style={{
-              fontSize: 28,
-              fontWeight: 700,
-              color: "#6b9fff",
-              letterSpacing: "0.08em",
-            }}
-          >
+        <div style={{ display: flex, alignItems: "center", gap: 16 }}>
+          <span style={{ fontSize: 28, fontWeight: 700, color: "#6b9fff", letterSpacing: "0.08em" }}>
             PUMP
-          </div>
-          <div style={{ fontSize: 22, color: "#7a92b8" }}>BSC Launchpad</div>
+          </span>
+          <span style={{ fontSize: 22, color: "#7a92b8" }}>BSC Launchpad</span>
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 32 }}>
-          {logoSrc ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={logoSrc}
-              alt=""
-              width={120}
-              height={120}
-              style={{
-                borderRadius: 4,
-                border: "2px solid #3d5a9a",
-                objectFit: "cover",
-              }}
-            />
-          ) : (
-            <div
-              style={{
-                width: 120,
-                height: 120,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                border: "2px solid #3d5a9a",
-                background: "rgba(61, 90, 154, 0.2)",
-                fontSize: 40,
-                fontWeight: 700,
-                color: "#9eb4d8",
-              }}
-            >
-              {initials}
-            </div>
-          )}
-          <div>
-            <div style={{ fontSize: 72, fontWeight: 700, letterSpacing: "-0.02em" }}>
-              ${token.symbol}
-            </div>
-            <div
+        <div style={{ display: flex, alignItems: "center", gap: 32 }}>
+          {logoNode}
+          <div style={{ display: flex, flexDirection: "column" }}>
+            <span style={{ fontSize: 72, fontWeight: 700, letterSpacing: "-0.02em" }}>{symbolLabel}</span>
+            <span
               style={{
                 marginTop: 12,
                 fontSize: 36,
                 color: "#9eb4d8",
                 maxWidth: 720,
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
               }}
             >
               {token.name}
-            </div>
+            </span>
           </div>
         </div>
 
-        <div style={{ display: "flex", gap: 48, fontSize: 28 }}>
-          <div>
-            <div style={{ color: "#7a92b8", fontSize: 20, marginBottom: 6 }}>MCAP</div>
-            <div style={{ fontWeight: 600 }}>{formatMcapBnb(token.marketCapBnb)}</div>
-          </div>
-          <div>
-            <div style={{ color: "#7a92b8", fontSize: 20, marginBottom: 6 }}>24H</div>
-            <div style={{ fontWeight: 600, color: changeColor }}>{changeLabel}</div>
-          </div>
+        <div style={{ display: flex, gap: 48, fontSize: 28 }}>
+          <StatBlock label="MCAP" value={mcapLabel} />
+          <StatBlock label="24H" value={changeLabel} valueColor={changeColor} />
         </div>
       </div>
     ),

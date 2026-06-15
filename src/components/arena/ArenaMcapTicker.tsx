@@ -13,6 +13,8 @@ type ArenaMcapTickerProps = {
 };
 
 function TickerItem({ token }: { token: TokenListItem }) {
+  const symbolLabel = `$${token.symbol}`;
+
   return (
     <Link href={`/token/${token.address}`} className="mcap-ticker-item">
       <TokenAvatar
@@ -21,7 +23,7 @@ function TickerItem({ token }: { token: TokenListItem }) {
         logoUrl={token.logoUrl}
         size={18}
       />
-      <span className="mcap-ticker-symbol">${token.symbol}</span>
+      <span className="mcap-ticker-symbol">{symbolLabel}</span>
       <span
         className={`financial-value mcap-ticker-pct ${pctTone(token.change24hPct ?? null)}`}
       >
@@ -39,9 +41,27 @@ function repeatTokens(source: TokenListItem[], repeats: number): TokenListItem[]
   return out;
 }
 
+function measureSegmentShift(first: HTMLElement, second: HTMLElement): number {
+  const firstRect = first.getBoundingClientRect();
+  const secondRect = second.getBoundingClientRect();
+  const shift = secondRect.left - firstRect.left;
+  if (shift > 0) return Math.round(shift);
+
+  const width = firstRect.width;
+  if (width <= 0) return 0;
+
+  const track = first.parentElement;
+  if (!track) return width;
+
+  const gapValue = getComputedStyle(track).columnGap || getComputedStyle(track).gap || "0px";
+  const gap = Number.parseFloat(gapValue) || 0;
+  return Math.round(width + gap);
+}
+
 export function ArenaMcapTicker({ tokens }: ArenaMcapTickerProps) {
   const [reducedMotion, setReducedMotion] = useState(false);
   const viewportRef = useRef<HTMLDivElement>(null);
+  const trackRef = useRef<HTMLDivElement>(null);
   const measureRef = useRef<HTMLDivElement>(null);
   const segmentRef = useRef<HTMLDivElement>(null);
   const segmentDupRef = useRef<HTMLDivElement>(null);
@@ -61,6 +81,7 @@ export function ArenaMcapTicker({ tokens }: ArenaMcapTickerProps) {
   useLayoutEffect(() => {
     if (reducedMotion) {
       setLoopTokens(topTokens);
+      setShiftPx(0);
       return;
     }
 
@@ -68,7 +89,7 @@ export function ArenaMcapTicker({ tokens }: ArenaMcapTickerProps) {
     const measure = measureRef.current;
     if (!viewport || !measure || topTokens.length === 0) return;
 
-    const sync = () => {
+    const syncLoopTokens = () => {
       const unitWidth = measure.scrollWidth;
       const viewportWidth = viewport.clientWidth;
       if (unitWidth <= 0 || viewportWidth <= 0) {
@@ -84,35 +105,77 @@ export function ArenaMcapTicker({ tokens }: ArenaMcapTickerProps) {
       setLoopTokens(repeatTokens(topTokens, repeats));
     };
 
-    sync();
-    const ro = new ResizeObserver(sync);
+    syncLoopTokens();
+    const ro = new ResizeObserver(syncLoopTokens);
     ro.observe(viewport);
     ro.observe(measure);
     return () => ro.disconnect();
   }, [topTokens, reducedMotion]);
 
   useLayoutEffect(() => {
-    if (reducedMotion || loopTokens.length === 0) return;
+    if (reducedMotion || loopTokens.length === 0) {
+      setShiftPx(0);
+      return;
+    }
+
+    let cancelled = false;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
 
     const measureLoop = () => {
       const first = segmentRef.current;
       const second = segmentDupRef.current;
       if (!first || !second) return;
-      const shift = second.offsetLeft - first.offsetLeft;
-      if (shift > 0) setShiftPx(shift);
+
+      const shift = measureSegmentShift(first, second);
+      if (shift > 0) {
+        if (!cancelled) setShiftPx(shift);
+        return;
+      }
+
+      retryTimer = setTimeout(() => {
+        if (cancelled) return;
+        const retryFirst = segmentRef.current;
+        const retrySecond = segmentDupRef.current;
+        if (!retryFirst || !retrySecond) return;
+        const retryShift = measureSegmentShift(retryFirst, retrySecond);
+        if (retryShift > 0) setShiftPx(retryShift);
+      }, 120);
     };
 
     measureLoop();
+    const raf = requestAnimationFrame(() => {
+      measureLoop();
+    });
+
     const ro = new ResizeObserver(measureLoop);
     if (segmentRef.current) ro.observe(segmentRef.current);
     if (segmentDupRef.current) ro.observe(segmentDupRef.current);
-    return () => ro.disconnect();
+    if (viewportRef.current) ro.observe(viewportRef.current);
+
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(raf);
+      if (retryTimer) clearTimeout(retryTimer);
+      ro.disconnect();
+    };
   }, [loopTokens, reducedMotion]);
+
+  useEffect(() => {
+    if (reducedMotion || shiftPx <= 0) return;
+
+    const track = trackRef.current;
+    if (!track) return;
+
+    // Safari sometimes skips CSS animation when the class/var is applied after first paint.
+    track.style.animation = "none";
+    void track.offsetHeight;
+    track.style.removeProperty("animation");
+  }, [shiftPx, reducedMotion]);
 
   if (topTokens.length === 0) return null;
 
   const loopReady = !reducedMotion && loopTokens.length > 0 && shiftPx > 0;
-  const trackStyle = loopReady
+  const viewportStyle = loopReady
     ? ({ "--mcap-ticker-shift": `-${shiftPx}px` } as React.CSSProperties)
     : undefined;
 
@@ -126,15 +189,15 @@ export function ArenaMcapTicker({ tokens }: ArenaMcapTickerProps) {
         Top tokens by market cap:{" "}
         {topTokens.map((token) => `$${token.symbol}`).join(", ")}
       </div>
-      <div ref={viewportRef} className="mcap-ticker-viewport" aria-hidden={!reducedMotion}>
+      <div ref={viewportRef} className="mcap-ticker-viewport" style={viewportStyle}>
         <div ref={measureRef} className="mcap-ticker-measure" aria-hidden>
           {topTokens.map((token) => (
             <TickerItem key={`measure-${token.address}`} token={token} />
           ))}
         </div>
         <div
+          ref={trackRef}
           className={`mcap-ticker-track${loopReady ? " mcap-ticker-track--ready" : ""}`}
-          style={trackStyle}
         >
           <div ref={segmentRef} className="mcap-ticker-segment">
             {(loopTokens.length > 0 ? loopTokens : topTokens).map((token, index) => (
