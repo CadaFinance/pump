@@ -1803,6 +1803,7 @@ code,
   .mcap-ticker-viewport {
     position: relative;
     overflow: hidden;
+    transform: translateZ(0);
   }
 
   .mcap-ticker-measure {
@@ -1861,9 +1862,6 @@ code,
     width: max-content;
     padding-inline: 0.75rem;
     will-change: transform;
-    transform: translate3d(0, 0, 0);
-    backface-visibility: hidden;
-    -webkit-backface-visibility: hidden;
   }
 
   .mcap-ticker-track--active {
@@ -2678,11 +2676,15 @@ code,
     .hourglass-sand-bottom,
     .progress-fill,
     .koth-banner,
-    .mcap-ticker-track,
     [data-board-key] {
       animation: none !important;
       transition: none !important;
       transform: none !important;
+    }
+
+    .mcap-ticker:not(.mcap-ticker-static) .mcap-ticker-track {
+      animation: none !important;
+      transition: none !important;
     }
   }
 }

@@ -42,37 +42,32 @@ function repeatTokens(source: TokenListItem[], repeats: number): TokenListItem[]
   return out;
 }
 
-function measureSegmentShift(first: HTMLElement, second: HTMLElement): number {
-  const firstRect = first.getBoundingClientRect();
-  const secondRect = second.getBoundingClientRect();
-  const shift = secondRect.left - firstRect.left;
-  if (shift > 0) return Math.round(shift);
-
-  const width = firstRect.width;
-  if (width <= 0) return 0;
-
-  const track = first.parentElement;
-  if (!track) return width;
-
-  const gapValue = getComputedStyle(track).columnGap || getComputedStyle(track).gap || "0px";
-  const gap = Number.parseFloat(gapValue) || 0;
-  return Math.round(width + gap);
+function readTrackGap(track: HTMLElement): number {
+  const style = getComputedStyle(track);
+  const gapValue = style.columnGap || style.gap || "0px";
+  return Number.parseFloat(gapValue) || 0;
 }
 
-function startTickerLoop(track: HTMLElement, shiftPx: number): Animation {
-  track.style.transform = "translate3d(0, 0, 0)";
+/** One loop = first segment width + flex gap (Safari-safe vs offsetLeft between segments). */
+function measureLoopShift(segment: HTMLElement | null): number {
+  if (!segment) return 0;
 
-  return track.animate(
-    [
-      { transform: "translate3d(0, 0, 0)" },
-      { transform: `translate3d(-${shiftPx}px, 0, 0)` },
-    ],
-    {
-      duration: TICKER_LOOP_MS,
-      iterations: Infinity,
-      easing: "linear",
-    }
-  );
+  const track = segment.parentElement;
+  if (!track) return 0;
+
+  const width =
+    segment.offsetWidth ||
+    segment.scrollWidth ||
+    segment.getBoundingClientRect().width;
+
+  if (width <= 0) return 0;
+  return Math.round(width + readTrackGap(track));
+}
+
+function setTrackTranslate(track: HTMLElement, offsetPx: number) {
+  const value = `translate3d(${-offsetPx}px, 0, 0)`;
+  track.style.transform = value;
+  track.style.webkitTransform = value;
 }
 
 export function ArenaMcapTicker({ tokens }: ArenaMcapTickerProps) {
@@ -82,7 +77,7 @@ export function ArenaMcapTicker({ tokens }: ArenaMcapTickerProps) {
   const measureRef = useRef<HTMLDivElement>(null);
   const segmentRef = useRef<HTMLDivElement>(null);
   const segmentDupRef = useRef<HTMLDivElement>(null);
-  const animationRef = useRef<Animation | null>(null);
+  const rafRef = useRef<number | null>(null);
   const [loopTokens, setLoopTokens] = useState<TokenListItem[]>([]);
   const [shiftPx, setShiftPx] = useState(0);
 
@@ -137,42 +132,73 @@ export function ArenaMcapTicker({ tokens }: ArenaMcapTickerProps) {
     }
 
     let cancelled = false;
-    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    const timers: ReturnType<typeof setTimeout>[] = [];
 
     const measureLoop = () => {
-      const first = segmentRef.current;
-      const second = segmentDupRef.current;
-      if (!first || !second) return;
+      if (cancelled) return;
 
-      const shift = measureSegmentShift(first, second);
+      const first = segmentRef.current;
+      const shift = measureLoopShift(first);
+
       if (shift > 0) {
-        if (!cancelled) setShiftPx(shift);
-        return;
+        setShiftPx((prev) => (prev === shift ? prev : shift));
+        return true;
       }
 
-      retryTimer = setTimeout(() => {
-        if (cancelled) return;
-        const retryFirst = segmentRef.current;
-        const retrySecond = segmentDupRef.current;
-        if (!retryFirst || !retrySecond) return;
-        const retryShift = measureSegmentShift(retryFirst, retrySecond);
-        if (retryShift > 0) setShiftPx(retryShift);
-      }, 120);
+      return false;
+    };
+
+    const scheduleRetries = () => {
+      if (measureLoop()) return;
+
+      [0, 50, 120, 300, 600, 1200].forEach((delay) => {
+        timers.push(
+          setTimeout(() => {
+            measureLoop();
+          }, delay)
+        );
+      });
     };
 
     measureLoop();
-    const raf = requestAnimationFrame(measureLoop);
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        scheduleRetries();
+      });
+    });
 
-    const ro = new ResizeObserver(measureLoop);
+    const ro = new ResizeObserver(() => {
+      measureLoop();
+    });
+
     if (segmentRef.current) ro.observe(segmentRef.current);
     if (segmentDupRef.current) ro.observe(segmentDupRef.current);
     if (viewportRef.current) ro.observe(viewportRef.current);
 
+    const segment = segmentRef.current;
+    const dup = segmentDupRef.current;
+    const onImageLoad = () => measureLoop();
+    const images = [
+      ...(segment ? Array.from(segment.querySelectorAll("img")) : []),
+      ...(dup ? Array.from(dup.querySelectorAll("img")) : []),
+    ];
+    images.forEach((img) => {
+      if (img.complete) return;
+      img.addEventListener("load", onImageLoad, { once: true });
+      img.addEventListener("error", onImageLoad, { once: true });
+    });
+
+    window.addEventListener("load", onImageLoad);
+
     return () => {
       cancelled = true;
-      cancelAnimationFrame(raf);
-      if (retryTimer) clearTimeout(retryTimer);
+      timers.forEach(clearTimeout);
       ro.disconnect();
+      window.removeEventListener("load", onImageLoad);
+      images.forEach((img) => {
+        img.removeEventListener("load", onImageLoad);
+        img.removeEventListener("error", onImageLoad);
+      });
     };
   }, [loopTokens, reducedMotion]);
 
@@ -180,41 +206,72 @@ export function ArenaMcapTicker({ tokens }: ArenaMcapTickerProps) {
     const track = trackRef.current;
     if (!track) return;
 
-    animationRef.current?.cancel();
-    animationRef.current = null;
-
-    if (reducedMotion || shiftPx <= 0) {
+    const stop = () => {
+      if (rafRef.current != null) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
       track.style.transform = "";
-      return;
-    }
-
-    const run = () => {
-      animationRef.current?.cancel();
-      animationRef.current = startTickerLoop(track, shiftPx);
+      track.style.webkitTransform = "";
     };
 
-    run();
+    stop();
+
+    if (reducedMotion || shiftPx <= 0) return;
+
+    let running = true;
+    let lastTime = performance.now();
+    let offset = 0;
+    const pxPerMs = shiftPx / TICKER_LOOP_MS;
+
+    const tick = (now: number) => {
+      if (!running) return;
+
+      const delta = Math.min(now - lastTime, 64);
+      lastTime = now;
+      offset += delta * pxPerMs;
+
+      if (offset >= shiftPx) {
+        offset %= shiftPx;
+      }
+
+      setTrackTranslate(track, offset);
+      rafRef.current = requestAnimationFrame(tick);
+    };
+
+    const start = () => {
+      lastTime = performance.now();
+      rafRef.current = requestAnimationFrame(tick);
+    };
+
+    start();
 
     const onPageShow = (event: PageTransitionEvent) => {
-      if (event.persisted) run();
+      if (event.persisted) {
+        stop();
+        offset = 0;
+        start();
+      }
     };
 
     const onVisibility = () => {
-      if (document.visibilityState !== "visible") return;
-      const anim = animationRef.current;
-      if (!anim || anim.playState === "running") return;
-      run();
+      if (document.visibilityState === "hidden") {
+        stop();
+        return;
+      }
+      stop();
+      offset = 0;
+      start();
     };
 
     window.addEventListener("pageshow", onPageShow);
     document.addEventListener("visibilitychange", onVisibility);
 
     return () => {
+      running = false;
       window.removeEventListener("pageshow", onPageShow);
       document.removeEventListener("visibilitychange", onVisibility);
-      animationRef.current?.cancel();
-      animationRef.current = null;
-      track.style.transform = "";
+      stop();
     };
   }, [shiftPx, reducedMotion]);
 
