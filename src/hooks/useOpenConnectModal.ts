@@ -1,14 +1,13 @@
 "use client";
 
 import { useCallback } from "react";
-import { useAppKit } from "@reown/appkit/react";
+import { modal } from "@reown/appkit/react";
+import "@/lib/appkit";
 
 export function useOpenConnectModal() {
-  const { open } = useAppKit();
-
   const openConnectModal = useCallback(() => {
-    open();
-  }, [open]);
+    void modal?.open();
+  }, []);
 
   return { openConnectModal };
 }

@@ -26,18 +26,31 @@ export const appKitNetworks = [pumpAppKitNetwork] as [typeof pumpAppKitNetwork, 
 
 const initialTheme = getAppKitThemeOptions("slate");
 
-export const wagmiAdapter = new WagmiAdapter({
-  storage: createStorage({ storage: cookieStorage }),
-  ssr: true,
-  projectId,
-  networks: appKitNetworks,
-  transports: {
-    [pumpAppKitNetwork.id]: http(rpcUrl),
-  },
-});
+type AppKitGlobal = typeof globalThis & {
+  __pumpWagmiAdapter?: WagmiAdapter;
+};
+
+const globalStore = globalThis as AppKitGlobal;
+
+function createWagmiAdapter() {
+  return new WagmiAdapter({
+    storage: createStorage({ storage: cookieStorage }),
+    ssr: true,
+    projectId,
+    networks: appKitNetworks,
+    transports: {
+      [pumpAppKitNetwork.id]: http(rpcUrl),
+    },
+  });
+}
+
+/** Reuse adapter across Fast Refresh to avoid duplicate WalletConnect instances in dev. */
+export const wagmiAdapter =
+  globalStore.__pumpWagmiAdapter ?? (globalStore.__pumpWagmiAdapter = createWagmiAdapter());
 
 export const wagmiConfig = wagmiAdapter.wagmiConfig;
 
+/** Must run at module load (SSR + client) before any AppKit hooks. */
 createAppKit({
   adapters: [wagmiAdapter],
   projectId,
@@ -47,9 +60,16 @@ createAppKit({
   themeMode: initialTheme.themeMode,
   themeVariables: initialTheme.themeVariables,
   features: {
-    analytics: false,
+    analytics: true,
+    history: true,
+    onramp: true,
+    swaps: false,
     email: true,
-    socials: ["google", "apple", "discord", "github"],
+    socials: ["google", "x", "discord", "github", "apple", "facebook"],
     emailShowWallets: true,
+    connectMethodsOrder: ["email", "social", "wallet"],
   },
 });
+
+/** No-op helper kept for callers; AppKit is initialized at module load. */
+export function ensureAppKit() {}

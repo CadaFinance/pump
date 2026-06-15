@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState, type MouseEvent } from "react";
-import { useAppKit } from "@reown/appkit/react";
+import { modal } from "@reown/appkit/react";
 import { formatEther } from "viem";
-import { useAccount, useBalance, useChainId, useDisconnect, useWatchBlockNumber } from "wagmi";
+import { useAccount, useBalance, useChainId, useDisconnect } from "wagmi";
 import { pumpChain, shortAddress } from "@/config/chain";
+import "@/lib/appkit";
 import { UserAvatar } from "@/components/user/UserAvatar";
 import { useUserAvatar } from "@/components/user/UserAvatarProvider";
 import { useBnbUsdPrice } from "@/hooks/useBnbUsdPrice";
@@ -179,20 +180,16 @@ function WalletMenu({
 function ConnectedWalletButton({ address }: { address: string }) {
   const { avatarId } = useUserAvatar();
   const { bnbUsd } = useBnbUsdPrice();
-  const { data: balance, refetch: refetchBalance } = useBalance({
-    address: address as `0x${string}`,
-    chainId: pumpChain.id,
-  });
-
-  useWatchBlockNumber({
-    chainId: pumpChain.id,
-    onBlockNumber: () => {
-      void refetchBalance();
-    },
-  });
   const [open, setOpen] = useState(false);
   const [showBnb, setShowBnb] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const { data: balance } = useBalance({
+    address: address as `0x${string}`,
+    chainId: pumpChain.id,
+    query: {
+      refetchInterval: open ? 20_000 : false,
+    },
+  });
 
   const bnbAmount = balance ? Number(formatEther(balance.value)) : 0;
   const usdAmount = bnbToUsd(bnbAmount, bnbUsd);
@@ -245,11 +242,18 @@ function ConnectedWalletButton({ address }: { address: string }) {
 }
 
 export function WalletBar() {
-  const { open } = useAppKit();
   const { address, isConnected, isConnecting, isReconnecting } = useAccount();
   const chainId = useChainId();
   const wrongNetwork = isConnected && chainId !== pumpChain.id;
   const ready = !isConnecting && !isReconnecting;
+
+  function openConnect() {
+    void modal?.open();
+  }
+
+  function openNetworks() {
+    void modal?.open({ view: "Networks" });
+  }
 
   return (
     <div
@@ -263,13 +267,13 @@ export function WalletBar() {
       })}
     >
       {!isConnected ? (
-        <button type="button" onClick={() => open()} className="toolbar-btn font-semibold">
+        <button type="button" onClick={openConnect} className="toolbar-btn font-semibold">
           Connect wallet
         </button>
       ) : wrongNetwork ? (
         <button
           type="button"
-          onClick={() => open({ view: "Networks" })}
+          onClick={openNetworks}
           className="toolbar-btn border-pump-danger/45 bg-pump-danger/10 text-pump-danger"
         >
           Wrong network
