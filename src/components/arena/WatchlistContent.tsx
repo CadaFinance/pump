@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { Star } from "lucide-react";
 import { useAccount } from "wagmi";
 import { useConnectModal } from "@rainbow-me/rainbowkit";
 import type { TokenListItem } from "@/lib/db/launchpad";
@@ -8,7 +9,7 @@ import { TokenAvatar } from "@/components/token/TokenAvatar";
 import { useFavorites } from "@/components/favorites/FavoritesProvider";
 import { bnbToUsd } from "@/lib/format-usd";
 import { formatCapForBoard, formatSignedPct, pctTone } from "@/lib/arena-board-format";
-import { buildTokenTradeUrl } from "@/lib/token-trade-prefill";
+import { ICON_STROKE } from "@/lib/icons";
 
 type FlashTone = "up" | "down";
 
@@ -23,7 +24,6 @@ export type WatchlistContentProps = {
   bnbUsd: number | null;
   flashes: Record<string, FlashTone>;
   animatedCaps: Record<string, number>;
-  showTradeActions?: boolean;
 };
 
 export function useWatchlistTokens(tokens: TokenListItem[]) {
@@ -39,16 +39,15 @@ export function WatchlistContent({
   bnbUsd,
   flashes,
   animatedCaps,
-  showTradeActions = true,
 }: WatchlistContentProps) {
-  const { favorites, toggleFavorite, loading } = useFavorites();
+  const { toggleFavorite, loading } = useFavorites();
   const { isConnected } = useAccount();
   const { openConnectModal } = useConnectModal();
   const watchlistTokens = useWatchlistTokens(tokens);
 
   if (!isConnected) {
     return (
-      <div className="empty-state px-2 py-4">
+      <div className="empty-state px-3 py-6">
         <p className="empty-state-copy text-caption">
           Connect wallet to sync starred tokens across devices.
         </p>
@@ -64,12 +63,12 @@ export function WatchlistContent({
   }
 
   if (loading) {
-    return <p className="p-3 text-center text-caption text-pump-muted">Loading…</p>;
+    return <p className="p-4 text-center text-caption text-pump-muted">Loading…</p>;
   }
 
   if (watchlistTokens.length === 0) {
     return (
-      <div className="empty-state px-2 py-4">
+      <div className="empty-state px-3 py-6">
         <p className="empty-state-copy text-caption">
           Star tokens in the Arena to pin them here.
         </p>
@@ -78,58 +77,52 @@ export function WatchlistContent({
   }
 
   return (
-    <ul className="space-y-1">
+    <ul className="toolbar-sheet-list">
       {watchlistTokens.map((token) => {
         const addressKey = token.address.toLowerCase();
         const mcapUsd =
           animatedCaps[`${addressKey}:cap:mcap`] ??
           bnbToUsd(Number(token.marketCapBnb), bnbUsd);
+        const symbolLabel = `$${token.symbol}`;
 
         return (
           <li key={token.address}>
-            <div className="arena-watchlist-item group">
-              <Link href={`/token/${token.address}`} className="flex min-w-0 flex-1 items-center gap-2">
+            <div className="toolbar-sheet-row">
+              <button
+                type="button"
+                onClick={() => toggleFavorite(token.address)}
+                className="toolbar-sheet-row__action text-pump-accent"
+                aria-label="Remove from watchlist"
+              >
+                <Star className="h-3.5 w-3.5 fill-current" strokeWidth={ICON_STROKE} aria-hidden />
+              </button>
+              <Link href={`/token/${token.address}`} className="toolbar-sheet-row__main">
                 <TokenAvatar
                   address={token.address}
                   symbol={token.symbol}
                   logoUrl={token.logoUrl}
-                  size={24}
+                  size={28}
+                  className="toolbar-sheet-row__avatar"
                 />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-caption font-medium text-pump-text">${token.symbol}</p>
-                  <p
-                    className={`financial-value text-[10px] font-semibold ${flashText(
+                <span className="toolbar-sheet-row__symbol">{symbolLabel}</span>
+                <span className="toolbar-sheet-row__metric">
+                  <span className="toolbar-sheet-row__metric-label">MC</span>
+                  <span
+                    className={`financial-value toolbar-sheet-row__metric-value ${flashText(
                       flashes[`${addressKey}:mcap`]
                     )}`}
                   >
                     {formatCapForBoard(mcapUsd)}
-                  </p>
-                </div>
+                  </span>
+                </span>
                 <span
-                  className={`financial-value shrink-0 text-[10px] font-medium ${pctTone(
+                  className={`financial-value toolbar-sheet-row__pct ${pctTone(
                     token.change24hPct ?? null
                   )}`}
                 >
                   {formatSignedPct(token.change24hPct ?? null)}
                 </span>
               </Link>
-              {showTradeActions ? (
-                <Link
-                  href={buildTokenTradeUrl(token.address)}
-                  className="secondary-button shrink-0 px-2 py-0.5 text-[10px] font-semibold"
-                  onClick={(event) => event.stopPropagation()}
-                >
-                  Trade
-                </Link>
-              ) : null}
-              <button
-                type="button"
-                onClick={() => toggleFavorite(token.address)}
-                className="shrink-0 text-sm leading-none text-pump-accent opacity-70 transition hover:opacity-100 xl:opacity-0 xl:group-hover:opacity-100"
-                aria-label="Remove from watchlist"
-              >
-                ★
-              </button>
             </div>
           </li>
         );

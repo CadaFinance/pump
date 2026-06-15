@@ -1,15 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Star, X } from "lucide-react";
+import { Star } from "lucide-react";
 import type { TokenListItem } from "@/lib/db/launchpad";
-import { ModalPortal } from "@/components/ui/ModalPortal";
+import { ToolbarSheet } from "@/components/ui/ToolbarSheet";
 import { ICON_STROKE } from "@/lib/icons";
-import {
-  WatchlistContent,
-  WatchlistCountBadge,
-  useWatchlistTokens,
-} from "@/components/arena/WatchlistContent";
+import { WatchlistContent, useWatchlistTokens } from "@/components/arena/WatchlistContent";
 import { useFavorites } from "@/components/favorites/FavoritesProvider";
 
 type FlashTone = "up" | "down";
@@ -61,46 +57,21 @@ export function ArenaWatchlistSheet({
         ) : null}
       </button>
 
-      <ModalPortal open={open}>
-        <div
-          className="modal-backdrop modal-backdrop-shell z-50"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Watchlist"
-        >
-          <button
-            type="button"
-            className="absolute inset-0 cursor-default"
-            aria-label="Close watchlist"
-            onClick={close}
-          />
-          <div className="modal-panel pointer-events-auto relative flex max-h-[min(80vh,32rem)] w-full max-w-lg flex-col overflow-hidden">
-            <div className="flex items-center justify-between gap-2 border-b border-pump-border/30 px-4 py-3">
-              <div className="flex items-center gap-1.5">
-                <Star className="h-4 w-4 text-pump-accent" strokeWidth={ICON_STROKE} aria-hidden />
-                <span className="section-heading text-body-sm">Watchlist</span>
-                <WatchlistCountBadge tokens={tokens} />
-              </div>
-              <button
-                type="button"
-                onClick={close}
-                className="toolbar-btn !w-8 !px-0"
-                aria-label="Close"
-              >
-                <X className="h-4 w-4" strokeWidth={ICON_STROKE} aria-hidden />
-              </button>
-            </div>
-            <div className="min-h-0 flex-1 overflow-y-auto p-2">
-              <WatchlistContent
-                tokens={tokens}
-                bnbUsd={bnbUsd}
-                flashes={flashes}
-                animatedCaps={animatedCaps}
-              />
-            </div>
-          </div>
-        </div>
-      </ModalPortal>
+      <ToolbarSheet
+        open={open}
+        onClose={close}
+        ariaLabel="Watchlist"
+        title="Watchlist"
+        count={watchlistTokens.length}
+        icon={<Star className="h-4 w-4 text-pump-accent" strokeWidth={ICON_STROKE} />}
+      >
+        <WatchlistContent
+          tokens={tokens}
+          bnbUsd={bnbUsd}
+          flashes={flashes}
+          animatedCaps={animatedCaps}
+        />
+      </ToolbarSheet>
     </>
   );
 }

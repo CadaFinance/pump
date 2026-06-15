@@ -7,6 +7,7 @@ import { TokenAvatar } from "@/components/token/TokenAvatar";
 import { formatSignedPct, pctTone } from "@/lib/arena-board-format";
 
 const MCAP_TICKER_LIMIT = 20;
+const TICKER_LOOP_MS = 40_000;
 
 type ArenaMcapTickerProps = {
   tokens: TokenListItem[];
@@ -58,6 +59,22 @@ function measureSegmentShift(first: HTMLElement, second: HTMLElement): number {
   return Math.round(width + gap);
 }
 
+function startTickerLoop(track: HTMLElement, shiftPx: number): Animation {
+  track.style.transform = "translate3d(0, 0, 0)";
+
+  return track.animate(
+    [
+      { transform: "translate3d(0, 0, 0)" },
+      { transform: `translate3d(-${shiftPx}px, 0, 0)` },
+    ],
+    {
+      duration: TICKER_LOOP_MS,
+      iterations: Infinity,
+      easing: "linear",
+    }
+  );
+}
+
 export function ArenaMcapTicker({ tokens }: ArenaMcapTickerProps) {
   const [reducedMotion, setReducedMotion] = useState(false);
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -65,6 +82,7 @@ export function ArenaMcapTicker({ tokens }: ArenaMcapTickerProps) {
   const measureRef = useRef<HTMLDivElement>(null);
   const segmentRef = useRef<HTMLDivElement>(null);
   const segmentDupRef = useRef<HTMLDivElement>(null);
+  const animationRef = useRef<Animation | null>(null);
   const [loopTokens, setLoopTokens] = useState<TokenListItem[]>([]);
   const [shiftPx, setShiftPx] = useState(0);
 
@@ -143,9 +161,7 @@ export function ArenaMcapTicker({ tokens }: ArenaMcapTickerProps) {
     };
 
     measureLoop();
-    const raf = requestAnimationFrame(() => {
-      measureLoop();
-    });
+    const raf = requestAnimationFrame(measureLoop);
 
     const ro = new ResizeObserver(measureLoop);
     if (segmentRef.current) ro.observe(segmentRef.current);
@@ -161,23 +177,50 @@ export function ArenaMcapTicker({ tokens }: ArenaMcapTickerProps) {
   }, [loopTokens, reducedMotion]);
 
   useEffect(() => {
-    if (reducedMotion || shiftPx <= 0) return;
-
     const track = trackRef.current;
     if (!track) return;
 
-    // Safari sometimes skips CSS animation when the class/var is applied after first paint.
-    track.style.animation = "none";
-    void track.offsetHeight;
-    track.style.removeProperty("animation");
+    animationRef.current?.cancel();
+    animationRef.current = null;
+
+    if (reducedMotion || shiftPx <= 0) {
+      track.style.transform = "";
+      return;
+    }
+
+    const run = () => {
+      animationRef.current?.cancel();
+      animationRef.current = startTickerLoop(track, shiftPx);
+    };
+
+    run();
+
+    const onPageShow = (event: PageTransitionEvent) => {
+      if (event.persisted) run();
+    };
+
+    const onVisibility = () => {
+      if (document.visibilityState !== "visible") return;
+      const anim = animationRef.current;
+      if (!anim || anim.playState === "running") return;
+      run();
+    };
+
+    window.addEventListener("pageshow", onPageShow);
+    document.addEventListener("visibilitychange", onVisibility);
+
+    return () => {
+      window.removeEventListener("pageshow", onPageShow);
+      document.removeEventListener("visibilitychange", onVisibility);
+      animationRef.current?.cancel();
+      animationRef.current = null;
+      track.style.transform = "";
+    };
   }, [shiftPx, reducedMotion]);
 
   if (topTokens.length === 0) return null;
 
   const loopReady = !reducedMotion && loopTokens.length > 0 && shiftPx > 0;
-  const viewportStyle = loopReady
-    ? ({ "--mcap-ticker-shift": `-${shiftPx}px` } as React.CSSProperties)
-    : undefined;
 
   return (
     <div
@@ -189,7 +232,7 @@ export function ArenaMcapTicker({ tokens }: ArenaMcapTickerProps) {
         Top tokens by market cap:{" "}
         {topTokens.map((token) => `$${token.symbol}`).join(", ")}
       </div>
-      <div ref={viewportRef} className="mcap-ticker-viewport" style={viewportStyle}>
+      <div ref={viewportRef} className="mcap-ticker-viewport">
         <div ref={measureRef} className="mcap-ticker-measure" aria-hidden>
           {topTokens.map((token) => (
             <TickerItem key={`measure-${token.address}`} token={token} />
@@ -197,7 +240,7 @@ export function ArenaMcapTicker({ tokens }: ArenaMcapTickerProps) {
         </div>
         <div
           ref={trackRef}
-          className={`mcap-ticker-track${loopReady ? " mcap-ticker-track--ready" : ""}`}
+          className={`mcap-ticker-track${loopReady ? " mcap-ticker-track--active" : ""}`}
         >
           <div ref={segmentRef} className="mcap-ticker-segment">
             {(loopTokens.length > 0 ? loopTokens : topTokens).map((token, index) => (

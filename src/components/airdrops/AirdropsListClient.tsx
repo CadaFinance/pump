@@ -26,6 +26,7 @@ import { useConnectModal } from "@rainbow-me/rainbowkit";
 import { useAccount } from "wagmi";
 import { AirdropsSkeleton } from "@/components/airdrops/AirdropsSkeleton";
 import { useAirdropSaves } from "@/components/airdrops/AirdropSavesProvider";
+import { AirdropsSavedSheet } from "@/components/airdrops/AirdropsSavedSheet";
 import { FieldSearchInput } from "@/components/ui/FieldSearchInput";
 import { IconLabel, SectionHeadingIcon, TableHeaderLabel } from "@/components/ui/IconLabel";
 import { ICON_STROKE } from "@/lib/icons";
@@ -102,7 +103,7 @@ function AirdropFilterChips({
             onClick={() => onSelect(key)}
             className={`arena-filter-chip ${
               activeFilter === key ? "arena-filter-chip-active" : ""
-            }`}
+            }${isSavedTab ? " hidden md:inline-flex" : ""}`}
           >
             {isSavedTab ? (
               <>
@@ -812,6 +813,9 @@ export function AirdropsListClient() {
                 placeholder="Search campaigns"
               />
             </div>
+          </div>
+          <div className="arena-toolbar-watchlist shrink-0 md:hidden">
+            <AirdropsSavedSheet items={resolvedItems} bnbUsd={bnbUsd} />
           </div>
           <div className="arena-filter-bar-wrap hidden md:block">
             <div className="arena-filter-bar" role="tablist" aria-label="Airdrop filters">
