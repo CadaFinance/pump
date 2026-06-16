@@ -1150,37 +1150,44 @@ code,
   }
 
   .scroll-strip-row {
-    display: flex;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
     align-items: center;
     gap: 8px;
+    width: 100%;
     min-width: 0;
   }
 
-  .scroll-strip-row__track {
-    display: flex;
+  .scroll-strip-row__viewport {
     min-width: 0;
-    flex: 1;
-    align-items: center;
-    gap: 8px;
     overflow-x: auto;
     overflow-y: hidden;
+    overscroll-behavior-x: contain;
     -webkit-overflow-scrolling: touch;
+    touch-action: pan-x pinch-zoom;
     scrollbar-width: none;
     padding-block: 2px;
   }
 
-  .scroll-strip-row__track::-webkit-scrollbar {
+  .scroll-strip-row__viewport::-webkit-scrollbar {
     display: none;
   }
 
+  .scroll-strip-row__track {
+    display: inline-flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 8px;
+    width: max-content;
+  }
+
   @media (min-width: 768px) {
-    .scroll-strip-row {
-      flex-wrap: wrap;
+    .scroll-strip-row__viewport {
+      cursor: grab;
     }
 
-    .scroll-strip-row__track {
-      display: contents;
-      overflow: visible;
+    .scroll-strip-row__viewport:active {
+      cursor: grabbing;
     }
   }
 
@@ -2632,6 +2639,30 @@ code,
 
   [data-board-key] {
     will-change: transform;
+  }
+
+  /* Mobile board rows: avoid translate/scale land — they stack with poll reordering */
+  @media (max-width: 1023px) {
+    .sheet-list > [data-board-key] {
+      will-change: auto;
+    }
+
+    .sheet-list > [data-board-key].live-land-in {
+      animation: live-land-in-mobile 0.55s ease-out forwards;
+    }
+
+    @keyframes live-land-in-mobile {
+      0% {
+        opacity: 0.72;
+        background-color: rgb(var(--pump-accent) / 0.12);
+        box-shadow: inset 3px 0 0 rgb(var(--pump-accent) / 0.85);
+      }
+      100% {
+        opacity: 1;
+        background-color: transparent;
+        box-shadow: inset 3px 0 0 transparent;
+      }
+    }
   }
 
   .hourglass-icon {

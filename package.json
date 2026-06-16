@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start -H 0.0.0.0 -p 3012",
     "lint": "next lint",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "bulk-launch": "node --env-file=.env scripts/bulk-launch-tokens.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1064.0",

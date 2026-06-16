@@ -1,2 +1,2 @@
 export const RECENT_STRIP_MOBILE = 10;
-export const RECENT_STRIP_DESKTOP = 15;
+export const RECENT_STRIP_DESKTOP = 30;

@@ -31,6 +31,7 @@ import { FieldSearchInput } from "@/components/ui/FieldSearchInput";
 import { IconLabel, SectionHeadingIcon, TableHeaderLabel } from "@/components/ui/IconLabel";
 import { ICON_STROKE } from "@/lib/icons";
 import { MetricIcons } from "@/lib/metric-icons";
+import { ScrollStripTrack } from "@/components/ui/ScrollStripTrack";
 import { RECENT_STRIP_DESKTOP, RECENT_STRIP_MOBILE } from "@/lib/recent-strip-limits";
 import { HourglassIcon } from "@/components/ui/HourglassIcon";
 import {
@@ -719,7 +720,7 @@ export function AirdropsListClient() {
               >
                 More
               </IconLabel>
-              <div className="scroll-strip-row__track">
+              <ScrollStripTrack aria-label="More airdrops">
                 {resolvedItems
                   .filter((item) => item.id !== featured.id)
                   .slice(0, RECENT_STRIP_DESKTOP)
@@ -744,7 +745,7 @@ export function AirdropsListClient() {
                       <span className="text-caption text-pump-text">{poolSymbol(item)}</span>
                     </Link>
                   ))}
-              </div>
+              </ScrollStripTrack>
             </div>
           ) : null}
         </section>

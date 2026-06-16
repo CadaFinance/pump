@@ -85,6 +85,18 @@ export function useLiveBoardAnimations(
       }
     });
 
+    // New insertions shift every row below — animating all of them stacks rows on mobile.
+    if (nextLanding.size > 0) {
+      for (const key of Object.keys(nextRankShift)) {
+        delete nextRankShift[key];
+      }
+    } else if (Object.keys(nextRankShift).length > 4) {
+      // Bulk reorder (poll / load-more) — skip rank choreography.
+      for (const key of Object.keys(nextRankShift)) {
+        delete nextRankShift[key];
+      }
+    }
+
     const hasChanges = nextLanding.size > 0 || Object.keys(nextRankShift).length > 0;
 
     if (hasChanges) {
@@ -122,6 +134,12 @@ export function useLiveBoardAnimations(
         requestAnimationFrame(() => {
           el.style.transition = "transform 0.48s cubic-bezier(0.22, 1, 0.36, 1)";
           el.style.transform = "";
+          const onEnd = () => {
+            el.style.transition = "";
+            el.style.transform = "";
+            el.removeEventListener("transitionend", onEnd);
+          };
+          el.addEventListener("transitionend", onEnd);
         });
       }
 

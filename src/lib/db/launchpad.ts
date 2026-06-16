@@ -60,6 +60,24 @@ export type KothSummary = {
   recent: KothHistoryItem[];
 };
 
+export type ArenaListSort = "age" | "mcap";
+
+export type ArenaFilterCounts = {
+  all: number;
+  new: number;
+  highVol: number;
+  movers: number;
+  kothContenders: number;
+  hasAirdrop: number;
+};
+
+export type ArenaListMeta = {
+  total: number;
+  limit: number;
+  hasMore: boolean;
+  filterCounts: ArenaFilterCounts;
+};
+
 type TokenListQueryRow = {
   address: string;
   symbol: string;
@@ -385,10 +403,7 @@ const TOKEN_TRADE_STATS_CTE = `
     )
 `;
 
-export async function listTokens(limit = 50): Promise<TokenListItem[]> {
-  const db = getLaunchpadPool();
-  const sql = buildTokenListSql(
-    `
+const ARENA_TOKEN_BASE_INNER = `
       SELECT
         t.address,
         t.symbol,
@@ -400,14 +415,175 @@ export async function listTokens(limit = 50): Promise<TokenListItem[]> {
         t.logo_url
       FROM tokens t
       WHERE t.is_hidden = false
-      ORDER BY t.created_at DESC
-      LIMIT $1
-    `,
-    "ORDER BY COALESCE(b.market_cap_zug, COALESCE(b.last_price_zug, 0) * 1000000000, 0) DESC, bt.created_at DESC"
+    `;
+
+function arenaListOrderBy(sort: ArenaListSort): string {
+  if (sort === "age") {
+    return "ORDER BY bt.created_at DESC";
+  }
+  return "ORDER BY COALESCE(b.market_cap_zug, COALESCE(b.last_price_zug, 0) * 1000000000, 0) DESC, bt.created_at DESC";
+}
+
+export async function listTokensPaginated(
+  options: { limit?: number; offset?: number; sort?: ArenaListSort } = {}
+): Promise<TokenListItem[]> {
+  const limit = options.limit ?? 50;
+  const offset = options.offset ?? 0;
+  const sort = options.sort ?? "age";
+  const db = getLaunchpadPool();
+  const sql = buildTokenListSql(
+    ARENA_TOKEN_BASE_INNER,
+    `${arenaListOrderBy(sort)} LIMIT $1 OFFSET $2`
   );
-  const result = await db.query<TokenListQueryRow>(sql, [limit]);
+  const result = await db.query<TokenListQueryRow>(sql, [limit, offset]);
 
   return result.rows.map(mapTokenListRow);
+}
+
+export async function listTokens(limit = 50): Promise<TokenListItem[]> {
+  return listTokensPaginated({ limit, offset: 0, sort: "age" });
+}
+
+export async function listTopTokensByMcap(limit = 20): Promise<TokenListItem[]> {
+  return listTokensPaginated({ limit, offset: 0, sort: "mcap" });
+}
+
+export async function countVisibleTokens(): Promise<number> {
+  const db = getLaunchpadPool();
+  const result = await db.query<{ count: string }>(
+    `SELECT COUNT(*)::text AS count FROM tokens WHERE is_hidden = false`
+  );
+  return Number(result.rows[0]?.count ?? 0);
+}
+
+export async function getArenaFilterCounts(
+  airdropAddresses: string[] = []
+): Promise<ArenaFilterCounts> {
+  const db = getLaunchpadPool();
+  const normalizedAirdrops = airdropAddresses.map((address) => address.toLowerCase());
+  const total = await countVisibleTokens();
+  const kothContenders = Math.min(5, total);
+
+  if (useMvTokenStats()) {
+    const result = await db.query<{
+      high_vol: number;
+      movers: number;
+      has_airdrop: number;
+    }>(
+      `
+      WITH enriched AS (
+        SELECT
+          t.address,
+          COALESCE(mts.volume_24h_zug, '0')::numeric AS volume_24h,
+          CASE
+            WHEN COALESCE(mpa.price_24h_ago, mpa.price_first) IS NOT NULL
+                 AND COALESCE(mpa.price_24h_ago, mpa.price_first) > 0
+              THEN (
+                (
+                  COALESCE(b.last_price_zug, 0) - COALESCE(mpa.price_24h_ago, mpa.price_first)
+                ) / COALESCE(mpa.price_24h_ago, mpa.price_first) * 100
+              )
+            ELSE NULL
+          END AS change_24h_pct
+        FROM tokens t
+        LEFT JOIN bonding_states b ON b.token_address = t.address
+        LEFT JOIN mv_token_trade_stats mts ON mts.token_address = t.address
+        LEFT JOIN mv_token_price_anchors mpa ON mpa.token_address = t.address
+        WHERE t.is_hidden = false
+      )
+      SELECT
+        COUNT(*) FILTER (WHERE volume_24h >= 0.5)::int AS high_vol,
+        COUNT(*) FILTER (
+          WHERE change_24h_pct IS NOT NULL AND ABS(change_24h_pct) >= 1
+        )::int AS movers,
+        COUNT(*) FILTER (
+          WHERE LOWER(address) = ANY($1::text[])
+        )::int AS has_airdrop
+      FROM enriched
+      `,
+      [normalizedAirdrops]
+    );
+    const row = result.rows[0];
+    return {
+      all: total,
+      new: total,
+      highVol: row?.high_vol ?? 0,
+      movers: row?.movers ?? 0,
+      kothContenders,
+      hasAirdrop: row?.has_airdrop ?? 0,
+    };
+  }
+
+  const result = await db.query<{
+    high_vol: number;
+    movers: number;
+    has_airdrop: number;
+  }>(
+    `
+    WITH enriched AS (
+      SELECT
+        t.address,
+        COALESCE(ts.volume_24h_zug, '0')::numeric AS volume_24h,
+        CASE
+          WHEN COALESCE(p24h_prev.price_zug, p_first.price_zug) IS NOT NULL
+               AND COALESCE(p24h_prev.price_zug, p_first.price_zug) > 0
+            THEN (
+              (
+                COALESCE(b.last_price_zug, 0) - COALESCE(p24h_prev.price_zug, p_first.price_zug)
+              ) / COALESCE(p24h_prev.price_zug, p_first.price_zug) * 100
+            )
+          ELSE NULL
+        END AS change_24h_pct
+      FROM tokens t
+      LEFT JOIN bonding_states b ON b.token_address = t.address
+      LEFT JOIN LATERAL (
+        SELECT
+          COALESCE(
+            SUM(GREATEST(tr.zug_amount - COALESCE(tr.fee_zug, 0), 0))
+              FILTER (WHERE tr.block_time >= now() - interval '24 hours'),
+            0
+          )::text AS volume_24h_zug
+        FROM trades tr
+        WHERE tr.token_address = t.address
+      ) ts ON true
+      LEFT JOIN LATERAL (
+        SELECT tr.price_zug
+        FROM trades tr
+        WHERE tr.token_address = t.address
+          AND tr.block_time <= now() - interval '24 hours'
+        ORDER BY tr.block_time DESC, tr.block_number DESC, tr.log_index DESC
+        LIMIT 1
+      ) p24h_prev ON true
+      LEFT JOIN LATERAL (
+        SELECT tr.price_zug
+        FROM trades tr
+        WHERE tr.token_address = t.address
+        ORDER BY tr.block_time ASC, tr.block_number ASC, tr.log_index ASC
+        LIMIT 1
+      ) p_first ON true
+      WHERE t.is_hidden = false
+    )
+    SELECT
+      COUNT(*) FILTER (WHERE volume_24h >= 0.5)::int AS high_vol,
+      COUNT(*) FILTER (
+        WHERE change_24h_pct IS NOT NULL AND ABS(change_24h_pct) >= 1
+      )::int AS movers,
+      COUNT(*) FILTER (
+        WHERE LOWER(address) = ANY($1::text[])
+      )::int AS has_airdrop
+    FROM enriched
+    `,
+    [normalizedAirdrops]
+  );
+  const row = result.rows[0];
+  return {
+    all: total,
+    new: total,
+    highVol: row?.high_vol ?? 0,
+    movers: row?.movers ?? 0,
+    kothContenders,
+    hasAirdrop: row?.has_airdrop ?? 0,
+  };
 }
 
 export async function listTokensByCreator(creatorAddress: string): Promise<TokenListItem[]> {
