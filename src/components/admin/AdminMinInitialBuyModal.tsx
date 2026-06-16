@@ -1,7 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { parseEther } from "viem";
+import {
+  useWaitForTransactionReceipt,
+  useWriteContract,
+} from "wagmi";
 import { ModalPortal } from "@/components/ui/ModalPortal";
+import { contracts, pumpChain } from "@/config/chain";
+import { memeFactoryAbi } from "@/lib/abis/meme-factory";
 import { MAX_MIN_INITIAL_BUY_BNB } from "@/lib/platform-settings";
 
 type AdminMinInitialBuyModalProps = {
@@ -21,41 +28,61 @@ export function AdminMinInitialBuyModal({
 }: AdminMinInitialBuyModalProps) {
   const [bnbInput, setBnbInput] = useState("");
   const [localError, setLocalError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
+  const { writeContract, data: txHash, isPending, reset, error: writeError } = useWriteContract();
+  const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash: txHash });
 
   useEffect(() => {
     if (!open) return;
     setBnbInput(currentMinBnb);
     setLocalError(null);
-  }, [open, currentMinBnb]);
+    reset();
+  }, [open, currentMinBnb, reset]);
+
+  useEffect(() => {
+    if (!isSuccess) return;
+    onUpdated();
+    onClose();
+  }, [isSuccess, onUpdated, onClose]);
+
+  useEffect(() => {
+    if (!writeError) return;
+    setLocalError(writeError.message.split("\n")[0] ?? "Transaction failed");
+  }, [writeError]);
 
   if (!open) return null;
 
-  async function handleSubmit() {
+  const saving = isPending || isConfirming;
+
+  function handleSubmit() {
     setLocalError(null);
-    setSaving(true);
 
-    try {
-      const res = await fetch(
-        `/api/admin/platform-settings?address=${encodeURIComponent(adminAddress)}`,
-        {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ minInitialBuyBnb: bnbInput.trim() }),
-        }
-      );
-      const json = (await res.json()) as { error?: string };
-      if (!res.ok) {
-        throw new Error(json.error ?? "Failed to update setting");
-      }
-
-      onUpdated();
-      onClose();
-    } catch (err) {
-      setLocalError(err instanceof Error ? err.message : "Failed to update setting");
-    } finally {
-      setSaving(false);
+    const trimmed = bnbInput.trim();
+    if (!trimmed) {
+      setLocalError("Enter a minimum amount.");
+      return;
     }
+
+    let minWei: bigint;
+    try {
+      minWei = parseEther(trimmed);
+    } catch {
+      setLocalError("Enter a valid BNB amount.");
+      return;
+    }
+
+    const maxWei = parseEther(MAX_MIN_INITIAL_BUY_BNB);
+    if (minWei > maxWei) {
+      setLocalError(`Maximum is ${MAX_MIN_INITIAL_BUY_BNB} BNB.`);
+      return;
+    }
+
+    writeContract({
+      address: contracts.memeFactory,
+      abi: memeFactoryAbi,
+      functionName: "setMinInitialBuyWei",
+      args: [minWei],
+      chainId: pumpChain.id,
+    });
   }
 
   return (
@@ -72,8 +99,8 @@ export function AdminMinInitialBuyModal({
             Minimum initial buy
           </h2>
           <p className="mt-1 text-sm text-pump-muted">
-            Off-chain UI rule for the create page. Creators must buy at least this much BNB on
-            launch (in addition to the meme launch fee). Not enforced on-chain.
+            On-chain rule on MemeFactory. Creators must include at least this much BNB in the
+            initial buy (in addition to the meme launch fee, unless fee-exempt).
           </p>
 
           <div className="mt-4 rounded-md border border-pump-border/15 bg-pump-surface/35 px-3 py-2.5">
@@ -97,8 +124,8 @@ export function AdminMinInitialBuyModal({
           </label>
 
           <p className="mt-2 text-caption text-pump-muted">
-            Must be &gt; 0 and ≤ {MAX_MIN_INITIAL_BUY_BNB} BNB. Takes effect immediately on the
-            create page.
+            Set to 0 to disable the minimum. Max {MAX_MIN_INITIAL_BUY_BNB} BNB. Requires MemeFactory
+            owner wallet.
           </p>
 
           {localError ? <p className="notice-error mt-3">{localError}</p> : null}
@@ -110,10 +137,10 @@ export function AdminMinInitialBuyModal({
             <button
               type="button"
               disabled={saving}
-              onClick={() => void handleSubmit()}
+              onClick={() => handleSubmit()}
               className="primary-button flex-1 py-2.5"
             >
-              {saving ? "Saving…" : "Save"}
+              {saving ? "Confirming…" : "Save on-chain"}
             </button>
           </div>
         </div>

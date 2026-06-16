@@ -15,6 +15,7 @@ import { contracts, explorerAddressUrl, explorerTxUrl, pumpChain, shortAddress }
 import { erc20Abi } from "@/lib/abis/erc20";
 import { launchpadTreasuryAbi } from "@/lib/abis/launchpad-treasury";
 import { pumpAirdropManagerAbi } from "@/lib/abis/pump-airdrop-manager";
+import { bondingCurveManagerAbi } from "@/lib/bonding-curve";
 import {
   airdropRewardAmountUsd,
   formatAirdropReward,
@@ -55,7 +56,13 @@ import { BnbLogo } from "@/components/token/BnbLogo";
 import { TokenAvatar } from "@/components/token/TokenAvatar";
 
 type ProtocolSnapshot = {
-  memeFactory: { address: string; owner: string; treasury: string; createFeeBnb: string };
+  memeFactory: {
+    address: string;
+    owner: string;
+    treasury: string;
+    createFeeBnb: string;
+    minInitialBuyBnb: string;
+  };
   bondingCurveManager: {
     address: string;
     owner: string;
@@ -248,6 +255,8 @@ export function AdminPanel() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [sweepingId, setSweepingId] = useState<string | null>(null);
+  const [bondingEmergencySweepPending, setBondingEmergencySweepPending] = useState(false);
+  const [emergencySweepTo, setEmergencySweepTo] = useState("");
   const [withdrawTo, setWithdrawTo] = useState("");
   const [withdrawAmount, setWithdrawAmount] = useState("");
   const [withdrawTokenAddress, setWithdrawTokenAddress] = useState("");
@@ -266,7 +275,7 @@ export function AdminPanel() {
   const [referrerShareModalOpen, setReferrerShareModalOpen] = useState(false);
   const [memeCreateFeeModalOpen, setMemeCreateFeeModalOpen] = useState(false);
   const [minInitialBuyModalOpen, setMinInitialBuyModalOpen] = useState(false);
-  const [minInitialBuyBnb, setMinInitialBuyBnb] = useState("0.01");
+  const [minInitialBuyBnb, setMinInitialBuyBnb] = useState("0");
   const [platformSettingsLoading, setPlatformSettingsLoading] = useState(true);
   const [airdropCreateFeeModalOpen, setAirdropCreateFeeModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<AdminTabId>("dashboard");
@@ -284,6 +293,12 @@ export function AdminPanel() {
     address!.toLowerCase() === treasuryOwner.toLowerCase();
 
   const bondingOwner = protocol?.bondingCurveManager.owner;
+  const canEmergencySweepBonding =
+    isAdmin &&
+    Boolean(address) &&
+    Boolean(contracts.bondingCurveManager) &&
+    bondingOwner != null &&
+    address!.toLowerCase() === bondingOwner.toLowerCase();
   const memeFactoryOwner = protocol?.memeFactory.owner;
   const airdropAdmin = protocol?.airdropManager?.admin;
 
@@ -344,26 +359,10 @@ export function AdminPanel() {
     }
   }, [address]);
 
-  const loadPlatformSettings = useCallback(async () => {
-    if (!address) return;
-    setPlatformSettingsLoading(true);
-    try {
-      const res = await fetch(`/api/admin/platform-settings?address=${address}`, {
-        cache: "no-store",
-      });
-      const json = (await res.json()) as { data?: { minInitialBuyBnb: string }; error?: string };
-      if (!res.ok) throw new Error(json.error ?? "Failed to load platform settings");
-      setMinInitialBuyBnb(json.data?.minInitialBuyBnb ?? "0.01");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load platform settings");
-    } finally {
-      setPlatformSettingsLoading(false);
-    }
-  }, [address]);
-
   const load = useCallback(async () => {
     setError(null);
     setLoading(true);
+    setPlatformSettingsLoading(true);
     try {
       if (!address) return;
       const res = await fetch(`/api/admin/overview?address=${address}`, { cache: "no-store" });
@@ -374,10 +373,12 @@ export function AdminPanel() {
       if (!res.ok) throw new Error(json.error ?? "Failed to load admin data");
       setProtocol(json.data?.protocol ?? null);
       setAirdrops(json.data?.airdrops ?? []);
+      setMinInitialBuyBnb(json.data?.protocol?.memeFactory.minInitialBuyBnb ?? "0");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Load failed");
     } finally {
       setLoading(false);
+      setPlatformSettingsLoading(false);
     }
   }, [address]);
 
@@ -385,18 +386,23 @@ export function AdminPanel() {
     void load();
     void loadStats();
     void loadPromoTasks();
-    void loadPlatformSettings();
-  }, [load, loadStats, loadPromoTasks, loadPlatformSettings]);
+  }, [load, loadStats, loadPromoTasks]);
 
   const refreshAll = useCallback(async () => {
-    await Promise.all([load(), loadStats(), loadPromoTasks(), loadPlatformSettings()]);
-  }, [load, loadStats, loadPromoTasks, loadPlatformSettings]);
+    await Promise.all([load(), loadStats(), loadPromoTasks()]);
+  }, [load, loadStats, loadPromoTasks]);
 
   useEffect(() => {
     if (!adminTxDone) return;
 
     if (sweepingId) {
       setSweepingId(null);
+      void load();
+      return;
+    }
+
+    if (bondingEmergencySweepPending) {
+      setBondingEmergencySweepPending(false);
       void load();
       return;
     }
@@ -411,6 +417,7 @@ export function AdminPanel() {
   }, [
     adminTxDone,
     sweepingId,
+    bondingEmergencySweepPending,
     load,
     loadStats,
     resetAdminTx,
@@ -424,6 +431,12 @@ export function AdminPanel() {
     }
   }, [address, withdrawTo]);
 
+  useEffect(() => {
+    if (treasuryContract && !emergencySweepTo) {
+      setEmergencySweepTo(treasuryContract);
+    }
+  }, [treasuryContract, emergencySweepTo]);
+
   function onSweep(row: SweepRow) {
     if (!contracts.airdropManager) return;
     setSweepingId(row.onChainId);
@@ -432,6 +445,37 @@ export function AdminPanel() {
       abi: pumpAirdropManagerAbi,
       functionName: "sweepRemainder",
       args: [BigInt(row.onChainId)],
+      chainId: pumpChain.id,
+    });
+  }
+
+  function onEmergencySweepBonding() {
+    if (!canEmergencySweepBonding || !contracts.bondingCurveManager) return;
+
+    const to = emergencySweepTo.trim();
+    if (!isAddress(to)) {
+      setError("Enter a valid emergency sweep recipient");
+      return;
+    }
+
+    const balanceBnb = protocol?.bondingCurveManager.contractBalanceBnb ?? "0";
+    if (Number(balanceBnb) <= 0) {
+      setError("Bonding curve has no BNB balance to sweep");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `EMERGENCY: Sweep ALL ${balanceBnb} BNB from BondingCurveManager to ${to}? All curve trading will halt immediately.`
+    );
+    if (!confirmed) return;
+
+    setError(null);
+    setBondingEmergencySweepPending(true);
+    writeContract({
+      address: contracts.bondingCurveManager,
+      abi: bondingCurveManagerAbi,
+      functionName: "emergencySweepAllBnb",
+      args: [to as `0x${string}`],
       chainId: pumpChain.id,
     });
   }
@@ -634,7 +678,7 @@ export function AdminPanel() {
           onClose={() => setMinInitialBuyModalOpen(false)}
           currentMinBnb={minInitialBuyBnb}
           adminAddress={address}
-          onUpdated={() => void loadPlatformSettings()}
+          onUpdated={() => void load()}
         />
       ) : null}
       <AdminAirdropCreateFeeModal
@@ -917,6 +961,29 @@ export function AdminPanel() {
             <AdminDataRow label="Bonding curve owner">
               {shortAddress(bondingOwner ?? ADMIN_ADDRESS)}
             </AdminDataRow>
+            {canEmergencySweepBonding ? (
+              <AdminDataRow
+                label="Emergency curve sweep"
+                action={
+                  <AdminBtn
+                    onClick={onEmergencySweepBonding}
+                    disabled={adminTxPending && bondingEmergencySweepPending}
+                  >
+                    {adminTxPending && bondingEmergencySweepPending ? "…" : "Sweep all BNB"}
+                  </AdminBtn>
+                }
+              >
+                <input
+                  type="text"
+                  value={emergencySweepTo}
+                  onChange={(e) => setEmergencySweepTo(e.target.value)}
+                  className="admin-input admin-num"
+                  placeholder="Recipient (treasury)"
+                  aria-label="Emergency sweep recipient"
+                />
+                <span className="admin-meta"> · halts all trading</span>
+              </AdminDataRow>
+            ) : null}
             <AdminDataRow label="Sweep recipient">
               {shortAddress(protocol?.airdropManager?.admin ?? ADMIN_ADDRESS)}
             </AdminDataRow>

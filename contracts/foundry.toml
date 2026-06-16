@@ -2,6 +2,9 @@
 src = "src"
 out = "out"
 libs = ["lib"]
+test = "test"
+script = "script"
+auto_detect_remappings = false
 solc_version = "0.8.26"
 evm_version = "cancun"
 allow_paths = ["../../zugchain-configuration/latest-uniswap/lib"]

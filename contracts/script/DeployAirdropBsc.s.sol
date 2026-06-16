@@ -3,17 +3,18 @@ pragma solidity ^0.8.26;
 
 import {Script} from "forge-std/Script.sol";
 import {console2} from "forge-std/console2.sol";
+import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
 import {PumpAirdropManager} from "../src/PumpAirdropManager.sol";
 
-/// @notice Additive BSC testnet deploy — only PumpAirdropManager; does not redeploy pump core.
+/// @notice UUPS deploy for PumpAirdropManager (requires pump core deploy json).
 contract DeployAirdropBsc is Script {
     uint256 internal constant BSC_TESTNET_ID = 97;
     uint256 internal constant CREATE_FEE = 0.001 ether;
 
     string internal constant PUMP_DEPLOY_FILE = "deployments/bsc-testnet-pump.json";
     string internal constant AIRDROP_DEPLOY_FILE = "deployments/bsc-testnet-airdrop.json";
-    string internal constant ABI_VERSION = "pump-airdrop-v1";
+    string internal constant ABI_VERSION = "pump-airdrop-uups-v1";
 
     struct Deployed {
         address owner;
@@ -22,6 +23,7 @@ contract DeployAirdropBsc is Script {
         address launchpadTreasury;
         address memeFactory;
         address pumpAirdropManager;
+        address pumpAirdropManagerImpl;
         uint256 deploymentBlock;
     }
 
@@ -44,8 +46,13 @@ contract DeployAirdropBsc is Script {
 
         vm.startBroadcast(privateKey);
 
+        PumpAirdropManager impl = new PumpAirdropManager();
+        d.pumpAirdropManagerImpl = address(impl);
         d.pumpAirdropManager = address(
-            new PumpAirdropManager(d.owner, d.launchpadTreasury, d.memeFactory, d.keeper, CREATE_FEE)
+            new ERC1967Proxy(
+                address(impl),
+                abi.encodeCall(PumpAirdropManager.initialize, (d.owner, d.launchpadTreasury, d.memeFactory, d.keeper, CREATE_FEE))
+            )
         );
 
         vm.stopBroadcast();
@@ -62,28 +69,28 @@ contract DeployAirdropBsc is Script {
         vm.serializeUint(key, "chainId", block.chainid);
         vm.serializeString(key, "rpcUrl", "https://data-seed-prebsc-1-s1.bnbchain.org:8545");
         vm.serializeString(key, "abiVersion", ABI_VERSION);
+        vm.serializeString(key, "proxyPattern", "UUPS");
         vm.serializeAddress(key, "owner", d.owner);
         vm.serializeAddress(key, "deployer", d.deployer);
         vm.serializeAddress(key, "keeper", d.keeper);
         vm.serializeUint(key, "deploymentBlock", d.deploymentBlock);
         vm.serializeAddress(key, "launchpadTreasury", d.launchpadTreasury);
         vm.serializeAddress(key, "memeFactory", d.memeFactory);
+        vm.serializeAddress(key, "pumpAirdropManagerImpl", d.pumpAirdropManagerImpl);
         string memory out = vm.serializeAddress(key, "pumpAirdropManager", d.pumpAirdropManager);
         vm.writeJson(out, AIRDROP_DEPLOY_FILE);
     }
 
     function _printSummary(Deployed memory d) internal view {
         console2.log("========================================");
-        console2.log(" BSC TESTNET AIRDROP DEPLOY");
+        console2.log(" BSC TESTNET AIRDROP UUPS DEPLOY");
         console2.log(" chainId:", block.chainid);
         console2.log(" deployer:", d.deployer);
         console2.log(" owner/admin:", d.owner);
         console2.log(" keeper:", d.keeper);
         console2.log(" deploymentBlock:", d.deploymentBlock);
         console2.log("========================================");
-        console2.log(" MemeFactory:", d.memeFactory);
-        console2.log(" LaunchpadTreasury:", d.launchpadTreasury);
-        console2.log(" PumpAirdropManager:", d.pumpAirdropManager);
+        console2.log(" PumpAirdropManager (proxy):", d.pumpAirdropManager);
         console2.log(" Create fee:", CREATE_FEE);
         console2.log("========================================");
     }

@@ -1,33 +1,33 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
+import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import {Ownable2StepUpgradeable} from "@openzeppelin/contracts-upgradeable/access/Ownable2StepUpgradeable.sol";
+
 import {IERC20Minimal} from "./interfaces/ILaunchpad.sol";
 
-/// @notice Receives launchpad creation and trade fees.
-contract LaunchpadTreasury {
-    address public owner;
-    address public pendingOwner;
-
+/// @notice UUPS-upgradeable treasury for launchpad fees.
+contract LaunchpadTreasury is Initializable, UUPSUpgradeable, Ownable2StepUpgradeable {
     event FeeReceived(address indexed payer, address indexed token, uint256 amount, bytes32 indexed reason);
     event TreasuryWithdraw(address indexed to, address indexed token, uint256 amount);
-    event OwnershipTransferStarted(address indexed currentOwner, address indexed pendingOwner);
-    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
 
-    error NotOwner();
-    error NotPendingOwner();
     error ZeroAddress();
     error TransferFailed();
 
-    modifier onlyOwner() {
-        if (msg.sender != owner) revert NotOwner();
-        _;
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() {
+        _disableInitializers();
     }
 
-    constructor(address owner_) {
+    function initialize(address owner_) external initializer {
         if (owner_ == address(0)) revert ZeroAddress();
-        owner = owner_;
-        emit OwnershipTransferred(address(0), owner_);
+        __Ownable2Step_init();
+        __UUPSUpgradeable_init();
+        _transferOwnership(owner_);
     }
+
+    function _authorizeUpgrade(address) internal override onlyOwner {}
 
     receive() external payable {
         emit FeeReceived(msg.sender, address(0), msg.value, keccak256("NATIVE_RECEIVE"));
@@ -39,7 +39,7 @@ contract LaunchpadTreasury {
 
     function withdrawNative(address payable to, uint256 amount) external onlyOwner {
         if (to == address(0)) revert ZeroAddress();
-        (bool ok, ) = to.call{value: amount}("");
+        (bool ok,) = to.call{value: amount}("");
         if (!ok) revert TransferFailed();
         emit TreasuryWithdraw(to, address(0), amount);
     }
@@ -50,17 +50,5 @@ contract LaunchpadTreasury {
         emit TreasuryWithdraw(to, token, amount);
     }
 
-    function transferOwnership(address newOwner) external onlyOwner {
-        if (newOwner == address(0)) revert ZeroAddress();
-        pendingOwner = newOwner;
-        emit OwnershipTransferStarted(owner, newOwner);
-    }
-
-    function acceptOwnership() external {
-        if (msg.sender != pendingOwner) revert NotPendingOwner();
-        address previous = owner;
-        owner = pendingOwner;
-        pendingOwner = address(0);
-        emit OwnershipTransferred(previous, owner);
-    }
+    uint256[45] private __gap;
 }

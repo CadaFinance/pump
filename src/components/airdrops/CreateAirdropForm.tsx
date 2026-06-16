@@ -167,6 +167,30 @@ export function CreateAirdropForm({
     query: { enabled: Boolean(contracts.airdropManager) },
   });
 
+  const { data: airdropAdmin } = useReadContract({
+    address: contracts.airdropManager,
+    abi: pumpAirdropManagerAbi,
+    functionName: "admin",
+    query: { enabled: Boolean(contracts.airdropManager) },
+  });
+
+  const { data: isAirdropFeeExempt } = useReadContract({
+    address: contracts.airdropManager,
+    abi: pumpAirdropManagerAbi,
+    functionName: "feeExempt",
+    args: address ? [address] : undefined,
+    query: { enabled: Boolean(contracts.airdropManager && address) },
+  });
+
+  const effectiveCreateFee = useMemo(() => {
+    const base = createFee ?? 0n;
+    if (!address) return base;
+    const lower = address.toLowerCase();
+    if (airdropAdmin && lower === airdropAdmin.toLowerCase()) return 0n;
+    if (isAirdropFeeExempt) return 0n;
+    return base;
+  }, [createFee, address, airdropAdmin, isAirdropFeeExempt]);
+
   const isBnbReward = isBnbRewardAsset(rewardAsset);
   const rewardToken = isBnbReward ? "" : rewardAsset;
 
@@ -538,7 +562,7 @@ export function CreateAirdropForm({
       return;
     }
 
-    const fee = createFee ?? 0n;
+    const fee = effectiveCreateFee;
     const qualifyStart = BigInt(startSec);
     const qualifyEnd = BigInt(endSec);
 
@@ -597,7 +621,7 @@ export function CreateAirdropForm({
     setQualifyEndLocal((prev) => endAfterStartOrDefault(value, prev));
   }
 
-  const feeWei = createFee ?? 0n;
+  const feeWei = effectiveCreateFee;
 
   const maxRewardWei = useMemo(() => {
     if (isBnbReward) {
@@ -766,7 +790,7 @@ export function CreateAirdropForm({
     let bnbShortfallWei = 0n;
     let fundMessage = "";
 
-    const fee = createFee ?? 0n;
+    const fee = effectiveCreateFee;
 
     if (isConnected && bnbBalance !== undefined) {
       const bnbAvail = bnbBalance.value;
@@ -898,7 +922,9 @@ export function CreateAirdropForm({
         })
       : "—";
   const createFeeValue =
-    createFee !== undefined ? formatCampaignAmount(createFee) : "…";
+    effectiveCreateFee !== undefined || createFee !== undefined
+      ? formatCampaignAmount(feeWei)
+      : "…";
   const totalBnbValue =
     totalBnbCost != null ? formatCampaignAmount(totalBnbCost) : "—";
 

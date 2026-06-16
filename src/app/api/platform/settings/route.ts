@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
-import { getMinInitialBuyBnb } from "@/lib/db/platform-settings";
+import { readMinInitialBuyBnb } from "@/lib/meme-factory-onchain";
 
 export async function GET() {
   try {
-    const minInitialBuyBnb = await getMinInitialBuyBnb();
+    const minInitialBuyBnb = await readMinInitialBuyBnb();
     return NextResponse.json(
       { data: { minInitialBuyBnb } },
       { headers: { "Cache-Control": "public, max-age=30, stale-while-revalidate=60" } }

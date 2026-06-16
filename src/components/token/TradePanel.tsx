@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { formatEther, formatUnits, parseEther, parseUnits } from "viem";
+import { formatEther, formatUnits, parseEther, parseSignature, parseUnits } from "viem";
 import type { TransactionReceipt } from "viem";
 import { useOpenConnectModal } from "@/hooks/useOpenConnectModal";
 import { useWalletFunding } from "@/components/wallet/WalletFundingProvider";
@@ -10,11 +10,14 @@ import {
   useBalance,
   useGasPrice,
   useReadContract,
+  useSignTypedData,
   useWaitForTransactionReceipt,
   useWriteContract,
 } from "wagmi";
 import { contracts, pumpChain } from "@/config/chain";
 import { erc20Abi, maxUint256 } from "@/lib/abis/erc20";
+import { memeTokenAbi } from "@/lib/abis/meme-token";
+import { buildPermitTypedData, permitDeadline } from "@/lib/erc20-permit";
 import {
   bondingCurveManagerAbi,
   bondingCurveFromSnapshot,
@@ -331,6 +334,36 @@ export function TradePanel({
     query: { enabled: Boolean(address) },
   });
 
+  const { isError: permitUnsupported } = useReadContract({
+    address: tokenAddress,
+    abi: memeTokenAbi,
+    functionName: "nonces",
+    args: address ? [address] : undefined,
+    chainId: pumpChain.id,
+    query: { enabled: Boolean(address) },
+  });
+
+  const supportsPermit = !permitUnsupported;
+
+  const { data: tokenName } = useReadContract({
+    address: tokenAddress,
+    abi: memeTokenAbi,
+    functionName: "name",
+    chainId: pumpChain.id,
+    query: { enabled: supportsPermit && Boolean(address) },
+  });
+
+  const { data: permitNonce } = useReadContract({
+    address: tokenAddress,
+    abi: memeTokenAbi,
+    functionName: "nonces",
+    args: address ? [address] : undefined,
+    chainId: pumpChain.id,
+    query: { enabled: supportsPermit && Boolean(address) },
+  });
+
+  const { signTypedDataAsync } = useSignTypedData();
+
   const { data: boundReferrer } = useReadContract({
     address: contracts.bondingCurveManager,
     abi: bondingCurveManagerAbi,
@@ -413,6 +446,8 @@ export function TradePanel({
     sellTokenWei > 0n &&
     allowance !== undefined &&
     allowance < sellTokenWei;
+
+  const needsLegacyApproval = needsApproval && !supportsPermit;
 
   const activeInputMode = side === "buy" ? buyInputMode : sellInputMode;
 
@@ -498,7 +533,7 @@ export function TradePanel({
         : resolvedBuyBnbWei,
     buyQuoteOut: side === "buy" ? gasProbeTokenOut : buyQuoteOut ?? undefined,
     sellQuoteOut: side === "sell" ? gasProbeSellQuoteOut : sellQuoteOut ?? undefined,
-    needsApproval,
+    needsApproval: needsLegacyApproval,
   });
 
   const estimatedGasWei = useMemo(() => {
@@ -507,11 +542,11 @@ export function TradePanel({
       const gasUnits =
         side === "buy"
           ? BUY_GAS_FALLBACK
-          : SELL_GAS_FALLBACK + (needsApproval ? APPROVE_GAS_FALLBACK : 0n);
+          : SELL_GAS_FALLBACK + (needsLegacyApproval ? APPROVE_GAS_FALLBACK : 0n);
       return gasUnits * gasPrice;
     }
     return 0n;
-  }, [gasCostWei, gasPrice, side, needsApproval]);
+  }, [gasCostWei, gasPrice, side, needsLegacyApproval]);
 
   /** On-chain estimate + hidden buffer for Max / balance checks (not shown in UI). */
   const gasReserveWei = useMemo(
@@ -1026,7 +1061,53 @@ export function TradePanel({
         return;
       }
 
-      if (needsApproval) {
+      if (needsApproval && supportsPermit) {
+        if (!address || !tokenName || permitNonce === undefined) {
+          setError("Could not prepare permit signature. Try again.");
+          return;
+        }
+
+        const minBnbOut = minOutWithSlippage(sellQuoteOut);
+        const tradeReferrer = resolvePendingTradeReferrer();
+        pendingTradeReferrerRef.current = tradeReferrer;
+        const deadline = permitDeadline();
+
+        let signature: `0x${string}`;
+        try {
+          signature = await signTypedDataAsync(
+            buildPermitTypedData({
+              tokenName,
+              tokenAddress,
+              chainId: pumpChain.id,
+              owner: address,
+              spender: contracts.bondingCurveManager,
+              value: sellTokenWei,
+              nonce: permitNonce,
+              deadline,
+            })
+          );
+        } catch (err) {
+          setError(formatTradeError(err));
+          return;
+        }
+
+        const parsed = parseSignature(signature);
+        const permitV =
+          parsed.yParity !== undefined ? parsed.yParity + 27 : Number(parsed.v ?? 27);
+        setPendingAction("sell");
+        writeContract({
+          address: contracts.bondingCurveManager,
+          abi: bondingCurveManagerAbi,
+          functionName: tradeReferrer ? "sellWithReferrerAndPermit" : "sellWithPermit",
+          args: tradeReferrer
+            ? [tokenAddress, sellTokenWei, minBnbOut, deadline, permitV, parsed.r, parsed.s, tradeReferrer]
+            : [tokenAddress, sellTokenWei, minBnbOut, deadline, permitV, parsed.r, parsed.s],
+          chainId: pumpChain.id,
+        });
+        return;
+      }
+
+      if (needsLegacyApproval) {
         pendingSellRef.current = {
           amountWei: sellTokenWei,
           minBnbOut: minOutWithSlippage(sellQuoteOut),
@@ -1126,15 +1207,19 @@ export function TradePanel({
           ? isBusy
             ? "Buying…"
             : "Buy"
-          : needsApproval || pendingAction === "approve"
+          : needsLegacyApproval || pendingAction === "approve"
             ? isBusy
               ? pendingAction === "sell"
                 ? "Selling…"
                 : "Approving…"
               : `Approve ${symbol}`
-            : isBusy
-              ? "Selling…"
-              : "Sell";
+            : needsApproval && supportsPermit
+              ? isBusy
+                ? "Selling…"
+                : "Sell"
+              : isBusy
+                ? "Selling…"
+                : "Sell";
 
   const submitDisabled =
     isConnected &&

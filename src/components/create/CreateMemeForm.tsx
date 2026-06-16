@@ -173,7 +173,6 @@ export function CreateMemeForm() {
   const [name, setName] = useState("");
   const [symbol, setSymbol] = useState("");
   const [description, setDescription] = useState("");
-  const [minInitialBuyBnb, setMinInitialBuyBnb] = useState(DEFAULT_MIN_INITIAL_BUY_BNB);
   const [initialBuyBnb, setInitialBuyBnb] = useState(DEFAULT_MIN_INITIAL_BUY_BNB);
   const [socialOpen, setSocialOpen] = useState(false);
   const [twitter, setTwitter] = useState("");
@@ -192,26 +191,32 @@ export function CreateMemeForm() {
   descriptionRef.current = description;
   socialLinksRef.current = { twitter, website, telegram, discord };
 
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      try {
-        const res = await fetch("/api/platform/settings", { cache: "no-store" });
-        const body = (await res.json()) as { data?: { minInitialBuyBnb?: string } };
-        if (!res.ok || cancelled) return;
-        const min = body.data?.minInitialBuyBnb ?? DEFAULT_MIN_INITIAL_BUY_BNB;
-        setMinInitialBuyBnb(min);
-        setInitialBuyBnb(min);
-      } catch {
-        // Keep defaults on transient errors.
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const minInitialBuySyncedRef = useRef(false);
 
-  const minInitialBuyWei = useMemo(() => parseEther(minInitialBuyBnb), [minInitialBuyBnb]);
+  const { data: minInitialBuyWeiOnChain } = useReadContract({
+    address: contracts.memeFactory,
+    abi: memeFactoryAbi,
+    functionName: "minInitialBuyWei",
+    chainId: pumpChain.id,
+  });
+
+  const minInitialBuyWei = useMemo(() => {
+    if (minInitialBuyWeiOnChain !== undefined) return minInitialBuyWeiOnChain;
+    return parseEther(DEFAULT_MIN_INITIAL_BUY_BNB);
+  }, [minInitialBuyWeiOnChain]);
+
+  const minInitialBuyBnb = useMemo(
+    () => (minInitialBuyWei > 0n ? formatCampaignAmount(minInitialBuyWei) : "0"),
+    [minInitialBuyWei]
+  );
+
+  useEffect(() => {
+    if (minInitialBuyWeiOnChain === undefined || minInitialBuySyncedRef.current) return;
+    minInitialBuySyncedRef.current = true;
+    if (minInitialBuyWeiOnChain > 0n) {
+      setInitialBuyBnb(formatCampaignAmount(minInitialBuyWeiOnChain));
+    }
+  }, [minInitialBuyWeiOnChain]);
 
   const contractsReady = Boolean(contracts.memeFactory && contracts.bondingCurveManager);
 
@@ -220,6 +225,22 @@ export function CreateMemeForm() {
     abi: memeFactoryAbi,
     functionName: "createFee",
     chainId: pumpChain.id,
+  });
+
+  const { data: factoryOwner } = useReadContract({
+    address: contracts.memeFactory,
+    abi: memeFactoryAbi,
+    functionName: "owner",
+    chainId: pumpChain.id,
+  });
+
+  const { data: isCreateFeeExempt } = useReadContract({
+    address: contracts.memeFactory,
+    abi: memeFactoryAbi,
+    functionName: "feeExempt",
+    args: address ? [address] : undefined,
+    chainId: pumpChain.id,
+    query: { enabled: Boolean(address) },
   });
 
   const { data: virtualBnbReserveOnChain } = useReadContract({
@@ -345,7 +366,14 @@ export function CreateMemeForm() {
   }, [receipt, reset, address, name, symbol]);
 
   const wrongChain = isConnected && chain?.id !== pumpChain.id;
-  const feeWei = createFee ?? 0n;
+  const feeWei = useMemo(() => {
+    const base = createFee ?? 0n;
+    if (!address) return base;
+    const lower = address.toLowerCase();
+    if (factoryOwner && lower === factoryOwner.toLowerCase()) return 0n;
+    if (isCreateFeeExempt) return 0n;
+    return base;
+  }, [createFee, address, factoryOwner, isCreateFeeExempt]);
 
   const initialBuyWei = useMemo(() => {
     const trimmed = initialBuyBnb.trim();

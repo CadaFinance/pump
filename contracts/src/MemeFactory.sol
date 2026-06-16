@@ -1,20 +1,26 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
+import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
+
 import {IBondingCurveManager} from "./interfaces/ILaunchpad.sol";
 import {MemeTokenImplementation} from "./MemeTokenImplementation.sol";
 
-/// @notice Creates meme tokens and auto-lists them in BondingCurveManager.
-contract MemeFactory {
-    address public owner;
+/// @notice UUPS-upgradeable meme factory. New tokens are EIP-1167 clones of `memeTokenImplementation`.
+contract MemeFactory is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     address public treasury;
     IBondingCurveManager public bondingCurveManager;
+    address public memeTokenImplementation;
 
     uint256 public createFee;
-    uint256 public defaultTotalSupply = 1_000_000_000 ether;
-    uint256 public defaultTargetZug = 20_000 ether;
-    uint256 public defaultVirtualZugReserve = 5_000 ether;
-    uint256 public defaultVirtualTokenReserve = 1_000_000_000 ether;
+    uint256 public minInitialBuyWei;
+    uint256 public defaultTotalSupply;
+    uint256 public defaultTargetZug;
+    uint256 public defaultVirtualZugReserve;
+    uint256 public defaultVirtualTokenReserve;
 
     uint256 public constant MAX_NAME_LENGTH = 64;
     uint256 public constant MAX_SYMBOL_LENGTH = 16;
@@ -22,6 +28,7 @@ contract MemeFactory {
 
     mapping(address => address[]) public creatorTokens;
     mapping(address => bool) public isLaunchpadToken;
+    mapping(address => bool) public feeExempt;
 
     event TokenCreated(
         address indexed token,
@@ -39,36 +46,67 @@ contract MemeFactory {
         uint256 createFee,
         uint256 defaultTargetZug
     );
-    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
+    event MinInitialBuyUpdated(uint256 previousMinWei, uint256 newMinWei);
+    event FeeExemptUpdated(address indexed account, bool exempt);
+    event MemeTokenImplementationUpdated(address indexed previousImpl, address indexed newImpl);
 
-    error NotOwner();
     error ZeroAddress();
     error InvalidInput();
     error FeeTooLow();
+    error InitialBuyTooLow();
     error TransferFailed();
 
-    modifier onlyOwner() {
-        if (msg.sender != owner) revert NotOwner();
-        _;
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() {
+        _disableInitializers();
     }
 
-    constructor(address owner_, address treasury_, address bondingCurveManager_) {
-        if (owner_ == address(0) || treasury_ == address(0) || bondingCurveManager_ == address(0)) {
+    function initialize(
+        address owner_,
+        address treasury_,
+        address bondingCurveManager_,
+        address memeTokenImplementation_
+    ) external initializer {
+        if (treasury_ == address(0) || bondingCurveManager_ == address(0) || memeTokenImplementation_ == address(0)) {
             revert ZeroAddress();
         }
 
-        owner = owner_;
+        __Ownable_init(owner_);
+        __UUPSUpgradeable_init();
+
         treasury = treasury_;
         bondingCurveManager = IBondingCurveManager(bondingCurveManager_);
-        emit OwnershipTransferred(address(0), owner_);
+        memeTokenImplementation = memeTokenImplementation_;
+
+        defaultTotalSupply = 1_000_000_000 ether;
+        defaultTargetZug = 20_000 ether;
+        defaultVirtualZugReserve = 5_000 ether;
+        defaultVirtualTokenReserve = 1_000_000_000 ether;
+
+        feeExempt[owner_] = true;
+        emit FeeExemptUpdated(owner_, true);
         emit ConfigUpdated(treasury_, bondingCurveManager_, createFee, defaultTargetZug);
     }
 
-    function transferOwnership(address newOwner) external onlyOwner {
-        if (newOwner == address(0)) revert ZeroAddress();
-        address previousOwner = owner;
-        owner = newOwner;
-        emit OwnershipTransferred(previousOwner, newOwner);
+    function _authorizeUpgrade(address) internal override onlyOwner {}
+
+    function setMemeTokenImplementation(address implementation_) external onlyOwner {
+        if (implementation_ == address(0)) revert ZeroAddress();
+        address previous = memeTokenImplementation;
+        memeTokenImplementation = implementation_;
+        emit MemeTokenImplementationUpdated(previous, implementation_);
+    }
+
+    function setFeeExempt(address account, bool exempt) external onlyOwner {
+        if (account == address(0)) revert ZeroAddress();
+        feeExempt[account] = exempt;
+        emit FeeExemptUpdated(account, exempt);
+    }
+
+    function setMinInitialBuyWei(uint256 minInitialBuyWei_) external onlyOwner {
+        uint256 previous = minInitialBuyWei;
+        minInitialBuyWei = minInitialBuyWei_;
+        emit MinInitialBuyUpdated(previous, minInitialBuyWei_);
     }
 
     function createMeme(
@@ -84,16 +122,17 @@ contract MemeFactory {
             bytes(symbol).length > MAX_SYMBOL_LENGTH ||
             bytes(metadataURI).length > MAX_METADATA_URI_LENGTH
         ) revert InvalidInput();
-        if (msg.value < createFee) revert FeeTooLow();
 
-        uint256 initialBuyValue = msg.value - createFee;
+        uint256 feeDue = _createFeeFor(msg.sender);
+        if (msg.value < feeDue) revert FeeTooLow();
+
+        uint256 initialBuyValue = msg.value - feeDue;
+        if (minInitialBuyWei > 0 && initialBuyValue < minInitialBuyWei) revert InitialBuyTooLow();
         if (initialBuyValue > 0 && minInitialBuyTokens == 0) revert InvalidInput();
-        if (createFee > 0) _sendNative(payable(treasury), createFee);
+        if (feeDue > 0) _sendNative(payable(treasury), feeDue);
 
-        MemeTokenImplementation meme = new MemeTokenImplementation();
-        token = address(meme);
-
-        meme.initialize(name, symbol, msg.sender, address(bondingCurveManager), defaultTotalSupply);
+        token = Clones.clone(memeTokenImplementation);
+        MemeTokenImplementation(token).initialize(name, symbol, msg.sender, address(bondingCurveManager), defaultTotalSupply);
 
         bondingCurveManager.registerToken(
             token,
@@ -156,8 +195,15 @@ contract MemeFactory {
         return creatorTokens[creator].length;
     }
 
+    function _createFeeFor(address account) internal view returns (uint256) {
+        if (account == owner() || feeExempt[account]) return 0;
+        return createFee;
+    }
+
     function _sendNative(address payable to, uint256 amount) internal {
-        (bool ok, ) = to.call{value: amount}("");
+        (bool ok,) = to.call{value: amount}("");
         if (!ok) revert TransferFailed();
     }
+
+    uint256[40] private __gap;
 }

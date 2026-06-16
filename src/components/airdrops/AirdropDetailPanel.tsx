@@ -284,6 +284,7 @@ function RewardCell({
   align = "right",
   showSymbol = true,
   showLabel = false,
+  usdOnly = false,
 }: {
   amount: string;
   usd: number | null;
@@ -292,10 +293,21 @@ function RewardCell({
   align?: "left" | "right";
   showSymbol?: boolean;
   showLabel?: boolean;
+  usdOnly?: boolean;
 }) {
   const isBnb = !detail.rewardToken;
   const alignClass = align === "right" ? "text-right" : "text-left";
   const flexAlign = align === "right" ? "justify-end" : "justify-start";
+
+  if (usdOnly) {
+    return (
+      <div className={`min-w-0 ${alignClass}`}>
+        <p className="financial-value shrink-0 text-caption font-medium tabular-nums text-pump-text">
+          {usd != null ? formatUsdReadable(usd, { compact: true }) : "—"}
+        </p>
+      </div>
+    );
+  }
 
   if (amount === "—") {
     return (
@@ -436,6 +448,7 @@ function HoldCell({
   bnbUsd,
   align = "right",
   showSymbol = true,
+  inlineUsd = false,
 }: {
   holdAmount: string | null | undefined;
   linkedToken: string;
@@ -444,6 +457,7 @@ function HoldCell({
   bnbUsd: number | null;
   align?: "left" | "right";
   showSymbol?: boolean;
+  inlineUsd?: boolean;
 }) {
   const amount = Number(holdAmount);
   const hasHold = Number.isFinite(amount) && amount > 0;
@@ -463,7 +477,7 @@ function HoldCell({
 
   return (
     <div className={`min-w-0 ${alignClass}`}>
-      <div className={`flex min-w-0 items-center gap-1 ${flexAlign}`}>
+      <div className={`flex min-w-0 items-center gap-1 ${flexAlign} flex-nowrap`}>
         <p className="financial-value shrink-0 text-caption font-medium tabular-nums text-pump-text">
           {formatAmount(holdAmount!)}
         </p>
@@ -475,8 +489,13 @@ function HoldCell({
             className="shrink-0 text-caption font-medium text-pump-text"
           />
         ) : null}
+        {inlineUsd && usd != null ? (
+          <span className="financial-value shrink-0 text-caption tabular-nums text-pump-muted">
+            · {formatUsdReadable(usd, { compact: true })}
+          </span>
+        ) : null}
       </div>
-      {usd != null ? (
+      {!inlineUsd && usd != null ? (
         <p className="text-[10px] tabular-nums text-pump-muted">
           {formatUsdReadable(usd, { compact: true })}
         </p>
@@ -486,9 +505,9 @@ function HoldCell({
 }
 
 const LEADERBOARD_GRID_COLS =
-  "grid-cols-[1.75rem_minmax(0,1fr)_minmax(7.5rem,9rem)_minmax(7.5rem,9rem)] sm:grid-cols-[2rem_minmax(0,1fr)_minmax(8.25rem,9.5rem)_minmax(8.25rem,9.5rem)]";
+  "grid-cols-[1.75rem_minmax(0,1fr)_minmax(8.5rem,10rem)_minmax(8.5rem,10rem)] sm:grid-cols-[2rem_minmax(0,1fr)_minmax(9.75rem,11.25rem)_minmax(9.75rem,11.25rem)]";
 
-const LEADERBOARD_ROW_GRID = `grid ${LEADERBOARD_GRID_COLS} items-center gap-x-3 px-3 py-2 text-caption`;
+const LEADERBOARD_ROW_GRID = `grid ${LEADERBOARD_GRID_COLS} items-center gap-x-4 px-3 py-2 text-caption`;
 
 const PREVIEW_RANKS = Array.from({ length: 100 }, (_, index) => index + 1);
 
@@ -601,6 +620,7 @@ function LiveLeaderboardTable({
       bnbUsd,
       align: mobile ? ("left" as const) : ("right" as const),
       showSymbol: !mobile,
+      inlineUsd: true,
     };
   }
 
@@ -611,6 +631,7 @@ function LiveLeaderboardTable({
       detail,
       compact: true,
       align: mobile ? ("left" as const) : ("right" as const),
+      usdOnly: true,
     };
   }
 
@@ -654,16 +675,16 @@ function LiveLeaderboardTable({
                       />
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-3 px-3 pl-10">
-                    <div>
-                      <LeaderboardMetricLabel>
+                  <div className="space-y-2 px-3 pl-10">
+                    <div className="flex items-center justify-between gap-3">
+                      <LeaderboardMetricLabel align="right">
                         <TokenSymbolInline address={detail.linkedToken} symbol={symbol} size={10} />
                         <span>held</span>
                       </LeaderboardMetricLabel>
                       <HoldCell {...holdCellProps(row.holdAmount, true)} />
                     </div>
-                    <div>
-                      <LeaderboardMetricLabel>Est. reward</LeaderboardMetricLabel>
+                    <div className="flex items-center justify-between gap-3">
+                      <LeaderboardMetricLabel align="right">Est. reward</LeaderboardMetricLabel>
                       <RewardCell {...rewardCellProps(reward, true)} />
                     </div>
                   </div>
@@ -695,16 +716,16 @@ function LiveLeaderboardTable({
                   </span>
                   <span className="pt-1 italic text-caption text-pump-muted">Open slot</span>
                 </div>
-                <div className="grid grid-cols-2 gap-3 px-3 pl-10">
-                  <div>
-                    <LeaderboardMetricLabel>
+                <div className="space-y-2 px-3 pl-10">
+                  <div className="flex items-center justify-between gap-3">
+                    <LeaderboardMetricLabel align="right">
                       <TokenSymbolInline address={detail.linkedToken} symbol={symbol} size={10} />
                       <span>held</span>
                     </LeaderboardMetricLabel>
                     <HoldCell {...holdCellProps(null, true)} />
                   </div>
-                  <div>
-                    <LeaderboardMetricLabel>Est. reward</LeaderboardMetricLabel>
+                  <div className="flex items-center justify-between gap-3">
+                    <LeaderboardMetricLabel align="right">Est. reward</LeaderboardMetricLabel>
                     <RewardCell {...rewardCellProps(reward, true)} />
                   </div>
                 </div>

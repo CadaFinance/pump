@@ -662,6 +662,7 @@ export async function getAirdropProof(
 
 export type MyAirdropParticipation = {
   id: string;
+  onChainId: string | null;
   title: string | null;
   linkedToken: string;
   linkedSymbol: string | null;
@@ -896,6 +897,7 @@ export async function listMyAirdropParticipations(
 
   const result = await pool.query<{
     id: string;
+    on_chain_id: string | null;
     rules_json: AirdropRules;
     linked_token: string;
     reward_token: string | null;
@@ -922,6 +924,7 @@ export async function listMyAirdropParticipations(
     `
       SELECT
         a.id,
+        a.on_chain_id,
         a.rules_json,
         a.linked_token,
         a.reward_token,
@@ -991,6 +994,7 @@ export async function listMyAirdropParticipations(
 
     return {
       id: row.id,
+      onChainId: row.on_chain_id,
       title: row.rules_json?.title ?? null,
       linkedToken: row.linked_token,
       linkedSymbol: row.symbol,

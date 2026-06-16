@@ -1,17 +1,21 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
+import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
+import {MerkleProof} from "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
+
 import {IERC20Minimal} from "./interfaces/ILaunchpad.sol";
 import {IMemeFactory} from "./interfaces/IMemeFactory.sol";
 
-import {MerkleProof} from "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
-
-/// @notice On-chain escrow + Merkle claim airdrops for the BSC pump launchpad.
-contract PumpAirdropManager {
+/// @notice UUPS-upgradeable Merkle airdrop escrow for the pump launchpad.
+contract PumpAirdropManager is Initializable, UUPSUpgradeable, OwnableUpgradeable, ReentrancyGuardUpgradeable {
     uint256 public constant CLAIM_DURATION = 24 hours;
     uint256 public constant BPS = 10_000;
+    uint256 public constant MAX_CLAIM_BATCH = 25;
 
-    // Distribution slots (must match off-chain keeper math).
     uint256 public constant RANK1_BPS = 1500;
     uint256 public constant RANK2_BPS = 1000;
     uint256 public constant RANK3_BPS = 500;
@@ -41,9 +45,14 @@ contract PumpAirdropManager {
         bool remainderSwept;
     }
 
-    address public immutable admin;
-    address public immutable treasury;
-    IMemeFactory public immutable memeFactory;
+    struct ClaimInput {
+        uint256 airdropId;
+        uint256 amount;
+        bytes32[] proof;
+    }
+
+    address public treasury;
+    IMemeFactory public memeFactory;
 
     address public keeper;
     uint256 public createFee;
@@ -51,9 +60,11 @@ contract PumpAirdropManager {
 
     mapping(uint256 => Airdrop) public airdrops;
     mapping(uint256 => mapping(address => bool)) public hasClaimed;
+    mapping(address => bool) public feeExempt;
 
     event KeeperUpdated(address indexed previousKeeper, address indexed newKeeper);
     event CreateFeeUpdated(uint256 previousFee, uint256 newFee);
+    event FeeExemptUpdated(address indexed account, bool exempt);
     event AirdropCreated(
         uint256 indexed airdropId,
         address indexed creator,
@@ -70,7 +81,6 @@ contract PumpAirdropManager {
     event AirdropClaimed(uint256 indexed airdropId, address indexed claimant, uint256 amount);
     event AirdropRemainderSwept(uint256 indexed airdropId, address indexed admin, uint256 amount);
 
-    error NotAdmin();
     error NotKeeper();
     error ZeroAddress();
     error InvalidConfig();
@@ -89,41 +99,75 @@ contract PumpAirdropManager {
     error AlreadySwept();
     error NothingToSweep();
 
-    modifier onlyAdmin() {
-        if (msg.sender != admin) revert NotAdmin();
-        _;
-    }
-
     modifier onlyKeeper() {
         if (msg.sender != keeper) revert NotKeeper();
         _;
     }
 
-    constructor(address admin_, address treasury_, address memeFactory_, address keeper_, uint256 createFee_) {
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() {
+        _disableInitializers();
+    }
+
+    function initialize(
+        address admin_,
+        address treasury_,
+        address memeFactory_,
+        address keeper_,
+        uint256 createFee_
+    ) external initializer {
         if (admin_ == address(0) || treasury_ == address(0) || memeFactory_ == address(0) || keeper_ == address(0)) {
             revert ZeroAddress();
         }
-        admin = admin_;
+
+        __Ownable_init(admin_);
+        __UUPSUpgradeable_init();
+        __ReentrancyGuard_init();
+
         treasury = treasury_;
         memeFactory = IMemeFactory(memeFactory_);
         keeper = keeper_;
         createFee = createFee_;
+        feeExempt[admin_] = true;
+        emit FeeExemptUpdated(admin_, true);
     }
 
-    function setKeeper(address keeper_) external onlyAdmin {
+    function _authorizeUpgrade(address) internal override onlyOwner {}
+
+    /// @dev Backward-compatible alias for admin reads in the app.
+    function admin() external view returns (address) {
+        return owner();
+    }
+
+    function setTreasury(address treasury_) external onlyOwner {
+        if (treasury_ == address(0)) revert ZeroAddress();
+        treasury = treasury_;
+    }
+
+    function setMemeFactory(address memeFactory_) external onlyOwner {
+        if (memeFactory_ == address(0)) revert ZeroAddress();
+        memeFactory = IMemeFactory(memeFactory_);
+    }
+
+    function setKeeper(address keeper_) external onlyOwner {
         if (keeper_ == address(0)) revert ZeroAddress();
         address previous = keeper;
         keeper = keeper_;
         emit KeeperUpdated(previous, keeper_);
     }
 
-    function setCreateFee(uint256 createFee_) external onlyAdmin {
+    function setCreateFee(uint256 createFee_) external onlyOwner {
         uint256 previous = createFee;
         createFee = createFee_;
         emit CreateFeeUpdated(previous, createFee_);
     }
 
-    /// @notice Distribution preview for a rank (1-based). Used by UI; keeper must match.
+    function setFeeExempt(address account, bool exempt) external onlyOwner {
+        if (account == address(0)) revert ZeroAddress();
+        feeExempt[account] = exempt;
+        emit FeeExemptUpdated(account, exempt);
+    }
+
     function rewardAmountForRank(uint256 totalReward, uint256 rank) external pure returns (uint256) {
         if (rank == 0 || rank > 100 || totalReward == 0) revert InvalidConfig();
         if (rank == 1) return (totalReward * RANK1_BPS) / BPS;
@@ -149,18 +193,19 @@ contract PumpAirdropManager {
 
         uint64 claimStart_ = qualifyEnd;
         uint64 claimEnd_ = qualifyEnd + uint64(CLAIM_DURATION);
+        uint256 feeDue = _createFeeFor(msg.sender);
 
         if (rewardToken == address(0)) {
-            if (msg.value != rewardAmount + createFee) revert InvalidAmount();
+            if (msg.value != rewardAmount + feeDue) revert InvalidAmount();
         } else {
-            if (msg.value != createFee) revert InvalidAmount();
+            if (msg.value != feeDue) revert InvalidAmount();
             if (!IERC20Minimal(rewardToken).transferFrom(msg.sender, address(this), rewardAmount)) {
                 revert TransferFailed();
             }
         }
 
-        if (createFee > 0) {
-            _sendNative(payable(treasury), createFee);
+        if (feeDue > 0) {
+            _sendNative(payable(treasury), feeDue);
         }
 
         airdropId = nextAirdropId++;
@@ -210,25 +255,22 @@ contract PumpAirdropManager {
         emit AirdropFinalized(airdropId, merkleRoot, totalAllocated);
     }
 
-    function claim(uint256 airdropId, uint256 amount, bytes32[] calldata proof) external {
-        Airdrop storage a = airdrops[airdropId];
-        if (a.status != AirdropStatus.Finalized) revert AirdropNotFinalized();
-        if (block.timestamp < a.claimStart) revert ClaimWindowNotOpen();
-        if (block.timestamp > a.claimEnd) revert ClaimWindowClosed();
-        if (hasClaimed[airdropId][msg.sender]) revert AlreadyClaimed();
-
-        bytes32 leaf = _leaf(msg.sender, amount);
-        if (!MerkleProof.verify(proof, a.merkleRoot, leaf)) revert InvalidProof();
-
-        hasClaimed[airdropId][msg.sender] = true;
-        a.totalClaimed += amount;
-
-        _payout(a.rewardToken, msg.sender, amount);
-
-        emit AirdropClaimed(airdropId, msg.sender, amount);
+    function claim(uint256 airdropId, uint256 amount, bytes32[] calldata proof) external nonReentrant {
+        _claim(airdropId, msg.sender, amount, proof);
     }
 
-    function sweepRemainder(uint256 airdropId) external onlyAdmin {
+    function claimBatch(ClaimInput[] calldata claims) external nonReentrant {
+        uint256 length = claims.length;
+        if (length == 0 || length > MAX_CLAIM_BATCH) revert InvalidAmount();
+
+        address claimant = msg.sender;
+        for (uint256 i = 0; i < length; i++) {
+            ClaimInput calldata input = claims[i];
+            _claim(input.airdropId, claimant, input.amount, input.proof);
+        }
+    }
+
+    function sweepRemainder(uint256 airdropId) external onlyOwner {
         Airdrop storage a = airdrops[airdropId];
         if (a.creator == address(0)) revert InvalidConfig();
         if (a.remainderSwept) revert AlreadySwept();
@@ -240,15 +282,39 @@ contract PumpAirdropManager {
         a.remainderSwept = true;
         a.status = AirdropStatus.Closed;
 
-        _payout(a.rewardToken, admin, remainder);
+        address admin_ = owner();
+        _payout(a.rewardToken, admin_, remainder);
 
-        emit AirdropRemainderSwept(airdropId, admin, remainder);
+        emit AirdropRemainderSwept(airdropId, admin_, remainder);
     }
 
     function remainingBalance(uint256 airdropId) external view returns (uint256) {
         Airdrop storage a = airdrops[airdropId];
         if (a.totalFunded < a.totalClaimed) return 0;
         return a.totalFunded - a.totalClaimed;
+    }
+
+    function _claim(uint256 airdropId, address claimant, uint256 amount, bytes32[] calldata proof) internal {
+        Airdrop storage a = airdrops[airdropId];
+        if (a.status != AirdropStatus.Finalized) revert AirdropNotFinalized();
+        if (block.timestamp < a.claimStart) revert ClaimWindowNotOpen();
+        if (block.timestamp > a.claimEnd) revert ClaimWindowClosed();
+        if (hasClaimed[airdropId][claimant]) revert AlreadyClaimed();
+
+        bytes32 leaf = _leaf(claimant, amount);
+        if (!MerkleProof.verify(proof, a.merkleRoot, leaf)) revert InvalidProof();
+
+        hasClaimed[airdropId][claimant] = true;
+        a.totalClaimed += amount;
+
+        _payout(a.rewardToken, claimant, amount);
+
+        emit AirdropClaimed(airdropId, claimant, amount);
+    }
+
+    function _createFeeFor(address account) internal view returns (uint256) {
+        if (account == owner() || feeExempt[account]) return 0;
+        return createFee;
     }
 
     function _leaf(address account, uint256 amount) internal pure returns (bytes32) {
@@ -268,4 +334,6 @@ contract PumpAirdropManager {
         (bool ok,) = to.call{value: amount}("");
         if (!ok) revert TransferFailed();
     }
+
+    uint256[40] private __gap;
 }

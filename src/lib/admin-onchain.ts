@@ -56,6 +56,7 @@ export async function getAdminProtocolSnapshot() {
     memeTreasury,
     memeOwner,
     memeCreateFee,
+    memeMinInitialBuyWei,
     curveTreasury,
     curveOwner,
     curveProtocolFeeBps,
@@ -81,6 +82,11 @@ export async function getAdminProtocolSnapshot() {
       address: factory,
       abi: memeFactoryAbi,
       functionName: "createFee",
+    }),
+    publicClient.readContract({
+      address: factory,
+      abi: memeFactoryAbi,
+      functionName: "minInitialBuyWei",
     }),
     publicClient.readContract({
       address: bonding,
@@ -148,6 +154,7 @@ export async function getAdminProtocolSnapshot() {
       owner: memeOwner as Address,
       treasury: memeTreasury as Address,
       createFeeBnb: formatEther(memeCreateFee),
+      minInitialBuyBnb: formatEther(memeMinInitialBuyWei),
     },
     bondingCurveManager: {
       address: bonding,

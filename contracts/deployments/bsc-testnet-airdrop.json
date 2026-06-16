@@ -1,12 +1,14 @@
 {
-  "abiVersion": "pump-airdrop-v1",
+  "abiVersion": "pump-airdrop-uups-v1",
   "chainId": 97,
   "deployer": "0x11Ea71d1BEb04Aece4d06a585D9dbc6F58836880",
-  "deploymentBlock": 112753660,
+  "deploymentBlock": 113710460,
   "keeper": "0x11Ea71d1BEb04Aece4d06a585D9dbc6F58836880",
-  "launchpadTreasury": "0x9EFE93b528800aF08d0EA3033135B3D5964cc7b7",
-  "memeFactory": "0x2Fa07dFd25f1C2F3E2C0b6084bc5e0b87c9997A2",
+  "launchpadTreasury": "0x6ceEdc76c239d856b89704397239eFCF0D858cc7",
+  "memeFactory": "0x43D1e72eF1127270ae09749DAE5C5bE49eCF8430",
   "owner": "0x11Ea71d1BEb04Aece4d06a585D9dbc6F58836880",
-  "pumpAirdropManager": "0xA943566a158355504f089e37062145c0f67D1d2a",
+  "proxyPattern": "UUPS",
+  "pumpAirdropManager": "0xb6DC709aA97a64B0B3Ba324263bC3B758283C688",
+  "pumpAirdropManagerImpl": "0x32A72E7F86FeB11dd973816bD71ED04A977e5650",
   "rpcUrl": "https://data-seed-prebsc-1-s1.bnbchain.org:8545"
 }

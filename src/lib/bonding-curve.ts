@@ -190,6 +190,21 @@ export const bondingCurveManagerAbi = [
   },
   {
     type: "function",
+    name: "sellWithPermit",
+    inputs: [
+      { name: "token", type: "address" },
+      { name: "tokenIn", type: "uint256" },
+      { name: "minZugOut", type: "uint256" },
+      { name: "deadline", type: "uint256" },
+      { name: "v", type: "uint8" },
+      { name: "r", type: "bytes32" },
+      { name: "s", type: "bytes32" },
+    ],
+    outputs: [{ name: "zugOut", type: "uint256" }],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
     name: "sellWithReferrer",
     inputs: [
       { name: "token", type: "address" },
@@ -199,6 +214,67 @@ export const bondingCurveManagerAbi = [
     ],
     outputs: [{ name: "zugOut", type: "uint256" }],
     stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "sellWithReferrerAndPermit",
+    inputs: [
+      { name: "token", type: "address" },
+      { name: "tokenIn", type: "uint256" },
+      { name: "minZugOut", type: "uint256" },
+      { name: "deadline", type: "uint256" },
+      { name: "v", type: "uint8" },
+      { name: "r", type: "bytes32" },
+      { name: "s", type: "bytes32" },
+      { name: "referrer", type: "address" },
+    ],
+    outputs: [{ name: "zugOut", type: "uint256" }],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "sellBatch",
+    inputs: [
+      {
+        name: "sells",
+        type: "tuple[]",
+        components: [
+          { name: "token", type: "address" },
+          { name: "tokenIn", type: "uint256" },
+          { name: "minZugOut", type: "uint256" },
+        ],
+      },
+    ],
+    outputs: [{ name: "zugOuts", type: "uint256[]" }],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "sellBatchWithPermit",
+    inputs: [
+      {
+        name: "sells",
+        type: "tuple[]",
+        components: [
+          { name: "token", type: "address" },
+          { name: "tokenIn", type: "uint256" },
+          { name: "minZugOut", type: "uint256" },
+          { name: "deadline", type: "uint256" },
+          { name: "v", type: "uint8" },
+          { name: "r", type: "bytes32" },
+          { name: "s", type: "bytes32" },
+        ],
+      },
+    ],
+    outputs: [{ name: "zugOuts", type: "uint256[]" }],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "MAX_SELL_BATCH",
+    inputs: [],
+    outputs: [{ name: "", type: "uint256" }],
+    stateMutability: "view",
   },
   {
     type: "function",
@@ -227,6 +303,40 @@ export const bondingCurveManagerAbi = [
     inputs: [{ name: "trader", type: "address" }],
     outputs: [{ name: "", type: "bool" }],
     stateMutability: "view",
+  },
+  {
+    type: "event",
+    name: "EmergencyBnbSwept",
+    inputs: [
+      { name: "to", type: "address", indexed: true },
+      { name: "amount", type: "uint256", indexed: false },
+    ],
+  },
+  {
+    type: "event",
+    name: "EmergencyHaltSet",
+    inputs: [{ name: "halted", type: "bool", indexed: false }],
+  },
+  {
+    type: "function",
+    name: "emergencyHalt",
+    inputs: [],
+    outputs: [{ name: "", type: "bool" }],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "setEmergencyHalt",
+    inputs: [{ name: "halted", type: "bool" }],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "emergencySweepAllBnb",
+    inputs: [{ name: "to", type: "address" }],
+    outputs: [],
+    stateMutability: "nonpayable",
   },
   {
     type: "function",

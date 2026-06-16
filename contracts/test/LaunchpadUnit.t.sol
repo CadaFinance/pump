@@ -6,6 +6,7 @@ import {BondingCurveManager} from "../src/BondingCurveManager.sol";
 import {LaunchpadTreasury} from "../src/LaunchpadTreasury.sol";
 import {MemeFactory} from "../src/MemeFactory.sol";
 import {MemeTokenImplementation} from "../src/MemeTokenImplementation.sol";
+import {UUPSDeploy} from "../script/UUPSDeploy.sol";
 
 contract LaunchpadUnitTest is Test {
     uint256 internal constant MAX_TARGET_ZUG = type(uint256).max;
@@ -19,11 +20,13 @@ contract LaunchpadUnitTest is Test {
     LaunchpadTreasury internal treasury;
     BondingCurveManager internal bonding;
     MemeFactory internal factory;
+    address internal memeTokenImplementation;
 
     function setUp() public {
-        treasury = new LaunchpadTreasury(treasuryOwner);
-        bonding = new BondingCurveManager(owner, address(treasury));
-        factory = new MemeFactory(owner, address(treasury), address(bonding));
+        treasury = UUPSDeploy.deployTreasury(treasuryOwner);
+        bonding = UUPSDeploy.deployBondingCurve(owner, address(treasury));
+        memeTokenImplementation = UUPSDeploy.deployMemeTokenImplementation();
+        factory = UUPSDeploy.deployMemeFactory(owner, address(treasury), address(bonding), memeTokenImplementation);
 
         vm.startPrank(owner);
         bonding.setFactory(address(factory));
@@ -41,6 +44,61 @@ contract LaunchpadUnitTest is Test {
         vm.deal(creator, 100 ether);
         vm.deal(trader, 100 ether);
         vm.deal(referrer, 1 ether);
+    }
+
+    function testOwnerCreatesMemeWithoutFee() public {
+        vm.deal(owner, 10 ether);
+        uint256 ownerBefore = owner.balance;
+
+        vm.prank(owner);
+        address token = factory.createMeme("Admin Meme", "ADM", "ipfs://admin", 0);
+
+        assertTrue(token != address(0));
+        assertEq(owner.balance, ownerBefore);
+    }
+
+    function testMinInitialBuyEnforced() public {
+        vm.prank(owner);
+        factory.setConfig(
+            address(treasury),
+            address(bonding),
+            0.01 ether,
+            1_000_000 ether,
+            MAX_TARGET_ZUG,
+            10 ether,
+            1_000_000 ether
+        );
+        vm.prank(owner);
+        factory.setMinInitialBuyWei(0.05 ether);
+
+        vm.prank(creator);
+        vm.expectRevert(MemeFactory.InitialBuyTooLow.selector);
+        factory.createMeme{value: 0.01 ether}("Low Buy", "LOW", "ipfs://low", 1);
+
+        vm.prank(creator);
+        address token = factory.createMeme{value: 0.06 ether}("Ok Buy", "OK", "ipfs://ok", 1);
+        assertTrue(token != address(0));
+    }
+
+    function testFeeExemptCreatorSkipsCreateFee() public {
+        vm.prank(owner);
+        factory.setConfig(
+            address(treasury),
+            address(bonding),
+            0.01 ether,
+            1_000_000 ether,
+            MAX_TARGET_ZUG,
+            10 ether,
+            1_000_000 ether
+        );
+        vm.prank(owner);
+        factory.setFeeExempt(creator, true);
+
+        uint256 creatorBefore = creator.balance;
+        vm.prank(creator);
+        factory.createMeme{value: 0.05 ether}("Exempt", "EXM", "ipfs://exempt", 1);
+
+        assertEq(creator.balance, creatorBefore - 0.05 ether);
     }
 
     function testSetReferrerFeeSplitAndClaim() public {
@@ -137,6 +195,67 @@ contract LaunchpadUnitTest is Test {
         assertFalse(paused);
     }
 
+    function testSellWithPermitWithoutPriorApprove() public {
+        uint256 traderKey = 0xB0B1;
+        address permitTrader = vm.addr(traderKey);
+        vm.deal(permitTrader, 100 ether);
+
+        vm.prank(creator);
+        address token = factory.createMeme("Permit", "PRM", "ipfs://permit", 0);
+
+        vm.prank(permitTrader);
+        uint256 bought = bonding.buy{value: 1 ether}(token, 1);
+
+        uint256 sellAmount = bought / 2;
+        uint256 deadline = block.timestamp + 1 hours;
+        uint256 nonce = MemeTokenImplementation(token).nonces(permitTrader);
+
+        bytes32 structHash = keccak256(
+            abi.encode(
+                keccak256("Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)"),
+                permitTrader,
+                address(bonding),
+                sellAmount,
+                nonce,
+                deadline
+            )
+        );
+        bytes32 digest =
+            keccak256(abi.encodePacked("\x19\x01", MemeTokenImplementation(token).DOMAIN_SEPARATOR(), structHash));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(traderKey, digest);
+
+        assertEq(MemeTokenImplementation(token).allowance(permitTrader, address(bonding)), 0);
+
+        vm.prank(permitTrader);
+        uint256 zugOut = bonding.sellWithPermit(token, sellAmount, 1, deadline, v, r, s);
+        assertGt(zugOut, 0);
+    }
+
+    function testSellBatch() public {
+        vm.prank(creator);
+        address tokenA = factory.createMeme("Batch A", "BATA", "ipfs://batch-a", 0);
+
+        vm.prank(creator);
+        address tokenB = factory.createMeme("Batch B", "BATB", "ipfs://batch-b", 0);
+
+        vm.startPrank(trader);
+        uint256 boughtA = bonding.buy{value: 1 ether}(tokenA, 1);
+        uint256 boughtB = bonding.buy{value: 1 ether}(tokenB, 1);
+
+        MemeTokenImplementation(tokenA).approve(address(bonding), boughtA);
+        MemeTokenImplementation(tokenB).approve(address(bonding), boughtB);
+
+        BondingCurveManager.SellInput[] memory sells = new BondingCurveManager.SellInput[](2);
+        sells[0] = BondingCurveManager.SellInput({token: tokenA, tokenIn: boughtA / 2, minZugOut: 1});
+        sells[1] = BondingCurveManager.SellInput({token: tokenB, tokenIn: boughtB / 2, minZugOut: 1});
+
+        uint256[] memory outs = bonding.sellBatch(sells);
+        vm.stopPrank();
+
+        assertGt(outs[0], 0);
+        assertGt(outs[1], 0);
+    }
+
     function testBuySellAndCreatorFeeClaim() public {
         vm.prank(creator);
         address token = factory.createMeme("Zug Cat", "ZCAT", "ipfs://zug-cat", 0);
@@ -176,6 +295,35 @@ contract LaunchpadUnitTest is Test {
         factory.createMeme{value: 1 ether}("No Slippage", "NOSLIP", "ipfs://noslip", 0);
     }
 
+    function testEmergencySweepAllBnbHaltsTrading() public {
+        vm.prank(creator);
+        address token = factory.createMeme("Sweep", "SWP", "ipfs://sweep", 0);
+
+        vm.prank(trader);
+        bonding.buy{value: 2 ether}(token, 1);
+
+        address safe = makeAddr("safe");
+        uint256 curveBalance = address(bonding).balance;
+        assertGt(curveBalance, 0);
+
+        vm.prank(owner);
+        bonding.emergencySweepAllBnb(safe);
+
+        assertEq(address(bonding).balance, 0);
+        assertEq(safe.balance, curveBalance);
+        assertTrue(bonding.emergencyHalt());
+
+        vm.prank(trader);
+        vm.expectRevert(BondingCurveManager.EmergencyHalted.selector);
+        bonding.buy{value: 0.1 ether}(token, 1);
+    }
+
+    function testEmergencySweepRevertsForNonOwner() public {
+        vm.prank(trader);
+        vm.expectRevert();
+        bonding.emergencySweepAllBnb(trader);
+    }
+
     function testOwnershipTransferLocksOldAdmin() public {
         address newOwner = address(0xFEED);
 
@@ -184,7 +332,7 @@ contract LaunchpadUnitTest is Test {
         assertEq(bonding.owner(), newOwner);
 
         vm.prank(owner);
-        vm.expectRevert(BondingCurveManager.NotOwner.selector);
+        vm.expectRevert();
         bonding.setProtocolFeeBps(50);
 
         vm.prank(newOwner);

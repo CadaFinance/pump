@@ -22,6 +22,23 @@ export const pumpAirdropManagerAbi = [
   },
   {
     type: "function",
+    name: "feeExempt",
+    inputs: [{ name: "account", type: "address" }],
+    outputs: [{ name: "", type: "bool" }],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "setFeeExempt",
+    inputs: [
+      { name: "account", type: "address" },
+      { name: "exempt", type: "bool" },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
     name: "createFee",
     inputs: [],
     outputs: [{ name: "", type: "uint256" }],
@@ -72,6 +89,30 @@ export const pumpAirdropManagerAbi = [
     ],
     outputs: [],
     stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "claimBatch",
+    inputs: [
+      {
+        name: "claims",
+        type: "tuple[]",
+        components: [
+          { name: "airdropId", type: "uint256" },
+          { name: "amount", type: "uint256" },
+          { name: "proof", type: "bytes32[]" },
+        ],
+      },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "MAX_CLAIM_BATCH",
+    inputs: [],
+    outputs: [{ name: "", type: "uint256" }],
+    stateMutability: "view",
   },
   {
     type: "function",

@@ -3,14 +3,15 @@ pragma solidity ^0.8.26;
 
 import {Script} from "forge-std/Script.sol";
 import {console2} from "forge-std/console2.sol";
+import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
 import {BondingCurveManager} from "../src/BondingCurveManager.sol";
 import {LaunchpadLens} from "../src/LaunchpadLens.sol";
 import {LaunchpadTreasury} from "../src/LaunchpadTreasury.sol";
 import {MemeFactory} from "../src/MemeFactory.sol";
-import {MemeTokenImplementation} from "../src/MemeTokenImplementation.sol";
+import {UUPSDeploy} from "./UUPSDeploy.sol";
 
-/// @notice BSC Testnet pump deploy — targetZug = max (bonding curve never caps out).
+/// @notice UUPS proxy deploy for BSC testnet pump stack.
 contract DeployPumpBsc is Script {
     uint256 internal constant BSC_TESTNET_ID = 97;
     uint256 internal constant MAX_TARGET_ZUG = type(uint256).max;
@@ -18,16 +19,20 @@ contract DeployPumpBsc is Script {
     uint256 internal constant CREATE_FEE = 0.001 ether;
 
     string internal constant DEPLOY_FILE = "deployments/bsc-testnet-pump.json";
-    string internal constant ABI_VERSION = "pump-bsc-v1";
+    string internal constant ABI_VERSION = "pump-bsc-uups-v1";
 
     struct Deployed {
         address owner;
         address deployer;
         address launchpadTreasury;
+        address launchpadTreasuryImpl;
         address memeTokenImplementation;
         address bondingCurveManager;
+        address bondingCurveManagerImpl;
         address memeFactory;
+        address memeFactoryImpl;
         address launchpadLens;
+        address launchpadLensImpl;
         uint256 deploymentBlock;
     }
 
@@ -43,11 +48,48 @@ contract DeployPumpBsc is Script {
 
         vm.startBroadcast(privateKey);
 
-        d.launchpadTreasury = address(new LaunchpadTreasury(owner));
-        d.memeTokenImplementation = address(new MemeTokenImplementation());
-        d.bondingCurveManager = address(new BondingCurveManager(d.deployer, d.launchpadTreasury));
-        d.memeFactory = address(new MemeFactory(d.deployer, d.launchpadTreasury, d.bondingCurveManager));
-        d.launchpadLens = address(new LaunchpadLens(d.bondingCurveManager));
+        LaunchpadTreasury treasuryImpl = new LaunchpadTreasury();
+        d.launchpadTreasuryImpl = address(treasuryImpl);
+        d.launchpadTreasury = payable(
+            address(
+                new ERC1967Proxy(
+                    address(treasuryImpl),
+                    abi.encodeCall(LaunchpadTreasury.initialize, (owner))
+                )
+            )
+        );
+
+        d.memeTokenImplementation = UUPSDeploy.deployMemeTokenImplementation();
+
+        BondingCurveManager bondingImpl = new BondingCurveManager();
+        d.bondingCurveManagerImpl = address(bondingImpl);
+        d.bondingCurveManager = address(
+            new ERC1967Proxy(
+                address(bondingImpl),
+                abi.encodeCall(BondingCurveManager.initialize, (owner, d.launchpadTreasury))
+            )
+        );
+
+        MemeFactory factoryImpl = new MemeFactory();
+        d.memeFactoryImpl = address(factoryImpl);
+        d.memeFactory = address(
+            new ERC1967Proxy(
+                address(factoryImpl),
+                abi.encodeCall(
+                    MemeFactory.initialize,
+                    (owner, d.launchpadTreasury, d.bondingCurveManager, d.memeTokenImplementation)
+                )
+            )
+        );
+
+        LaunchpadLens lensImpl = new LaunchpadLens();
+        d.launchpadLensImpl = address(lensImpl);
+        d.launchpadLens = address(
+            new ERC1967Proxy(
+                address(lensImpl),
+                abi.encodeCall(LaunchpadLens.initialize, (owner, d.bondingCurveManager))
+            )
+        );
 
         BondingCurveManager(d.bondingCurveManager).setFactory(d.memeFactory);
 
@@ -61,9 +103,6 @@ contract DeployPumpBsc is Script {
             VIRTUAL_ZUG_RESERVE,
             factory.defaultVirtualTokenReserve()
         );
-
-        BondingCurveManager(d.bondingCurveManager).transferOwnership(owner);
-        factory.transferOwnership(owner);
 
         vm.stopBroadcast();
 
@@ -79,30 +118,36 @@ contract DeployPumpBsc is Script {
         vm.serializeUint(key, "chainId", block.chainid);
         vm.serializeString(key, "rpcUrl", "https://data-seed-prebsc-1-s1.bnbchain.org:8545");
         vm.serializeString(key, "abiVersion", ABI_VERSION);
+        vm.serializeString(key, "proxyPattern", "UUPS");
         vm.serializeAddress(key, "owner", d.owner);
         vm.serializeAddress(key, "deployer", d.deployer);
         vm.serializeUint(key, "deploymentBlock", d.deploymentBlock);
         vm.serializeAddress(key, "launchpadTreasury", d.launchpadTreasury);
+        vm.serializeAddress(key, "launchpadTreasuryImpl", d.launchpadTreasuryImpl);
         vm.serializeAddress(key, "memeTokenImplementation", d.memeTokenImplementation);
         vm.serializeAddress(key, "bondingCurveManager", d.bondingCurveManager);
+        vm.serializeAddress(key, "bondingCurveManagerImpl", d.bondingCurveManagerImpl);
         vm.serializeAddress(key, "memeFactory", d.memeFactory);
+        vm.serializeAddress(key, "memeFactoryImpl", d.memeFactoryImpl);
+        vm.serializeAddress(key, "launchpadLensImpl", d.launchpadLensImpl);
         string memory out = vm.serializeAddress(key, "launchpadLens", d.launchpadLens);
         vm.writeJson(out, DEPLOY_FILE);
     }
 
     function _printSummary(Deployed memory d) internal view {
         console2.log("========================================");
-        console2.log(" BSC TESTNET PUMP DEPLOY");
+        console2.log(" BSC TESTNET PUMP UUPS DEPLOY");
         console2.log(" chainId:", block.chainid);
         console2.log(" deployer:", d.deployer);
         console2.log(" owner:", d.owner);
         console2.log(" deploymentBlock:", d.deploymentBlock);
         console2.log("========================================");
-        console2.log(" MemeFactory:", d.memeFactory);
-        console2.log(" BondingCurveManager:", d.bondingCurveManager);
-        console2.log(" LaunchpadLens:", d.launchpadLens);
+        console2.log(" MemeFactory (proxy):", d.memeFactory);
+        console2.log(" BondingCurveManager (proxy):", d.bondingCurveManager);
+        console2.log(" LaunchpadLens (proxy):", d.launchpadLens);
+        console2.log(" Treasury (proxy):", d.launchpadTreasury);
+        console2.log(" MemeToken impl (clone):", d.memeTokenImplementation);
         console2.log(" Create fee:", CREATE_FEE);
-        console2.log(" Target ZUG: MAX");
         console2.log("========================================");
     }
 }

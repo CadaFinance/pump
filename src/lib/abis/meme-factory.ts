@@ -15,6 +15,37 @@ export const memeFactoryAbi = [
   },
   {
     type: "function",
+    name: "minInitialBuyWei",
+    inputs: [],
+    outputs: [{ name: "", type: "uint256" }],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "feeExempt",
+    inputs: [{ name: "account", type: "address" }],
+    outputs: [{ name: "", type: "bool" }],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "setMinInitialBuyWei",
+    inputs: [{ name: "minInitialBuyWei_", type: "uint256" }],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "setFeeExempt",
+    inputs: [
+      { name: "account", type: "address" },
+      { name: "exempt", type: "bool" },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
     name: "createFee",
     inputs: [],
     outputs: [{ name: "", type: "uint256" }],
