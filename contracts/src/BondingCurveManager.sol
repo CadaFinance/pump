@@ -46,6 +46,7 @@ contract BondingCurveManager is Initializable, UUPSUpgradeable, OwnableUpgradeab
     uint256 public referrerShareBps;
     uint256 public constant BPS = 10_000;
     uint256 public constant MAX_SELL_BATCH = 10;
+    uint256 internal constant PERMIT_ALLOWANCE_MAX = type(uint256).max;
 
     mapping(address => CurveState) public curves;
     mapping(address => uint256) public pendingCreatorFees;
@@ -265,7 +266,7 @@ contract BondingCurveManager is Initializable, UUPSUpgradeable, OwnableUpgradeab
         bytes32 r,
         bytes32 s
     ) external nonReentrant returns (uint256 zugOut) {
-        IERC20Permit(token).permit(msg.sender, address(this), tokenIn, deadline, v, r, s);
+        IERC20Permit(token).permit(msg.sender, address(this), PERMIT_ALLOWANCE_MAX, deadline, v, r, s);
         zugOut = _sell(token, msg.sender, tokenIn, minZugOut);
     }
 
@@ -280,7 +281,7 @@ contract BondingCurveManager is Initializable, UUPSUpgradeable, OwnableUpgradeab
         address referrer
     ) external nonReentrant returns (uint256 zugOut) {
         _bindReferrerIfEligible(msg.sender, referrer);
-        IERC20Permit(token).permit(msg.sender, address(this), tokenIn, deadline, v, r, s);
+        IERC20Permit(token).permit(msg.sender, address(this), PERMIT_ALLOWANCE_MAX, deadline, v, r, s);
         zugOut = _sell(token, msg.sender, tokenIn, minZugOut);
     }
 
@@ -308,7 +309,7 @@ contract BondingCurveManager is Initializable, UUPSUpgradeable, OwnableUpgradeab
         zugOuts = new uint256[](length);
         for (uint256 i = 0; i < length; i++) {
             SellPermitInput calldata input = sells[i];
-            IERC20Permit(input.token).permit(trader, address(this), input.tokenIn, input.deadline, input.v, input.r, input.s);
+            IERC20Permit(input.token).permit(trader, address(this), PERMIT_ALLOWANCE_MAX, input.deadline, input.v, input.r, input.s);
             zugOuts[i] = _sell(input.token, trader, input.tokenIn, input.minZugOut);
         }
     }

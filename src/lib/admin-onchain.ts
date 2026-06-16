@@ -67,6 +67,7 @@ export async function getAdminProtocolSnapshot() {
     airdropCreateFee,
     managerBalance,
     curveBalance,
+    curveEmergencyHalt,
   ] = await Promise.all([
     publicClient.readContract({
       address: factory,
@@ -136,6 +137,11 @@ export async function getAdminProtocolSnapshot() {
       : Promise.resolve(0n),
     manager ? publicClient.getBalance({ address: manager }) : Promise.resolve(0n),
     publicClient.getBalance({ address: bonding }),
+    publicClient.readContract({
+      address: bonding,
+      abi: bondingCurveManagerAbi,
+      functionName: "emergencyHalt",
+    }),
   ]);
 
   const treasuryAddress = (memeTreasury as Address).toLowerCase();
@@ -164,6 +170,7 @@ export async function getAdminProtocolSnapshot() {
       creatorFeeShareBps: Number(curveCreatorFeeShareBps),
       referrerShareBps: Number(curveReferrerShareBps),
       contractBalanceBnb: formatEther(curveBalance),
+      emergencyHalt: Boolean(curveEmergencyHalt),
     },
     airdropManager: manager
       ? {

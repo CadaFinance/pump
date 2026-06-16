@@ -95,7 +95,10 @@ function IssuanceSummaryRows({
       <div className={rowClass}>
         <dt className="text-pump-muted">Create fee</dt>
         <dd className="min-w-0 shrink-0 text-right">
-          <BnbAmountDisplay
+          {feeWei === 0n ? (
+            <span className="text-caption font-medium text-pump-accent">Free (exempt)</span>
+          ) : (
+            <BnbAmountDisplay
             amount={formatCampaignAmount(feeWei)}
             logoSize={isMobile ? 14 : 18}
             amountClassName={
@@ -105,6 +108,7 @@ function IssuanceSummaryRows({
             }
             symbolClassName={isMobile ? "text-caption font-medium text-pump-muted" : undefined}
           />
+          )}
         </dd>
       </div>
       {initialBuyWei > 0n ? (

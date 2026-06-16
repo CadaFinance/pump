@@ -5,6 +5,7 @@ import {
   createChart,
   CandlestickSeries,
   HistogramSeries,
+  PriceScaleMode,
   type CandlestickData,
   type HistogramData,
   type IChartApi,
@@ -21,6 +22,7 @@ import {
   resolveChartPriceFormat,
   type CandleBar,
   type CandleInterval,
+  type VolumeBar,
 } from "@/lib/candles";
 import { useTheme } from "@/components/theme/ThemeProvider";
 import {
@@ -46,6 +48,52 @@ type PriceChartProps = {
 const POLL_MS = 4_000;
 const WS_FALLBACK_POLL_MS = 30_000;
 const VOLUME_SCALE_ID = "volume";
+const DEFAULT_VISIBLE_CANDLES = 120;
+
+function shouldUseLogPriceScale(candles: CandleBar[]): boolean {
+  let min = Number.POSITIVE_INFINITY;
+  let max = 0;
+  for (const c of candles) {
+    if (c.low > 0) min = Math.min(min, c.low);
+    max = Math.max(max, c.high, c.close);
+  }
+  if (!Number.isFinite(min) || min <= 0 || max <= 0) return false;
+  return max / min >= 1.5;
+}
+
+/** Focus viewport on traded candles so genesis pump + recent action stay visible. */
+function visibleLogicalRange(
+  candles: CandleBar[],
+  volumes: VolumeBar[],
+  maxVisible: number
+): { from: number; to: number } {
+  if (candles.length === 0) return { from: 0, to: 5 };
+
+  let firstActive = 0;
+  let lastActive = candles.length - 1;
+  for (let i = 0; i < volumes.length; i++) {
+    if (volumes[i]!.value > 0) {
+      firstActive = i;
+      break;
+    }
+  }
+  for (let i = volumes.length - 1; i >= 0; i--) {
+    if (volumes[i]!.value > 0) {
+      lastActive = i;
+      break;
+    }
+  }
+
+  const span = Math.max(1, lastActive - firstActive + 1);
+  const padding = Math.max(3, Math.min(24, Math.floor(span * 0.2)));
+  const to = Math.min(candles.length + 5, lastActive + padding);
+  const activityFrom = Math.max(0, firstActive - padding);
+  const from =
+    span + padding * 2 <= maxVisible
+      ? activityFrom
+      : Math.max(0, Math.min(activityFrom, to - maxVisible));
+  return { from, to };
+}
 
 function cssVar(name: string, fallback: string): string {
   if (typeof window === "undefined") return fallback;
@@ -96,7 +144,8 @@ export function PriceChart({
   const volumeSeriesRef = useRef<ISeriesApi<"Histogram"> | null>(null);
   /** Fit viewport only on first paint or interval/currency change — not every poll. */
   const shouldFitViewportRef = useRef(true);
-  const lastCandleCountRef = useRef(0);
+  const lastTradeBucketCountRef = useRef(0);
+  const prevPriceScaleRef = useRef<number | null>(null);
 
   const [timeInterval, setTimeInterval] = useState<CandleInterval>("1m");
   const [currency, setCurrency] = useState<"usd" | "mcap">("usd");
@@ -149,7 +198,7 @@ export function PriceChart({
 
   useEffect(() => {
     if (frozen) return;
-    const timer = setInterval(() => setNowMs(Date.now()), 1_000);
+    const timer = setInterval(() => setNowMs(Date.now()), 15_000);
     return () => clearInterval(timer);
   }, [frozen]);
 
@@ -189,15 +238,60 @@ export function PriceChart({
     [candles, currency]
   );
 
+  const fitChartViewport = useCallback(() => {
+    const chart = chartRef.current;
+    const ts = chart?.timeScale();
+    const rightScale = chart?.priceScale("right");
+    if (!ts || !rightScale || candles.length === 0) return;
+
+    rightScale.setAutoScale(true);
+    const useLog = shouldUseLogPriceScale(candles);
+    rightScale.applyOptions({
+      mode: useLog ? PriceScaleMode.Logarithmic : PriceScaleMode.Normal,
+    });
+    const { from, to } = visibleLogicalRange(candles, volumes, DEFAULT_VISIBLE_CANDLES);
+    ts.setVisibleLogicalRange({ from, to });
+  }, [candles, volumes]);
+
+  // Defer viewport fit until lightweight-charts has laid out setData (fixes flat line on first paint).
+  const scheduleFitViewport = useCallback(() => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        fitChartViewport();
+      });
+    });
+  }, [fitChartViewport]);
+
   const selectInterval = useCallback((id: CandleInterval) => {
     shouldFitViewportRef.current = true;
-    setTimeInterval(id);
-  }, []);
+    setTimeInterval((prev) => {
+      if (prev === id) {
+        scheduleFitViewport();
+      }
+      return id;
+    });
+  }, [scheduleFitViewport]);
+
+  useEffect(() => {
+    if (mergedTrades.length > 0) {
+      shouldFitViewportRef.current = true;
+    }
+  }, [mergedTrades.length, tokenAddress]);
+
+  useEffect(() => {
+    if (prevPriceScaleRef.current != null && prevPriceScaleRef.current !== priceScale) {
+      shouldFitViewportRef.current = true;
+    }
+    prevPriceScaleRef.current = priceScale;
+  }, [priceScale]);
 
   const selectCurrency = useCallback((next: "usd" | "mcap") => {
     shouldFitViewportRef.current = true;
     setCurrency(next);
   }, []);
+
+  const scheduleFitViewportRef = useRef(scheduleFitViewport);
+  scheduleFitViewportRef.current = scheduleFitViewport;
 
   // Create chart once — container is always in the DOM.
   useLayoutEffect(() => {
@@ -229,16 +323,17 @@ export function PriceChart({
       },
       rightPriceScale: {
         borderColor,
-        scaleMargins: { top: 0.06, bottom: 0.2 },
+        scaleMargins: { top: 0.08, bottom: 0.22 },
         autoScale: true,
+        mode: PriceScaleMode.Logarithmic,
       },
       timeScale: {
         borderColor,
         timeVisible: true,
-        secondsVisible: true,
-        barSpacing: 10,
-        minBarSpacing: 4,
-        rightOffset: 12,
+        secondsVisible: false,
+        barSpacing: 12,
+        minBarSpacing: 6,
+        rightOffset: 8,
         fixLeftEdge: false,
         fixRightEdge: false,
         tickMarkFormatter: (time: Time) => {
@@ -276,6 +371,8 @@ export function PriceChart({
       borderDownColor: downColor,
       wickUpColor: upColor,
       wickDownColor: downColor,
+      borderVisible: true,
+      wickVisible: true,
     });
 
     const volumeSeries = chart.addSeries(HistogramSeries, {
@@ -315,7 +412,13 @@ export function PriceChart({
 
     const ro = new ResizeObserver(() => {
       if (!el) return;
-      chart.applyOptions({ width: el.clientWidth, height: chartHeightPx() });
+      const width = el.clientWidth;
+      chart.applyOptions({ width, height: chartHeightPx() });
+      if (width > 0 && shouldFitViewportRef.current) {
+        requestAnimationFrame(() => {
+          scheduleFitViewportRef.current();
+        });
+      }
     });
     ro.observe(el);
 
@@ -332,7 +435,7 @@ export function PriceChart({
   // Time scale options when interval changes (do not recreate chart).
   useEffect(() => {
     if (!chartRef.current) return;
-    chartRef.current.timeScale().applyOptions({ secondsVisible: true });
+    chartRef.current.timeScale().applyOptions({ secondsVisible: timeInterval === "15s" });
   }, [timeInterval]);
 
   useEffect(() => {
@@ -363,7 +466,7 @@ export function PriceChart({
       },
       rightPriceScale: {
         borderColor,
-        scaleMargins: { top: 0.06, bottom: 0.2 },
+        scaleMargins: { top: 0.08, bottom: 0.22 },
         autoScale: true,
       },
       timeScale: {
@@ -378,8 +481,21 @@ export function PriceChart({
       borderDownColor: downColor,
       wickUpColor: upColor,
       wickDownColor: downColor,
+      borderVisible: true,
+      wickVisible: true,
     });
   }, [theme]);
+
+  // Log scale when price range is wide (meme launch curves); linear for flat/stable tokens.
+  useEffect(() => {
+    const rightScale = chartRef.current?.priceScale("right");
+    if (!rightScale) return;
+    const useLog = shouldUseLogPriceScale(candles);
+    rightScale.applyOptions({
+      mode: useLog ? PriceScaleMode.Logarithmic : PriceScaleMode.Normal,
+      autoScale: true,
+    });
+  }, [candles, currency]);
 
   // Push candle data — fit viewport only when needed, never on every poll.
   useEffect(() => {
@@ -407,25 +523,23 @@ export function PriceChart({
     if (candleData.length === 0) return;
 
     const ts = chartRef.current?.timeScale();
-    const rightScale = chartRef.current?.priceScale("right");
-    if (!ts || !rightScale) return;
+    if (!ts) return;
+
+    const tradeBucketCount = volumes.filter((v) => v.value > 0).length;
 
     if (shouldFitViewportRef.current) {
-      // Reset both axes when the user switches chart mode/interval so MCAP/USD
-      // doesn't inherit a stale manually zoomed price range.
-      rightScale.setAutoScale(true);
-      ts.fitContent();
+      scheduleFitViewport();
       shouldFitViewportRef.current = false;
-      lastCandleCountRef.current = candleData.length;
+      lastTradeBucketCountRef.current = tradeBucketCount;
       return;
     }
 
-    // New candle appeared — scroll to latest without resetting user's zoom.
-    if (candleData.length > lastCandleCountRef.current) {
+    // Only follow realtime when a new traded bucket appears — not on gap-fill ticks.
+    if (tradeBucketCount > lastTradeBucketCountRef.current) {
       ts.scrollToRealTime();
-      lastCandleCountRef.current = candleData.length;
+      lastTradeBucketCountRef.current = tradeBucketCount;
     }
-  }, [candles, volumes, priceFormat, ready]);
+  }, [candles, volumes, priceFormat, ready, scheduleFitViewport]);
 
   const summaryValue =
     currency === "usd"
@@ -537,7 +651,7 @@ export function PriceChart({
           title="Reset zoom"
           onClick={() => {
             shouldFitViewportRef.current = true;
-            chartRef.current?.timeScale().fitContent();
+            scheduleFitViewport();
           }}
           className="chip-button chip-button-ghost hidden shrink-0 px-2.5 py-1.5 text-caption md:inline-flex"
         >

@@ -1,4 +1,5 @@
 import type { Address } from "viem";
+import { maxUint256 } from "viem";
 
 export const ERC20_PERMIT_TYPES = {
   Permit: [
@@ -11,6 +12,9 @@ export const ERC20_PERMIT_TYPES = {
 } as const;
 
 export const PERMIT_DEADLINE_SEC = 20 * 60;
+
+/** Unlimited allowance — sign once per token; later sells skip permit. */
+export const PERMIT_ALLOWANCE_MAX = maxUint256;
 
 export function buildPermitTypedData(params: {
   tokenName: string;

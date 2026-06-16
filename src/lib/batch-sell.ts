@@ -1,6 +1,6 @@
 import type { Address } from "viem";
 import { parseSignature } from "viem";
-import { buildPermitTypedData, permitDeadline } from "@/lib/erc20-permit";
+import { buildPermitTypedData, PERMIT_ALLOWANCE_MAX, permitDeadline } from "@/lib/erc20-permit";
 
 export const MAX_SELL_BATCH = 10;
 
@@ -39,7 +39,7 @@ export async function signBatchSellPermitItem(
       chainId: input.chainId,
       owner: input.owner,
       spender: input.spender,
-      value: input.tokenIn,
+      value: PERMIT_ALLOWANCE_MAX,
       nonce: input.permitNonce,
       deadline,
     })

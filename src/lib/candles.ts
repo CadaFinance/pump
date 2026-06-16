@@ -1,4 +1,10 @@
+import { parseEther } from "viem";
 import type { TradeItem } from "@/lib/db/launchpad";
+import {
+  DEFAULT_VIRTUAL_TOKEN_RESERVE,
+  DEFAULT_VIRTUAL_ZUG_RESERVE,
+  spotPriceZugFromReserves,
+} from "@/lib/bonding-curve";
 
 export type CandleInterval = "15s" | "1m" | "5m" | "15m" | "1h" | "4h";
 
@@ -33,6 +39,57 @@ export type ChartTradePoint = {
   isBuy: boolean;
 };
 
+export type TradeSpotTick = {
+  id: string;
+  before: number;
+  after: number;
+};
+
+/**
+ * Replay bonding-curve reserve state to derive spot price ticks.
+ * Charts use spot (not per-trade average execution price) — avoids giant wicks on large buys/sells.
+ */
+export function buildTradeSpotTicks(
+  trades: TradeItem[],
+  virtualZugReserve = DEFAULT_VIRTUAL_ZUG_RESERVE,
+  virtualTokenReserve = DEFAULT_VIRTUAL_TOKEN_RESERVE
+): Map<string, TradeSpotTick> {
+  const ticks = new Map<string, TradeSpotTick>();
+  let reserve = 0n;
+  let sold = 0n;
+
+  for (const trade of trades) {
+    const before = spotPriceZugFromReserves(
+      reserve,
+      sold,
+      virtualZugReserve,
+      virtualTokenReserve
+    );
+
+    const zug = parseEther(trade.nativeAmount as `${number}`);
+    const fee = parseEther((trade.feeBnb ?? "0") as `${number}`);
+    const tokens = parseEther(trade.tokenAmount as `${number}`);
+
+    if (trade.side === "BUY") {
+      reserve += zug - fee;
+      sold += tokens;
+    } else {
+      reserve -= zug;
+      sold -= tokens;
+    }
+
+    const after = spotPriceZugFromReserves(
+      reserve,
+      sold,
+      virtualZugReserve,
+      virtualTokenReserve
+    );
+    ticks.set(trade.id, { id: trade.id, before, after });
+  }
+
+  return ticks;
+}
+
 function tradeVolumeBnb(trade: TradeItem): number {
   if (trade.netBnb != null) return Math.max(0, Number(trade.netBnb));
   const gross = Number(trade.nativeAmount);
@@ -40,9 +97,12 @@ function tradeVolumeBnb(trade: TradeItem): number {
   return Math.max(0, gross - fee);
 }
 
-export function tradeToChartPoint(trade: TradeItem): ChartTradePoint | null {
-  const price = Number(trade.priceBnb);
+export function tradeToChartPoint(
+  trade: TradeItem,
+  spot?: TradeSpotTick
+): ChartTradePoint | null {
   const blockTimeMs = new Date(trade.blockTime).getTime();
+  const price = spot?.after ?? Number(trade.priceBnb);
   if (!Number.isFinite(price) || price <= 0 || !Number.isFinite(blockTimeMs)) {
     return null;
   }
@@ -75,9 +135,26 @@ export type BuildCandlesOptions = {
   fillGaps?: boolean;
   /** Last bucket time (ms). Defaults to now for live charts. */
   endTimeMs?: number;
+  /** Use bonding-curve spot price instead of per-trade average execution price. */
+  useSpotPrice?: boolean;
+  /** Max flat candles after the last trade when filling gaps (avoids long dead tails). */
+  maxGapBarsAfterLastTrade?: number;
 };
 
 const MAX_CANDLES = 4000;
+
+function gapTailBarsForInterval(interval: CandleInterval): number {
+  switch (interval) {
+    case "15s":
+      return 8;
+    case "1m":
+      return 6;
+    case "5m":
+      return 4;
+    default:
+      return 2;
+  }
+}
 
 export function buildCandlesFromTrades(
   trades: TradeItem[],
@@ -88,17 +165,14 @@ export function buildCandlesFromTrades(
   const intervalMs = CANDLE_INTERVALS.find((i) => i.id === interval)?.ms ?? 5 * 60_000;
   const intervalSec = intervalMs / 1000;
   const fillGaps = options.fillGaps !== false;
+  const useSpotPrice = options.useSpotPrice !== false;
   const endTimeMs = options.endTimeMs ?? Date.now();
-  const points = trades
-    .map(tradeToChartPoint)
-    .filter((p): p is ChartTradePoint => p != null);
+  const spotTicks = useSpotPrice ? buildTradeSpotTicks(trades) : null;
 
-  if (points.length === 0) {
+  if (trades.length === 0) {
     return { candles: [], volumes: [] };
   }
 
-  // First candle opens at 0 so launch + initial buy reads as a rise from nothing.
-  const genesisOpen = 0;
   let priorClose: number | null = null;
 
   const buckets = new Map<
@@ -106,30 +180,40 @@ export function buildCandlesFromTrades(
     { open: number; high: number; low: number; close: number; volume: number; buyVol: number }
   >();
 
-  for (const point of points) {
+  for (const trade of trades) {
+    const spot = spotTicks?.get(trade.id);
+    const point = tradeToChartPoint(trade, spot);
+    if (!point) continue;
     const bucketTime = Math.floor(point.blockTimeMs / intervalMs) * intervalMs;
     const bucketSec = Math.floor(bucketTime / 1000);
-    const price = point.priceBnb * priceScale;
+    const closePrice = (spot?.after ?? point.priceBnb) * priceScale;
+    const touchPrices = spot
+      ? [spot.before * priceScale, spot.after * priceScale]
+      : [closePrice];
 
     const existing = buckets.get(bucketSec);
     if (!existing) {
-      const open = priorClose ?? genesisOpen;
+      const open = (priorClose ?? touchPrices[0] ?? closePrice) as number;
       buckets.set(bucketSec, {
         open,
-        high: Math.max(open, price),
-        low: Math.min(open, price),
-        close: price,
+        high: Math.max(open, ...touchPrices),
+        low: Math.min(open, ...touchPrices),
+        close: closePrice,
         volume: point.volumeBnb,
         buyVol: point.isBuy ? point.volumeBnb : 0,
       });
     } else {
-      existing.high = Math.max(existing.high, price);
-      existing.low = Math.min(existing.low, price);
-      existing.close = price;
+      existing.high = Math.max(existing.high, ...touchPrices);
+      existing.low = Math.min(existing.low, ...touchPrices);
+      existing.close = closePrice;
       existing.volume += point.volumeBnb;
       if (point.isBuy) existing.buyVol += point.volumeBnb;
     }
     priorClose = buckets.get(bucketSec)!.close;
+  }
+
+  if (buckets.size === 0) {
+    return { candles: [], volumes: [] };
   }
 
   const sortedTimes = [...buckets.keys()].sort((a, b) => a - b);
@@ -159,7 +243,11 @@ export function buildCandlesFromTrades(
   let startSec = sortedTimes[0]!;
   const lastTradeSec = sortedTimes[sortedTimes.length - 1]!;
   const endBucketMs = Math.floor(endTimeMs / intervalMs) * intervalMs;
-  const endSec = Math.max(Math.floor(endBucketMs / 1000), lastTradeSec);
+  const gapTail =
+    options.maxGapBarsAfterLastTrade ?? gapTailBarsForInterval(interval);
+  const tailEndSec = lastTradeSec + gapTail * intervalSec;
+  const liveEndSec = Math.floor(endBucketMs / 1000);
+  const endSec = Math.max(lastTradeSec, Math.min(liveEndSec, tailEndSec));
 
   const span = Math.floor((endSec - startSec) / intervalSec) + 1;
   if (span > MAX_CANDLES) {

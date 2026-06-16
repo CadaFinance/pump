@@ -207,6 +207,7 @@ contract LaunchpadUnitTest is Test {
         uint256 bought = bonding.buy{value: 1 ether}(token, 1);
 
         uint256 sellAmount = bought / 2;
+        uint256 permitValue = type(uint256).max;
         uint256 deadline = block.timestamp + 1 hours;
         uint256 nonce = MemeTokenImplementation(token).nonces(permitTrader);
 
@@ -215,7 +216,7 @@ contract LaunchpadUnitTest is Test {
                 keccak256("Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)"),
                 permitTrader,
                 address(bonding),
-                sellAmount,
+                permitValue,
                 nonce,
                 deadline
             )
@@ -229,6 +230,11 @@ contract LaunchpadUnitTest is Test {
         vm.prank(permitTrader);
         uint256 zugOut = bonding.sellWithPermit(token, sellAmount, 1, deadline, v, r, s);
         assertGt(zugOut, 0);
+        assertEq(MemeTokenImplementation(token).allowance(permitTrader, address(bonding)), type(uint256).max);
+
+        vm.prank(permitTrader);
+        uint256 zugOut2 = bonding.sell(token, bought / 4, 1);
+        assertGt(zugOut2, 0);
     }
 
     function testSellBatch() public {

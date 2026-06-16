@@ -1336,7 +1336,11 @@ export function CreateAirdropForm({
             <div className="flex items-center justify-between gap-2">
               <dt className="text-pump-muted">Create fee</dt>
               <dd className="min-w-0 text-right">
-                <BnbAmountDisplay amount={createFeeValue} />
+                {feeWei === 0n ? (
+                  <span className="text-caption font-medium text-pump-accent">Free (exempt)</span>
+                ) : (
+                  <BnbAmountDisplay amount={createFeeValue} />
+                )}
               </dd>
             </div>
             <div className="flex items-center justify-between gap-2 border-t border-pump-border/15 pt-2">

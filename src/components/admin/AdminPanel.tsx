@@ -26,6 +26,7 @@ import { AdminCreatorShareModal } from "@/components/admin/AdminCreatorShareModa
 import { AdminReferrerShareModal } from "@/components/admin/AdminReferrerShareModal";
 import { AdminMemeCreateFeeModal } from "@/components/admin/AdminMemeCreateFeeModal";
 import { AdminMinInitialBuyModal } from "@/components/admin/AdminMinInitialBuyModal";
+import { AdminFeeExemptModal } from "@/components/admin/AdminFeeExemptModal";
 import { AdminProtocolFeeModal } from "@/components/admin/AdminProtocolFeeModal";
 import { AdminSystemHealth } from "@/components/admin/AdminSystemHealth";
 import {
@@ -71,6 +72,7 @@ type ProtocolSnapshot = {
     creatorFeeShareBps: number;
     referrerShareBps: number;
     contractBalanceBnb: string;
+    emergencyHalt: boolean;
   };
   airdropManager: {
     address: string;
@@ -275,6 +277,7 @@ export function AdminPanel() {
   const [referrerShareModalOpen, setReferrerShareModalOpen] = useState(false);
   const [memeCreateFeeModalOpen, setMemeCreateFeeModalOpen] = useState(false);
   const [minInitialBuyModalOpen, setMinInitialBuyModalOpen] = useState(false);
+  const [feeExemptModalOpen, setFeeExemptModalOpen] = useState(false);
   const [minInitialBuyBnb, setMinInitialBuyBnb] = useState("0");
   const [platformSettingsLoading, setPlatformSettingsLoading] = useState(true);
   const [airdropCreateFeeModalOpen, setAirdropCreateFeeModalOpen] = useState(false);
@@ -681,6 +684,10 @@ export function AdminPanel() {
           onUpdated={() => void load()}
         />
       ) : null}
+      <AdminFeeExemptModal
+        open={feeExemptModalOpen}
+        onClose={() => setFeeExemptModalOpen(false)}
+      />
       <AdminAirdropCreateFeeModal
         open={airdropCreateFeeModalOpen}
         onClose={() => setAirdropCreateFeeModalOpen(false)}
@@ -887,6 +894,7 @@ export function AdminPanel() {
                   {memeFeeUsd != null
                     ? ` · ${formatUsdReadable(memeFeeUsd, { compact: true })}`
                     : ""}
+                  <span className="admin-meta"> · on-chain · owner free</span>
                 </>
               ) : (
                 "—"
@@ -900,7 +908,15 @@ export function AdminPanel() {
               }
             >
               {formatBnb(minInitialBuyBnb)} BNB
-              <span className="admin-meta"> · off-chain create rule</span>
+              <span className="admin-meta"> · on-chain · MemeFactory</span>
+            </AdminDataRow>
+            <AdminDataRow
+              label="Create fee exemption"
+              action={
+                <AdminTextButton onClick={() => setFeeExemptModalOpen(true)}>Manage</AdminTextButton>
+              }
+            >
+              On-chain <span className="admin-meta"> · MemeFactory + AirdropManager</span>
             </AdminDataRow>
             <AdminDataRow
               label="Airdrop create fee"
@@ -917,6 +933,7 @@ export function AdminPanel() {
                   {airdropFeeUsd != null
                     ? ` · ${formatUsdReadable(airdropFeeUsd, { compact: true })}`
                     : ""}
+                  <span className="admin-meta"> · on-chain · admin free</span>
                 </>
               ) : (
                 "—"
@@ -949,11 +966,16 @@ export function AdminPanel() {
             </AdminDataRow>
             <AdminDataRow label="Bonding curve balance">
               {protocol ? (
-                <BnbAmountWithUsd
-                  bnb={protocol.bondingCurveManager.contractBalanceBnb}
-                  bnbUsd={bnbUsd}
-                  inline
-                />
+                <>
+                  <BnbAmountWithUsd
+                    bnb={protocol.bondingCurveManager.contractBalanceBnb}
+                    bnbUsd={bnbUsd}
+                    inline
+                  />
+                  {protocol.bondingCurveManager.emergencyHalt ? (
+                    <span className="admin-meta"> · trading halted</span>
+                  ) : null}
+                </>
               ) : (
                 "—"
               )}
@@ -1354,15 +1376,20 @@ export function AdminPanel() {
       </AdminTabPanel>
 
       <AdminTabPanel id="contracts" active={activeTab}>
-        <AdminBlock title="Contracts">
+        <AdminBlock title="UUPS proxies (user-facing)">
+          <p className="admin-note mb-3">
+            Addresses in <code className="admin-num">.env</code> and <code className="admin-num">contract_registry</code>{" "}
+            must be proxy addresses. Upgrades change implementation only.
+          </p>
           <AdminDataTable>
             {[
               ["MemeFactory", protocol?.memeFactory.address ?? contracts.memeFactory],
-              ["BondingCurve", protocol?.bondingCurveManager.address ?? contracts.bondingCurveManager],
+              ["BondingCurveManager", protocol?.bondingCurveManager.address ?? contracts.bondingCurveManager],
               [
-                "AirdropManager",
+                "PumpAirdropManager",
                 protocol?.airdropManager?.address ?? contracts.airdropManager ?? "—",
               ],
+              ["LaunchpadTreasury", protocol?.treasury.address ?? treasuryContract ?? "—"],
             ].map(([label, addr]) => (
               <AdminDataRow key={label} label={String(label)}>
                 {addr && addr !== "—" ? (

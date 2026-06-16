@@ -392,6 +392,19 @@ export function freshSpotPriceZug(
   return Number(virtualZugReserve) / Number(virtualTokenReserve);
 }
 
+/** Instantaneous spot ZUG-per-token after reserve/sold state (bonding curve marginal price). */
+export function spotPriceZugFromReserves(
+  reserveZug: bigint,
+  soldTokens: bigint,
+  virtualZugReserve: bigint = DEFAULT_VIRTUAL_ZUG_RESERVE,
+  virtualTokenReserve: bigint = DEFAULT_VIRTUAL_TOKEN_RESERVE
+): number {
+  const poolZug = virtualZugReserve + reserveZug;
+  const poolTokens = virtualTokenReserve - soldTokens;
+  if (poolTokens <= 0n || poolZug <= 0n) return 0;
+  return Number(poolZug) / Number(poolTokens);
+}
+
 export const DEFAULT_VIRTUAL_BNB_RESERVE = 5n * 10n ** 18n;
 export const DEFAULT_VIRTUAL_ZUG_RESERVE = DEFAULT_VIRTUAL_BNB_RESERVE;
 export const DEFAULT_TARGET_BNB = 2n ** 256n - 1n;

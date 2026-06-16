@@ -17,7 +17,7 @@ import {
 import { contracts, pumpChain } from "@/config/chain";
 import { erc20Abi, maxUint256 } from "@/lib/abis/erc20";
 import { memeTokenAbi } from "@/lib/abis/meme-token";
-import { buildPermitTypedData, permitDeadline } from "@/lib/erc20-permit";
+import { buildPermitTypedData, PERMIT_ALLOWANCE_MAX, permitDeadline } from "@/lib/erc20-permit";
 import {
   bondingCurveManagerAbi,
   bondingCurveFromSnapshot,
@@ -1081,7 +1081,7 @@ export function TradePanel({
               chainId: pumpChain.id,
               owner: address,
               spender: contracts.bondingCurveManager,
-              value: sellTokenWei,
+              value: PERMIT_ALLOWANCE_MAX,
               nonce: permitNonce,
               deadline,
             })

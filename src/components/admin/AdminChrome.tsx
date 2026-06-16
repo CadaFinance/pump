@@ -31,7 +31,7 @@ export function AdminPageHeader({
       <div>
         <p className="page-kicker">Operations</p>
         <h1 className="page-title">Admin</h1>
-        <p className="page-copy">Protocol operations console — fees, treasury, sweeps, and promo tasks.</p>
+        <p className="page-copy">Protocol operations — on-chain fees, treasury, emergency tools, and promo tasks.</p>
       </div>
       <div className="flex items-center gap-3">
         {address ? (
