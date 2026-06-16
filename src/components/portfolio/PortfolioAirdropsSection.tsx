@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { MyAirdropParticipation } from "@/lib/db/airdrops";
 import { MetricIcons } from "@/lib/metric-icons";
 import { ICON_STROKE } from "@/lib/icons";
@@ -10,9 +10,14 @@ import {
   JoinedAirdropsList,
   fetchJoinedAirdrops,
 } from "@/components/portfolio/joined-airdrops-shared";
-import { partitionJoinedAirdrops } from "@/lib/portfolio-airdrop-summary";
+import {
+  isPortfolioTrackedAirdrop,
+  partitionJoinedAirdrops,
+  sortJoinedAirdropsForPortfolio,
+} from "@/lib/portfolio-airdrop-summary";
 
-const PREVIEW_LIMIT = 5;
+/** Fetch all joined rows from DB in one query — refresh is separate. */
+const JOINED_FETCH_LIMIT = 500;
 
 export function PortfolioAirdropsSection({ address }: { address: string }) {
   const [items, setItems] = useState<MyAirdropParticipation[]>([]);
@@ -20,31 +25,42 @@ export function PortfolioAirdropsSection({ address }: { address: string }) {
   const [modalOpen, setModalOpen] = useState(false);
   const { bnbUsd } = useBnbUsdPrice();
 
-  function loadItems() {
-    setLoading(true);
-    return fetchJoinedAirdrops(address, 50)
-      .then((data) => {
+  const reloadItems = useCallback(
+    async (options?: { refresh?: boolean }) => {
+      try {
+        const data = await fetchJoinedAirdrops(address, JOINED_FETCH_LIMIT, {
+          refresh: options?.refresh,
+        });
         setItems(data);
-      })
-      .catch(() => {
+        return data;
+      } catch {
         setItems([]);
-      })
-      .finally(() => {
-        setLoading(false);
-      });
-  }
+        return [];
+      }
+    },
+    [address]
+  );
 
   useEffect(() => {
     let cancelled = false;
 
     void (async () => {
+      setLoading(true);
       try {
-        const data = await fetchJoinedAirdrops(address, 50);
-        if (!cancelled) setItems(data);
+        const snapshot = await fetchJoinedAirdrops(address, JOINED_FETCH_LIMIT);
+        if (cancelled) return;
+        setItems(snapshot);
+        setLoading(false);
+
+        const refreshed = await fetchJoinedAirdrops(address, JOINED_FETCH_LIMIT, {
+          refresh: true,
+        });
+        if (!cancelled) setItems(refreshed);
       } catch {
-        if (!cancelled) setItems([]);
-      } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setItems([]);
+          setLoading(false);
+        }
       }
     })();
 
@@ -53,14 +69,23 @@ export function PortfolioAirdropsSection({ address }: { address: string }) {
     };
   }, [address]);
 
-  const visibleItems = useMemo(
-    () => items.filter((item) => item.displayStatus !== "CLOSED"),
-    [items]
-  );
+  useEffect(() => {
+    if (!modalOpen) return;
 
-  const previewItems = useMemo(
-    () => visibleItems.slice(0, PREVIEW_LIMIT),
-    [visibleItems]
+    let cancelled = false;
+    void fetchJoinedAirdrops(address, JOINED_FETCH_LIMIT, { refresh: true })
+      .then((data) => {
+        if (!cancelled) setItems(data);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [address, modalOpen]);
+
+  const visibleItems = useMemo(
+    () => sortJoinedAirdropsForPortfolio(items.filter(isPortfolioTrackedAirdrop)),
+    [items]
   );
 
   const claimableCount = useMemo(
@@ -68,7 +93,7 @@ export function PortfolioAirdropsSection({ address }: { address: string }) {
     [visibleItems]
   );
 
-  if (loading) {
+  if (loading && visibleItems.length === 0) {
     return (
       <div className="space-y-2 md:space-y-3">
         <h3 className="section-heading text-h3 inline-flex items-center gap-2">
@@ -91,7 +116,7 @@ export function PortfolioAirdropsSection({ address }: { address: string }) {
   return (
     <>
       <div className="space-y-2 md:space-y-3">
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <h3 className="section-heading text-h3 inline-flex items-center gap-2">
             <MetricIcons.airdrops
               className="hidden h-[1.05em] w-[1.05em] shrink-0 text-pump-accent sm:block"
@@ -105,15 +130,15 @@ export function PortfolioAirdropsSection({ address }: { address: string }) {
             onClick={() => setModalOpen(true)}
             className={
               claimableCount > 0
-                ? "primary-button px-3 py-1.5 text-caption"
-                : "secondary-button px-3 py-1.5 text-caption"
+                ? "primary-button shrink-0 px-3 py-1.5 text-caption"
+                : "secondary-button shrink-0 px-3 py-1.5 text-caption"
             }
           >
             Claim all{claimableCount > 0 ? ` (${claimableCount})` : ""}
           </button>
         </div>
 
-        <JoinedAirdropsList items={previewItems} bnbUsd={bnbUsd} />
+        <JoinedAirdropsList items={visibleItems} bnbUsd={bnbUsd} />
       </div>
 
       <ClaimAllAirdropsModal
@@ -122,7 +147,7 @@ export function PortfolioAirdropsSection({ address }: { address: string }) {
         items={visibleItems}
         address={address}
         onClaimed={() => {
-          void loadItems();
+          void reloadItems({ refresh: true });
         }}
       />
     </>

@@ -495,9 +495,10 @@ export function AirdropsListClient() {
     let cancelled = false;
     void (async () => {
       try {
-        const res = await fetch(`/api/airdrops/mine?address=${encodeURIComponent(address)}`, {
-          cache: "no-store",
-        });
+        const res = await fetch(
+          `/api/airdrops/mine?address=${encodeURIComponent(address)}&idsOnly=1&limit=500`,
+          { cache: "no-store" }
+        );
         const json = (await res.json()) as {
           data?: Array<{ id: string } | string>;
         };

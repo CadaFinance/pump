@@ -56,6 +56,56 @@ export function isReadyToClaim(item: MyAirdropParticipation): boolean {
   );
 }
 
+/** Active joined campaigns worth showing in portfolio (excludes closed). */
+export function isPortfolioTrackedAirdrop(item: MyAirdropParticipation): boolean {
+  return item.displayStatus !== "CLOSED";
+}
+
+/** Campaigns that benefit from live snapshot refresh (progress, rank, claim state). */
+export function needsLiveAirdropRefresh(item: MyAirdropParticipation): boolean {
+  if (!isPortfolioTrackedAirdrop(item) || item.claimedAt) return false;
+  return (
+    item.nextAction === "continue" ||
+    item.nextAction === "claim" ||
+    item.displayStatus === "QUALIFYING" ||
+    item.displayStatus === "FINALIZING" ||
+    item.displayStatus === "CLAIMABLE" ||
+    item.displayStatus === "UPCOMING"
+  );
+}
+
+const PORTFOLIO_AIRDROP_SORT_RANK: Record<string, number> = {
+  claim: 0,
+  continue: 1,
+  wait: 2,
+  view: 3,
+};
+
+/** Claim / continue first so users see what needs attention. */
+export function sortJoinedAirdropsForPortfolio(
+  items: MyAirdropParticipation[]
+): MyAirdropParticipation[] {
+  return [...items].sort((a, b) => {
+    const actionDelta =
+      (PORTFOLIO_AIRDROP_SORT_RANK[a.nextAction] ?? 9) -
+      (PORTFOLIO_AIRDROP_SORT_RANK[b.nextAction] ?? 9);
+    if (actionDelta !== 0) return actionDelta;
+
+    const statusOrder: Record<string, number> = {
+      CLAIMABLE: 0,
+      QUALIFYING: 1,
+      FINALIZING: 2,
+      UPCOMING: 3,
+      CLOSED: 9,
+    };
+    const statusDelta =
+      (statusOrder[a.displayStatus] ?? 8) - (statusOrder[b.displayStatus] ?? 8);
+    if (statusDelta !== 0) return statusDelta;
+
+    return new Date(b.qualifyEnd).getTime() - new Date(a.qualifyEnd).getTime();
+  });
+}
+
 export function partitionJoinedAirdrops(items: MyAirdropParticipation[]) {
   const claimable: MyAirdropParticipation[] = [];
   const qualifying: MyAirdropParticipation[] = [];

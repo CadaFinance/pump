@@ -23,10 +23,12 @@ import { HourglassIcon } from "@/components/ui/HourglassIcon";
 
 export async function fetchJoinedAirdrops(
   address: string,
-  limit = 50
+  limit = 50,
+  options?: { refresh?: boolean }
 ): Promise<MyAirdropParticipation[]> {
+  const refreshQuery = options?.refresh ? "&refresh=1" : "";
   const res = await fetch(
-    `/api/airdrops/mine?address=${encodeURIComponent(address)}&limit=${limit}`,
+    `/api/airdrops/mine?address=${encodeURIComponent(address)}&limit=${limit}${refreshQuery}`,
     { cache: "no-store" }
   );
   const json = (await res.json()) as { data?: MyAirdropParticipation[]; error?: string };
