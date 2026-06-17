@@ -37,6 +37,7 @@ import {
   resolveTradeReferrer,
 } from "@/lib/referral-storage";
 import { bnbToUsd, formatUsdReadable } from "@/lib/format-usd";
+import { formatEstimatedPriceUsd, quoteFillPriceBnb } from "@/lib/price-semantics";
 import { useBnbUsdPrice } from "@/hooks/useBnbUsdPrice";
 import {
   useTradeGasEstimate,
@@ -724,6 +725,29 @@ export function TradePanel({
         : "—";
 
   const slippagePct = Number(SLIPPAGE_BPS) / 100;
+
+  const estimatedQuotePriceUsd = useMemo(() => {
+    if (side === "buy" && estimatedOut > 0n && buyCostWei > 0n) {
+      const priceBnb = quoteFillPriceBnb(
+        Number(formatEther(buyCostWei)),
+        Number(formatUnits(estimatedOut, 18))
+      );
+      return priceBnb != null ? bnbToUsd(priceBnb, bnbUsd) : null;
+    }
+    if (side === "sell" && sellTokenWei > 0n && estimatedOut > 0n) {
+      const priceBnb = quoteFillPriceBnb(
+        Number(formatEther(estimatedOut)),
+        Number(formatUnits(sellTokenWei, 18))
+      );
+      return priceBnb != null ? bnbToUsd(priceBnb, bnbUsd) : null;
+    }
+    return null;
+  }, [side, estimatedOut, buyCostWei, sellTokenWei, bnbUsd]);
+
+  const estimatedQuotePriceLabel = formatEstimatedPriceUsd(
+    estimatedQuotePriceUsd,
+    (value) => formatUsdReadable(value)
+  );
 
   useEffect(() => {
     if (side !== "buy" || linkedBuySpendWei == null || maxBuySpendWei === 0n) return;
@@ -1414,6 +1438,14 @@ export function TradePanel({
             </button>
             {receiveExpanded ? (
               <div className="space-y-2 pt-1 text-caption">
+                {estimatedQuotePriceLabel ? (
+                  <div className="flex items-center justify-between gap-3 text-pump-muted">
+                    <span>Est. price</span>
+                    <span className="financial-value text-pump-text">
+                      {estimatedQuotePriceLabel}
+                    </span>
+                  </div>
+                ) : null}
                 <div className="flex items-center justify-between gap-3 text-pump-muted">
                   <span>Min received</span>
                   <span className="financial-value text-pump-text">{minReceivedLabel}</span>

@@ -362,6 +362,8 @@ export function ArenaListClient({
   const { favorites, isFavorite, toggleFavorite } = useFavorites();
   const { bnbUsd: hookBnbUsd } = useBnbUsdPrice();
   const effectiveBnbUsd = apiBnbUsd ?? hookBnbUsd;
+  const effectiveBnbUsdRef = useRef(effectiveBnbUsd);
+  effectiveBnbUsdRef.current = effectiveBnbUsd;
   const flashTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const capAnimFrameRef = useRef<Record<string, number>>({});
   const animatedCapsRef = useRef<Record<string, number>>({});
@@ -591,6 +593,31 @@ export function ArenaListClient({
     [setAnimatedCap]
   );
 
+  /** WS trade: snap caps instantly — no 1s tween (avoids dip-then-rise with silent poll). */
+  const snapAnimatedCapsForToken = useCallback(
+    (token: TokenListItem) => {
+      const address = token.address.toLowerCase();
+      const bnbUsd = effectiveBnbUsdRef.current;
+      const snap = (suffix: string, value: number | null | undefined) => {
+        if (value == null || !Number.isFinite(value)) return;
+        const key = `${address}:cap:${suffix}`;
+        const frame = capAnimFrameRef.current[key];
+        if (frame) {
+          cancelAnimationFrame(frame);
+          delete capAnimFrameRef.current[key];
+        }
+        setAnimatedCap(key, value);
+      };
+      snap("mcap", bnbToUsd(Number(token.marketCapBnb), bnbUsd));
+      snap(
+        "ath",
+        bnbToUsd(Number(token.athMarketCapBnb ?? token.marketCapBnb), bnbUsd)
+      );
+      snap("price", listTokenPriceUsd(token.marketCapBnb, bnbUsd));
+    },
+    [setAnimatedCap]
+  );
+
   const getComparableValues = useCallback((token: TokenListItem) => {
     return {
       mcap: Number(token.marketCapBnb),
@@ -739,6 +766,7 @@ export function ArenaListClient({
                 nextMcap > prevMcap ? "up" : "down"
               );
             }
+            snapAnimatedCapsForToken(newToken);
           }
           setTokens(next);
           setTopByMcap((prev) => {
