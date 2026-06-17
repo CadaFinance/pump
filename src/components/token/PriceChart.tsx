@@ -230,29 +230,65 @@ export function PriceChart({
     [mergedTrades, timeInterval, priceScale, chartEndTimeMs]
   );
 
-  const lastCandle = candles[candles.length - 1] ?? null;
+  const liveHeadlinePrice =
+    currency === "usd" ? currentPriceUsd : currentMcapUsd;
+
+  const candlesForChart = useMemo(() => {
+    if (
+      candles.length === 0 ||
+      liveHeadlinePrice == null ||
+      !Number.isFinite(liveHeadlinePrice) ||
+      liveHeadlinePrice <= 0
+    ) {
+      return candles;
+    }
+
+    const lastIndex = candles.length - 1;
+    const last = candles[lastIndex]!;
+    const close = liveHeadlinePrice;
+    const patched = {
+      ...last,
+      close,
+      high: Math.max(last.high, close),
+      low: Math.min(last.low, close),
+    };
+
+    if (
+      patched.close === last.close &&
+      patched.high === last.high &&
+      patched.low === last.low
+    ) {
+      return candles;
+    }
+
+    const next = candles.slice();
+    next[lastIndex] = patched;
+    return next;
+  }, [candles, liveHeadlinePrice]);
+
+  const lastCandle = candlesForChart[candlesForChart.length - 1] ?? null;
   const displayTimeUtc = hoverTimeUtc ?? (frozen ? null : formatUtcMs(nowMs));
   const displayCandle = hoverOhlc ?? lastCandle;
 
   const priceFormat = useMemo(
-    () => resolveChartPriceFormat(candles, currency),
-    [candles, currency]
+    () => resolveChartPriceFormat(candlesForChart, currency),
+    [candlesForChart, currency]
   );
 
   const fitChartViewport = useCallback(() => {
     const chart = chartRef.current;
     const ts = chart?.timeScale();
     const rightScale = chart?.priceScale("right");
-    if (!ts || !rightScale || candles.length === 0) return;
+    if (!ts || !rightScale || candlesForChart.length === 0) return;
 
     rightScale.setAutoScale(true);
-    const useLog = shouldUseLogPriceScale(candles);
+    const useLog = shouldUseLogPriceScale(candlesForChart);
     rightScale.applyOptions({
       mode: useLog ? PriceScaleMode.Logarithmic : PriceScaleMode.Normal,
     });
-    const { from, to } = visibleLogicalRange(candles, volumes, DEFAULT_VISIBLE_CANDLES);
+    const { from, to } = visibleLogicalRange(candlesForChart, volumes, DEFAULT_VISIBLE_CANDLES);
     ts.setVisibleLogicalRange({ from, to });
-  }, [candles, volumes]);
+  }, [candlesForChart, volumes]);
 
   // Defer viewport fit until lightweight-charts has laid out setData (fixes flat line on first paint).
   const scheduleFitViewport = useCallback(() => {
@@ -504,7 +540,7 @@ export function PriceChart({
 
     candleSeriesRef.current.applyOptions({ priceFormat });
 
-    const candleData: CandlestickData[] = candles.map((c) => ({
+    const candleData: CandlestickData[] = candlesForChart.map((c) => ({
       time: c.time as CandlestickData["time"],
       open: c.open,
       high: c.high,
@@ -540,12 +576,20 @@ export function PriceChart({
       ts.scrollToRealTime();
       lastTradeBucketCountRef.current = tradeBucketCount;
     }
-  }, [candles, volumes, priceFormat, ready, scheduleFitViewport]);
+  }, [candlesForChart, volumes, priceFormat, ready, scheduleFitViewport]);
 
   const summaryValue =
     currency === "usd"
-      ? (currentPriceUsd != null ? formatPumpSubscriptPrice(currentPriceUsd, "$") : "—")
-      : (currentMcapUsd != null ? formatUsd(currentMcapUsd, { compact: true }) ?? "—" : "—");
+      ? (liveHeadlinePrice != null
+          ? formatPumpSubscriptPrice(liveHeadlinePrice, "$")
+          : lastCandle != null
+            ? formatPumpSubscriptPrice(lastCandle.close, "$")
+            : "—")
+      : (liveHeadlinePrice != null
+          ? formatUsd(liveHeadlinePrice, { compact: true }) ?? "—"
+          : lastCandle != null
+            ? formatUsd(lastCandle.close, { compact: true }) ?? "—"
+            : "—");
   const summaryDeltaPct = price24hChangePct;
 
   const volumeUsd = bnbToUsd(volume24hBnb, bnbUsd);

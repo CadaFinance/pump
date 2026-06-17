@@ -90,6 +90,22 @@ export function buildTradeSpotTicks(
   return ticks;
 }
 
+/** Latest bonding-curve spot (BNB per token) after replaying trades chronologically. */
+export function resolveLatestSpotPriceBnb(trades: TradeItem[]): number | null {
+  if (trades.length === 0) return null;
+
+  const chronological = [...trades].sort(
+    (a, b) => new Date(a.blockTime).getTime() - new Date(b.blockTime).getTime()
+  );
+  const ticks = buildTradeSpotTicks(chronological);
+  const last = chronological[chronological.length - 1]!;
+  const tick = ticks.get(last.id);
+  if (tick && tick.after > 0) return tick.after;
+
+  const exec = Number(last.priceBnb);
+  return Number.isFinite(exec) && exec > 0 ? exec : null;
+}
+
 function tradeVolumeBnb(trade: TradeItem): number {
   if (trade.netBnb != null) return Math.max(0, Number(trade.netBnb));
   const gross = Number(trade.nativeAmount);

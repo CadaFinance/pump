@@ -392,6 +392,21 @@ export function freshSpotPriceZug(
   return Number(virtualZugReserve) / Number(virtualTokenReserve);
 }
 
+/** Spot BNB-per-token from an on-chain `curves` tuple (reserve + sold + virtual reserves). */
+export function spotPriceBnbFromCurveTuple(
+  reserveZug: bigint,
+  soldTokens: bigint,
+  virtualZugReserve: bigint,
+  virtualTokenReserve: bigint
+): number {
+  return spotPriceZugFromReserves(
+    reserveZug,
+    soldTokens,
+    virtualZugReserve,
+    virtualTokenReserve
+  );
+}
+
 /** Instantaneous spot ZUG-per-token after reserve/sold state (bonding curve marginal price). */
 export function spotPriceZugFromReserves(
   reserveZug: bigint,

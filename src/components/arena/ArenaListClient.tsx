@@ -32,6 +32,7 @@ import { PctChange } from "@/components/ui/PctChange";
 import {
   formatAge,
   formatCapForBoard,
+  listTokenPriceUsd,
 } from "@/lib/arena-board-format";
 import { ScrollStripTrack } from "@/components/ui/ScrollStripTrack";
 import { useLiveChannel, resolveLivePollDelay } from "@/hooks/useLiveChannel";
@@ -78,6 +79,9 @@ function applyBoardFilterDefaults(filter: BoardFilter): {
   sortDir?: SortDir;
   cardsSort?: ArenaCardsSortKey;
 } {
+  if (filter === "all") {
+    return { sortKey: "mcap", sortDir: "desc", cardsSort: "mcap" };
+  }
   if (filter === "new") {
     return { sortKey: "age", sortDir: "desc" };
   }
@@ -538,7 +542,7 @@ export function ArenaListClient() {
         return next;
       });
       delete flashTimersRef.current[key];
-    }, 700);
+    }, 1000);
   }, []);
 
   const setAnimatedCap = useCallback((key: string, value: number) => {
@@ -791,6 +795,13 @@ export function ArenaListClient() {
         const key = `${address}:cap:vol24h`;
         if (animatedCapsRef.current[key] == null) setAnimatedCap(key, vol24hTarget);
         else animateCap(key, vol24hTarget);
+      }
+
+      const priceTarget = listTokenPriceUsd(token.marketCapBnb, effectiveBnbUsd);
+      if (priceTarget != null && Number.isFinite(priceTarget)) {
+        const key = `${address}:cap:price`;
+        if (animatedCapsRef.current[key] == null) setAnimatedCap(key, priceTarget);
+        else animateCap(key, priceTarget);
       }
     }
   }, [tokens, effectiveBnbUsd, animateCap, setAnimatedCap]);
@@ -1414,6 +1425,9 @@ export function ArenaListClient() {
             const mcapUsd =
               animatedCaps[`${addressKey}:cap:mcap`] ??
               bnbToUsd(Number(token.marketCapBnb), effectiveBnbUsd);
+            const priceUsd =
+              animatedCaps[`${addressKey}:cap:price`] ??
+              listTokenPriceUsd(token.marketCapBnb, effectiveBnbUsd);
             return (
               <HoldingSwipeRow
                 key={token.address}
@@ -1433,8 +1447,10 @@ export function ArenaListClient() {
                 <ArenaExploreCoinRow
                   token={token}
                   mcapUsd={mcapUsd}
+                  priceUsd={priceUsd}
                   bnbUsd={effectiveBnbUsd}
                   mcapFlash={flashes[`${addressKey}:mcap`]}
+                  priceFlash={flashes[`${addressKey}:mcap`]}
                   change24hPct={token.change24hPct ?? null}
                 />
               </HoldingSwipeRow>

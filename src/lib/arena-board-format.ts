@@ -1,4 +1,9 @@
-import { formatUsdReadable, tokenPriceUsd, DEFAULT_TOKEN_TOTAL_SUPPLY } from "@/lib/format-usd";
+import {
+  formatUsdReadable,
+  tokenPriceUsd,
+  DEFAULT_TOKEN_TOTAL_SUPPLY,
+  USD_COMPACT_K_THRESHOLD,
+} from "@/lib/format-usd";
 
 export function formatAge(createdAt: string): string {
   const ms = Date.now() - new Date(createdAt).getTime();
@@ -37,6 +42,10 @@ export function formatExploreListPrice(
   bnbUsd: number | null | undefined
 ): string {
   const priceUsd = listTokenPriceUsd(marketCapBnb, bnbUsd);
+  return formatExplorePriceUsd(priceUsd);
+}
+
+export function formatExplorePriceUsd(priceUsd: number | null | undefined): string {
   return formatUsdReadable(priceUsd, { compact: true });
 }
 
@@ -56,7 +65,7 @@ export function formatCapForBoard(value: number | null): string {
   const abs = Math.abs(value);
   const sign = value < 0 ? "-" : "";
   if (abs >= 1_000_000) return `${sign}$${(abs / 1_000_000).toFixed(2)}M`;
-  if (abs >= 1_000) return `${sign}$${(abs / 1_000).toFixed(1)}K`;
-  if (abs >= 1) return `${sign}$${Math.round(abs)}`;
+  if (abs >= USD_COMPACT_K_THRESHOLD) return `${sign}$${(abs / 1_000).toFixed(1)}K`;
+  if (abs >= 1) return `${sign}$${abs.toFixed(1)}`;
   return formatUsdReadable(value);
 }

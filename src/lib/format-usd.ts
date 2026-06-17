@@ -3,6 +3,9 @@ import { formatPumpSubscriptPrice } from "@/lib/candles";
 /** Default meme total supply on bonding curves. */
 export const DEFAULT_TOKEN_TOTAL_SUPPLY = 1_000_000_000;
 
+/** Use one decimal ($1234.5) below this; compact K/M above. */
+export const USD_COMPACT_K_THRESHOLD = 10_000;
+
 export function formatUsd(
   value: number | null | undefined,
   opts?: { compact?: boolean }
@@ -11,9 +14,10 @@ export function formatUsd(
   if (opts?.compact && value >= 1_000_000) {
     return `$${(value / 1_000_000).toFixed(2)}M`;
   }
-  if (opts?.compact && value >= 1_000) {
-    return `$${(value / 1_000).toFixed(2)}K`;
+  if (opts?.compact && value >= USD_COMPACT_K_THRESHOLD) {
+    return `$${(value / 1_000).toFixed(1)}K`;
   }
+  if (opts?.compact && value >= 1) return `$${value.toFixed(1)}`;
   if (value >= 1) return `$${value.toFixed(2)}`;
   if (value >= 0.01) return `$${value.toFixed(4)}`;
   return `$${value.toExponential(2)}`;
@@ -29,7 +33,10 @@ export function formatUsdReadable(
   const sign = opts?.signed ? (value > 0 ? "+" : value < 0 ? "-" : "") : value < 0 ? "-" : "";
 
   if (opts?.compact && abs >= 1_000_000) return `${sign}$${(abs / 1_000_000).toFixed(2)}M`;
-  if (opts?.compact && abs >= 1_000) return `${sign}$${(abs / 1_000).toFixed(2)}K`;
+  if (opts?.compact && abs >= USD_COMPACT_K_THRESHOLD) {
+    return `${sign}$${(abs / 1_000).toFixed(1)}K`;
+  }
+  if (opts?.compact && abs >= 1) return `${sign}$${abs.toFixed(1)}`;
   if (opts?.compact && abs > 0) return `${sign}${formatPumpSubscriptPrice(abs, "$")}`;
   if (abs >= 1) return `${sign}$${abs.toFixed(2)}`;
   if (abs >= 0.01) return `${sign}$${abs.toFixed(4)}`;

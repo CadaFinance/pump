@@ -2819,11 +2819,11 @@ code,
   }
 
   .live-metric-flash-up {
-    animation: live-metric-flash-up 0.75s ease-out forwards;
+    animation: live-metric-flash-up 1s ease-out forwards;
   }
 
   .live-metric-flash-down {
-    animation: live-metric-flash-down 0.75s ease-out forwards;
+    animation: live-metric-flash-down 1s ease-out forwards;
   }
 
   .live-trade-land-buy {

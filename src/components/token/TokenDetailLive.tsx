@@ -5,7 +5,13 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { createPublicClient, http } from "viem";
 import { useReadContract } from "wagmi";
 import type { TokenDetail, TradeItem } from "@/lib/db/launchpad";
-import { bondingCurveManagerAbi, bondingCurveSnapshotFromTuple, displayTokenPriceBnb } from "@/lib/bonding-curve";
+import {
+  bondingCurveManagerAbi,
+  bondingCurveSnapshotFromTuple,
+  displayTokenPriceBnb,
+  spotPriceBnbFromCurveTuple,
+} from "@/lib/bonding-curve";
+import { resolveLatestSpotPriceBnb } from "@/lib/candles";
 import {
   estimateFdvUsd,
   formatUsdReadable,
@@ -100,9 +106,23 @@ type TokenDetailLiveProps = {
   initialTrades: TradeItem[];
 };
 
-function resolveDisplayPriceBnb(token: TokenDetail, liveTrades: TradeItem[]): number {
-  const fromTrade = liveTrades.find((t) => Number(t.priceBnb) > 0);
-  if (fromTrade) return Number(fromTrade.priceBnb);
+function resolveDisplayPriceBnb(
+  token: TokenDetail,
+  liveTrades: TradeItem[],
+  chainCurve?: CurveTuple
+): number {
+  if (chainCurve) {
+    const fromChain = spotPriceBnbFromCurveTuple(
+      chainCurve[2],
+      chainCurve[3],
+      chainCurve[5],
+      chainCurve[6]
+    );
+    if (fromChain > 0) return fromChain;
+  }
+
+  const fromSpotReplay = resolveLatestSpotPriceBnb(liveTrades);
+  if (fromSpotReplay != null && fromSpotReplay > 0) return fromSpotReplay;
 
   const fromDb = Number(token.lastPriceBnb);
   if (fromDb > 0) return fromDb;
@@ -426,7 +446,11 @@ export function TokenDetailLive({
     })();
   }, [applyOptimisticFromReceipt, fetchLive, tokenAddress]);
 
-  const displayPrice = resolveDisplayPriceBnb(liveToken, trades);
+  const displayPrice = resolveDisplayPriceBnb(
+    liveToken,
+    trades,
+    chainCurve as CurveTuple | undefined
+  );
   const priceUsd = tokenPriceUsd(displayPrice, bnbUsd);
   const fdvUsd = estimateFdvUsd(displayPrice, bnbUsd);
   const volume24hBnb = useMemo(() => computeVolumeWindowBnb(trades, 86_400_000), [trades]);

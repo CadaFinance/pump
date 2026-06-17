@@ -5,8 +5,9 @@ import type { TokenListItem } from "@/lib/db/launchpad";
 import { TokenAvatar } from "@/components/token/TokenAvatar";
 import { PctChange } from "@/components/ui/PctChange";
 import {
-  formatExploreListPrice,
   formatExploreMcapLabel,
+  formatExplorePriceUsd,
+  listTokenPriceUsd,
 } from "@/lib/arena-board-format";
 
 type FlashTone = "up" | "down";
@@ -20,19 +21,25 @@ function flashText(toneValue: FlashTone | undefined): string {
 type ArenaExploreCoinRowProps = {
   token: TokenListItem;
   mcapUsd: number | null;
+  priceUsd: number | null;
   bnbUsd: number | null;
   mcapFlash?: FlashTone;
+  priceFlash?: FlashTone;
   change24hPct: number | null;
 };
 
 export function ArenaExploreCoinRow({
   token,
   mcapUsd,
+  priceUsd,
   bnbUsd,
   mcapFlash,
+  priceFlash,
   change24hPct,
 }: ArenaExploreCoinRowProps) {
   const change = change24hPct ?? token.change24hPct ?? null;
+  const resolvedPriceUsd =
+    priceUsd ?? listTokenPriceUsd(token.marketCapBnb, bnbUsd);
 
   return (
     <article className="arena-explore-row grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3">
@@ -52,8 +59,10 @@ export function ArenaExploreCoinRow({
         </p>
       </Link>
       <div className="text-right">
-        <p className="financial-value text-body-sm font-medium leading-tight text-pump-text">
-          {formatExploreListPrice(token.marketCapBnb, bnbUsd)}
+        <p
+          className={`financial-value text-body-sm font-medium leading-tight text-pump-text ${flashText(priceFlash)}`}
+        >
+          {formatExplorePriceUsd(resolvedPriceUsd)}
         </p>
         <PctChange value={change} className="mt-0.5 text-caption leading-tight" />
       </div>
