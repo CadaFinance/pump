@@ -51,6 +51,13 @@ import { copyToClipboard } from "@/lib/copy-to-clipboard";
 import { tokenSharePayload } from "@/lib/share-links";
 import { shellPaddingXClass } from "@/components/layout/layout-shell";
 import { useLiveChannel, resolveLivePollDelay } from "@/hooks/useLiveChannel";
+import {
+  mergeChartTradePatch,
+  patchTokenDetailFromWsTrade,
+  prependTradeIfNew,
+  wsPayloadToTradeItem,
+  type TokenTradeWsPayload,
+} from "@/lib/token-live-delta";
 
 const POLL_MS = 4_000;
 const BURST_POLL_MS = 1_500;
@@ -195,6 +202,8 @@ export function TokenDetailLive({
 }: TokenDetailLiveProps) {
   const [token, setToken] = useState(initialToken);
   const [dbTrades, setDbTrades] = useState(initialTrades);
+  const [chartTradePatches, setChartTradePatches] = useState<TradeItem[]>([]);
+  const [holdersRefreshKey, setHoldersRefreshKey] = useState(0);
   const [optimisticTrades, setOptimisticTrades] = useState<TradeItem[]>([]);
   const [indexerSyncing, setIndexerSyncing] = useState(false);
   const [copiedAddress, setCopiedAddress] = useState(false);
@@ -273,6 +282,9 @@ export function TokenDetailLive({
       );
 
       setDbTrades(body.data.trades);
+      setChartTradePatches((prev) =>
+        prev.filter((t) => !dbHashes.has(t.txHash.toLowerCase()))
+      );
       setOptimisticTrades((prev) =>
         prev.filter((t) => !dbHashes.has(t.txHash.toLowerCase()))
       );
@@ -305,8 +317,24 @@ export function TokenDetailLive({
   const { connected: wsConnected } = useLiveChannel({
     room: `token:${tokenAddress.toLowerCase()}`,
     onMessage: (message) => {
-      const payload = message as { type?: string };
-      if (payload.type === "trade" || payload.type === "board_delta") {
+      const payload = message as TokenTradeWsPayload;
+
+      if (payload.type === "trade") {
+        const tradeItem = wsPayloadToTradeItem(payload);
+        if (tradeItem) {
+          setDbTrades((prev) => prependTradeIfNew(prev, tradeItem));
+          setChartTradePatches((prev) => mergeChartTradePatch(prev, tradeItem));
+          setToken((prev) => patchTokenDetailFromWsTrade(prev, payload) ?? prev);
+          setOptimisticTrades((prev) =>
+            prev.filter((t) => t.txHash.toLowerCase() !== tradeItem.txHash.toLowerCase())
+          );
+          setIndexerSyncing(false);
+          setHoldersRefreshKey((k) => k + 1);
+        }
+        return;
+      }
+
+      if (payload.type === "board_delta") {
         void fetchLiveRef.current();
       }
     },
@@ -608,6 +636,7 @@ export function TokenDetailLive({
             symbol={symbol}
             status={liveToken.status}
             optimisticTrades={optimisticTrades}
+            streamedTrades={chartTradePatches}
             wsConnected={wsConnected}
             bnbUsd={bnbUsd}
             currentPriceUsd={priceUsd}
@@ -627,6 +656,7 @@ export function TokenDetailLive({
               symbol={liveToken.symbol}
               trades={trades}
               wsConnected={wsConnected}
+              holdersRefreshKey={holdersRefreshKey}
               currentPriceBnb={displayPrice}
               bnbUsd={bnbUsd}
               onAddressClick={setProfileAddress}

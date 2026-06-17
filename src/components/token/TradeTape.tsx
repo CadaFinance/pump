@@ -138,6 +138,7 @@ export function TradeTape({
   symbol,
   trades,
   wsConnected = false,
+  holdersRefreshKey = 0,
   currentPriceBnb,
   bnbUsd,
   onAddressClick,
@@ -147,6 +148,7 @@ export function TradeTape({
   symbol: string;
   trades: TradeItem[];
   wsConnected?: boolean;
+  holdersRefreshKey?: number;
   currentPriceBnb: number;
   bnbUsd: number | null;
   onAddressClick: (address: string) => void;
@@ -194,6 +196,30 @@ export function TradeTape({
       window.clearInterval(timer);
     };
   }, [tokenAddress, wsConnected]);
+
+  useEffect(() => {
+    if (holdersRefreshKey <= 0) return;
+    let cancelled = false;
+
+    async function refreshHolders() {
+      try {
+        const response = await fetch(`/api/tokens/${tokenAddress}/holders`, {
+          cache: "no-store",
+        });
+        const body = (await response.json()) as { data?: TokenHolderSnapshot[] };
+        if (!response.ok || cancelled) return;
+        setHolderRows(mapApiHoldersToRows(body.data ?? []));
+        setHoldersReady(true);
+      } catch {
+        // Keep last snapshot.
+      }
+    }
+
+    void refreshHolders();
+    return () => {
+      cancelled = true;
+    };
+  }, [holdersRefreshKey, tokenAddress]);
 
   return (
     <section className="space-y-3">

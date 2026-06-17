@@ -56,6 +56,11 @@ import {
 } from "@/lib/onchain-balance";
 import { useLiveChannel, resolveLivePollDelay } from "@/hooks/useLiveChannel";
 import { walletRoom } from "@/lib/db/perf-flags";
+import {
+  patchPortfolioFromWalletTrade,
+  patchWalletHoldingFromWalletTrade,
+  type WalletTradeWsPayload,
+} from "@/lib/portfolio-live-delta";
 
 type PortfolioPosition = {
   tokenAddress: string;
@@ -568,15 +573,52 @@ export function PortfolioPanel() {
   const lastEnrichFingerprintRef = useRef("");
   const bnbUsdForDustRef = useRef<number | null>(null);
   const loadPortfolioRef = useRef<(wallet: string, limit?: number) => Promise<void>>(async () => {});
+  const portfolioDataRef = useRef<PortfolioData | null>(null);
 
   const { connected: wsConnected } = useLiveChannel({
     room: address ? walletRoom(address) : "wallet:disconnected",
     enabled: Boolean(isConnected && address),
     onMessage: (payload) => {
-      const message = payload as { type?: string };
-      if (message.type === "wallet_trade" && address) {
-        burstUntilRef.current = Date.now() + BURST_DURATION_MS;
+      const message = payload as WalletTradeWsPayload;
+      if (message.type !== "wallet_trade" || !address) return;
+
+      burstUntilRef.current = Date.now() + BURST_DURATION_MS;
+
+      const current = portfolioDataRef.current;
+      if (!current) {
         void loadPortfolioRef.current(address);
+        return;
+      }
+
+      const { next, changed, needsFullReload } = patchPortfolioFromWalletTrade(
+        current,
+        message,
+        address
+      );
+
+      if (needsFullReload) {
+        void loadPortfolioRef.current(address);
+        return;
+      }
+
+      if (!changed) return;
+
+      portfolioDataRef.current = next;
+      setData(next);
+
+      const token = message.tokenAddress?.toLowerCase();
+      const position =
+        next.positions.find((p) => p.tokenAddress.toLowerCase() === token) ??
+        current.positions.find((p) => p.tokenAddress.toLowerCase() === token);
+
+      if (position && message.position) {
+        setWalletHoldings((prev) =>
+          patchWalletHoldingFromWalletTrade(prev, message, {
+            symbol: position.symbol,
+            name: position.name,
+            logoUrl: position.logoUrl,
+          })
+        );
       }
     },
   });
@@ -715,6 +757,10 @@ export function PortfolioPanel() {
   );
 
   loadPortfolioRef.current = loadPortfolio;
+
+  useEffect(() => {
+    portfolioDataRef.current = data;
+  }, [data]);
 
   const loadMoreCreatedTokens = useCallback(async () => {
     if (!address || loadingMoreCreated || !data) return;

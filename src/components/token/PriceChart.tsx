@@ -38,6 +38,8 @@ type PriceChartProps = {
   symbol: string;
   status: string;
   optimisticTrades?: TradeItem[];
+  /** WS trade deltas merged into chart without full refetch. */
+  streamedTrades?: TradeItem[];
   wsConnected?: boolean;
   bnbUsd?: number | null;
   currentPriceUsd?: number | null;
@@ -131,6 +133,7 @@ export function PriceChart({
   symbol,
   status,
   optimisticTrades = [],
+  streamedTrades = [],
   wsConnected = false,
   bnbUsd = null,
   currentPriceUsd = null,
@@ -206,13 +209,16 @@ export function PriceChart({
   const mergedTrades = useMemo(() => {
     const byId = new Map<string, TradeItem>();
     for (const t of dbTrades) byId.set(t.id, t);
+    for (const t of streamedTrades) {
+      if (!byId.has(t.id)) byId.set(t.id, t);
+    }
     for (const t of optimisticTrades) {
       if (!byId.has(t.id)) byId.set(t.id, t);
     }
     return [...byId.values()].sort(
       (a, b) => new Date(a.blockTime).getTime() - new Date(b.blockTime).getTime()
     );
-  }, [dbTrades, optimisticTrades]);
+  }, [dbTrades, streamedTrades, optimisticTrades]);
 
   const chartEndTimeMs = useMemo(() => {
     if (frozen && mergedTrades.length > 0) {
