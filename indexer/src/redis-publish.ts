@@ -40,6 +40,7 @@ export type TradePublishPayload = {
   };
   bonding: {
     reserveZug: string;
+    tokenSold?: string;
     marketCapZug: string;
     lastPriceZug: string;
     progressBps: number;

@@ -274,6 +274,7 @@ export class LaunchpadEventHandlers {
 
       const bonding = await client.query<{
         reserve_zug: string;
+        token_sold: string;
         market_cap_zug: string;
         last_price_zug: string;
         progress_bps: number;
@@ -281,7 +282,7 @@ export class LaunchpadEventHandlers {
         holder_count: number;
       }>(
         `
-          SELECT reserve_zug::text, market_cap_zug::text, last_price_zug::text,
+          SELECT reserve_zug::text, token_sold::text, market_cap_zug::text, last_price_zug::text,
                  progress_bps, trade_count, holder_count
           FROM bonding_states
           WHERE token_address = $1
@@ -339,6 +340,7 @@ export class LaunchpadEventHandlers {
       },
       bonding: {
         reserveZug: tradeResult.bonding.reserve_zug,
+        tokenSold: tradeResult.bonding.token_sold,
         marketCapZug: tradeResult.bonding.market_cap_zug,
         lastPriceZug: tradeResult.bonding.last_price_zug,
         progressBps: tradeResult.bonding.progress_bps,
