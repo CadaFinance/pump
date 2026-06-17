@@ -279,12 +279,12 @@ export function TradeTape({
                           {formatSupplyShare(row.netTokens)}
                         </td>
                         <td className={`${cellClass} financial-value text-pump-text`}>
-                          {formatUsdReadable(avgEntryUsd)}
+                          {formatUsdReadable(avgEntryUsd, { compact: true })}
                         </td>
                         <td className={cellClass}>
                           <div className="flex items-center justify-end gap-1.5 whitespace-nowrap lg:gap-2">
                             <span className={`financial-value text-caption font-semibold lg:text-body-sm ${pnlTone}`}>
-                              {formatUsdReadable(unrealizedPnlUsd)}
+                              {formatUsdReadable(unrealizedPnlUsd, { compact: true, signed: true })}
                             </span>
                             <PctChange
                               value={unrealizedPnlPct}

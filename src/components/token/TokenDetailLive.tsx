@@ -8,10 +8,9 @@ import type { TokenDetail, TradeItem } from "@/lib/db/launchpad";
 import {
   bondingCurveManagerAbi,
   bondingCurveSnapshotFromTuple,
-  displayTokenPriceBnb,
-  spotPriceBnbFromCurveTuple,
 } from "@/lib/bonding-curve";
 import { resolveLatestSpotPriceBnb } from "@/lib/candles";
+import { resolveMarkPriceBnb } from "@/lib/mark-price";
 import {
   estimateFdvUsd,
   formatUsdReadable,
@@ -106,30 +105,6 @@ type TokenDetailLiveProps = {
   initialTrades: TradeItem[];
 };
 
-function resolveDisplayPriceBnb(
-  token: TokenDetail,
-  liveTrades: TradeItem[],
-  chainCurve?: CurveTuple
-): number {
-  if (chainCurve) {
-    const fromChain = spotPriceBnbFromCurveTuple(
-      chainCurve[2],
-      chainCurve[3],
-      chainCurve[5],
-      chainCurve[6]
-    );
-    if (fromChain > 0) return fromChain;
-  }
-
-  const fromSpotReplay = resolveLatestSpotPriceBnb(liveTrades);
-  if (fromSpotReplay != null && fromSpotReplay > 0) return fromSpotReplay;
-
-  const fromDb = Number(token.lastPriceBnb);
-  if (fromDb > 0) return fromDb;
-
-  return displayTokenPriceBnb(token.lastPriceBnb, token.tradeCount);
-}
-
 type PriceChange24h = {
   changeBnb: number;
   changePct: number;
@@ -192,10 +167,14 @@ function mergeLiveStats(
   let merged = chainCurve ? tokenFromCurve(base, chainCurve) : base;
 
   if (liveTrades.length > 0) {
+    const spotPrice = resolveLatestSpotPriceBnb(liveTrades);
     merged = {
       ...merged,
       tradeCount: Math.max(merged.tradeCount, liveTrades.length),
-      lastPriceBnb: liveTrades[0].priceBnb || merged.lastPriceBnb,
+      lastPriceBnb:
+        spotPrice != null && spotPrice > 0
+          ? String(spotPrice)
+          : liveTrades[0].priceBnb || merged.lastPriceBnb,
     };
   }
 
@@ -446,7 +425,7 @@ export function TokenDetailLive({
     })();
   }, [applyOptimisticFromReceipt, fetchLive, tokenAddress]);
 
-  const displayPrice = resolveDisplayPriceBnb(
+  const displayPrice = resolveMarkPriceBnb(
     liveToken,
     trades,
     chainCurve as CurveTuple | undefined

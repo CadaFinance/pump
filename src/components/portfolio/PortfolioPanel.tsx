@@ -42,7 +42,14 @@ import {
   PORTFOLIO_LAUNCHED_INITIAL,
   PORTFOLIO_ONCHAIN_BALANCE_CHUNK,
   PORTFOLIO_ONCHAIN_VERIFY_INITIAL,
+  PORTFOLIO_DUST_MIN_VALUE_USD,
 } from "@/lib/portfolio-limits";
+import {
+  isPortfolioDustHolding,
+  portfolioDustLabel,
+  readPortfolioShowDust,
+  writePortfolioShowDust,
+} from "@/lib/portfolio-dust";
 import {
   resolveVerifiedTokenBalance,
   scaleCostBasisForBalance,
@@ -139,6 +146,16 @@ function buildVerifiedPositionView(
     avgEntry: displayBalance > 0 ? remainingCostBasis / displayBalance : null,
     realizedPnlBnb: Number(position.realizedPnlBnb),
   };
+}
+
+/** Open-lot PnL (mark-to-market minus cost basis). */
+function holdingOpenPnlBnb(view: VerifiedPositionView): number {
+  return view.balance * Number(view.position.lastPriceBnb) - view.remainingCostBasis;
+}
+
+/** Unrealized + cumulative realized for this wallet+token (matches hero Net PnL). */
+function holdingNetPnlBnb(view: VerifiedPositionView): number {
+  return holdingOpenPnlBnb(view) + view.realizedPnlBnb;
 }
 
 function pnlTone(value: number): string {
@@ -528,6 +545,7 @@ export function PortfolioPanel() {
   const [createdLimit, setCreatedLimit] = useState(PORTFOLIO_LAUNCHED_INITIAL);
   const createdLimitRef = useRef(PORTFOLIO_LAUNCHED_INITIAL);
   const [holdingsVisibleLimit, setHoldingsVisibleLimit] = useState(PORTFOLIO_HOLDINGS_INITIAL);
+  const [showDustHoldings, setShowDustHoldings] = useState(false);
   const [sellAllOpen, setSellAllOpen] = useState(false);
   const [loadingMoreCreated, setLoadingMoreCreated] = useState(false);
   const [quickTradeTarget, setQuickTradeTarget] = useState<PortfolioQuickTradeTarget | null>(null);
@@ -546,6 +564,8 @@ export function PortfolioPanel() {
   const enrichGenerationRef = useRef(0);
   const holdingsReadyRef = useRef(false);
   const isInitialPortfolioLoadRef = useRef(true);
+  const lastEnrichFingerprintRef = useRef("");
+  const bnbUsdForDustRef = useRef<number | null>(null);
   const loadPortfolioRef = useRef<(wallet: string, limit?: number) => Promise<void>>(async () => {});
 
   const { connected: wsConnected } = useLiveChannel({
@@ -560,9 +580,28 @@ export function PortfolioPanel() {
     },
   });
 
-  const enrichHoldings = useCallback(async (walletAddress: string, portfolio: PortfolioData) => {
+  useEffect(() => {
+    setShowDustHoldings(readPortfolioShowDust());
+  }, []);
+
+  const toggleShowDustHoldings = useCallback(() => {
+    setShowDustHoldings((current) => {
+      const next = !current;
+      writePortfolioShowDust(next);
+      return next;
+    });
+  }, []);
+
+  const enrichHoldings = useCallback(
+    async (
+      walletAddress: string,
+      portfolio: PortfolioData,
+      options?: { silent?: boolean }
+    ) => {
     const generation = ++enrichGenerationRef.current;
-    setHoldingsEnriching(true);
+    if (!options?.silent) {
+      setHoldingsEnriching(true);
+    }
 
     try {
       const snapshot = await fetchVerifiedHoldingsSnapshot(walletAddress, portfolio, {
@@ -580,11 +619,12 @@ export function PortfolioPanel() {
       holdingsReadyRef.current = true;
       setHoldingsReady(true);
     } finally {
-      if (generation === enrichGenerationRef.current) {
+      if (generation === enrichGenerationRef.current && !options?.silent) {
         setHoldingsEnriching(false);
       }
     }
-  }, []);
+  },
+  []);
 
   const { data: pendingWei, refetch: refetchPending } = useReadContract({
     address: contracts.bondingCurveManager,
@@ -633,7 +673,21 @@ export function PortfolioPanel() {
 
         setData(portfolio);
         isInitialPortfolioLoadRef.current = false;
-        void enrichHoldings(walletAddress, portfolio);
+
+        const fingerprint = portfolio.positions
+          .map(
+            (position) =>
+              `${position.tokenAddress}:${position.tokenBalance}:${position.lastPriceBnb}`
+          )
+          .join("|");
+        const needsEnrich =
+          !holdingsReadyRef.current || fingerprint !== lastEnrichFingerprintRef.current;
+        if (needsEnrich) {
+          lastEnrichFingerprintRef.current = fingerprint;
+          void enrichHoldings(walletAddress, portfolio, {
+            silent: holdingsReadyRef.current,
+          });
+        }
       } catch (err) {
         if (generation !== loadGenerationRef.current) return;
 
@@ -721,6 +775,7 @@ export function PortfolioPanel() {
       enrichGenerationRef.current += 1;
       isInitialPortfolioLoadRef.current = true;
       holdingsReadyRef.current = false;
+      lastEnrichFingerprintRef.current = "";
       setData(null);
       setWalletHoldings([]);
       setOnChainBalances({});
@@ -738,6 +793,7 @@ export function PortfolioPanel() {
     enrichGenerationRef.current += 1;
     isInitialPortfolioLoadRef.current = true;
     holdingsReadyRef.current = false;
+    lastEnrichFingerprintRef.current = "";
     setData(null);
     setWalletHoldings([]);
     setOnChainBalances({});
@@ -798,7 +854,7 @@ export function PortfolioPanel() {
       const val = view.balance * Number(view.position.lastPriceBnb);
       values[key] = val;
       totalValue += val;
-      totalPnl += val - view.remainingCostBasis;
+      totalPnl += holdingNetPnlBnb(view);
     }
 
     for (const holding of walletHoldings) {
@@ -884,24 +940,47 @@ export function PortfolioPanel() {
       )
       .filter((view): view is VerifiedPositionView => view != null);
 
-  const totalEstimated = verifiedPositionViews.reduce(
+  if (bnbUsd != null) {
+    bnbUsdForDustRef.current = bnbUsd;
+  }
+  const bnbUsdForDust = bnbUsd ?? bnbUsdForDustRef.current;
+
+  const allHoldingsRows = buildPortfolioHoldingRows(verifiedPositionViews, walletHoldings);
+  const awaitingDustFilter =
+    !showDustHoldings && bnbUsdForDust == null && allHoldingsRows.length > 0;
+  const dustHoldingsCount = allHoldingsRows.filter((row) =>
+    isPortfolioDustHolding(row.estimatedValueBnb, bnbUsdForDust)
+  ).length;
+  const displayHoldingsRows = showDustHoldings
+    ? allHoldingsRows
+    : allHoldingsRows.filter(
+        (row) => !isPortfolioDustHolding(row.estimatedValueBnb, bnbUsdForDust)
+      );
+
+  const metricViews = showDustHoldings
+    ? verifiedPositionViews
+    : verifiedPositionViews.filter(
+        (view) =>
+          !isPortfolioDustHolding(
+            view.balance * Number(view.position.lastPriceBnb),
+            bnbUsdForDust
+          )
+      );
+
+  const totalEstimated = metricViews.reduce(
     (sum, view) => sum + view.balance * Number(view.position.lastPriceBnb),
     0
   );
-  const totalUnrealizedPnl = verifiedPositionViews.reduce((sum, view) => {
-    const openValue = view.balance * Number(view.position.lastPriceBnb);
-    return sum + (openValue - view.remainingCostBasis);
-  }, 0);
-  const totalRealizedPnl = verifiedPositionViews.reduce((sum, view) => {
-    return (
-      sum + view.realizedPnlBnb
-    );
-  }, 0);
+  const totalUnrealizedPnl = metricViews.reduce(
+    (sum, view) => sum + holdingOpenPnlBnb(view),
+    0
+  );
+  const totalRealizedPnl = metricViews.reduce((sum, view) => sum + view.realizedPnlBnb, 0);
   const totalNetPnl = totalUnrealizedPnl + totalRealizedPnl;
   const totalEstimatedUsd = bnbToUsd(totalEstimated, bnbUsd);
   const totalNetPnlUsd =
     bnbUsd != null && Number.isFinite(totalNetPnl) ? totalNetPnl * bnbUsd : null;
-  const totalCostBasis = verifiedPositionViews.reduce(
+  const totalCostBasis = metricViews.reduce(
     (sum, view) => sum + view.remainingCostBasis,
     0
   );
@@ -910,24 +989,30 @@ export function PortfolioPanel() {
   const claimedBnb = data.creatorFeesClaimedBnb ?? 0;
   const pendingBnb = pendingWei != null ? Number(formatEther(pendingWei)) : 0;
   const creatorFeesTotalBnb = claimedBnb + pendingBnb;
-  const holdingsCount = verifiedPositionViews.length + walletHoldings.length;
-  const allHoldingsRows = buildPortfolioHoldingRows(verifiedPositionViews, walletHoldings);
-  const visibleHoldingsRows = allHoldingsRows.slice(0, holdingsVisibleLimit);
-  const hasMoreHoldings = visibleHoldingsRows.length < holdingsCount;
-  const sellAllHoldingsInput = [
-    ...verifiedPositionViews.map((view) => ({
-      tokenAddress: view.position.tokenAddress,
-      symbol: view.position.symbol,
-      name: view.position.name,
-      logoUrl: view.position.logoUrl,
-    })),
-    ...walletHoldings.map((holding) => ({
-      tokenAddress: holding.tokenAddress,
-      symbol: holding.symbol,
-      name: holding.name,
-      logoUrl: holding.logoUrl,
-    })),
-  ];
+  const holdingsCount = displayHoldingsRows.length;
+  const totalHoldingsCount = allHoldingsRows.length;
+  const visibleHoldingsRows = displayHoldingsRows.slice(0, holdingsVisibleLimit);
+  const hasMoreHoldings = visibleHoldingsRows.length < displayHoldingsRows.length;
+  const sellAllHoldingsInput = displayHoldingsRows.flatMap((row) => {
+    if (row.kind === "position") {
+      return [
+        {
+          tokenAddress: row.view.position.tokenAddress,
+          symbol: row.view.position.symbol,
+          name: row.view.position.name,
+          logoUrl: row.view.position.logoUrl,
+        },
+      ];
+    }
+    return [
+      {
+        tokenAddress: row.holding.tokenAddress,
+        symbol: row.holding.symbol,
+        name: row.holding.name,
+        logoUrl: row.holding.logoUrl,
+      },
+    ];
+  });
 
   return (
     <>
@@ -1100,30 +1185,65 @@ export function PortfolioPanel() {
         {data && !error ? (
           <>
             <div className="space-y-2 md:space-y-3">
-              <div className="flex items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center justify-between gap-2 md:gap-3">
                 <h3 className="section-heading text-h3 inline-flex items-center gap-2">
                   <MetricIcons.holdings
                     className="hidden h-[1.05em] w-[1.05em] shrink-0 text-pump-accent sm:block"
                     strokeWidth={ICON_STROKE}
                     aria-hidden
                   />
-                  Holdings ({holdingsEnriching ? "…" : holdingsCount})
+                  Holdings ({!holdingsReady && holdingsEnriching ? "…" : holdingsCount})
                 </h3>
-                {holdingsCount > 0 ? (
-                  <button
-                    type="button"
-                    onClick={() => setSellAllOpen(true)}
-                    className="secondary-button shrink-0 border-pump-danger/35 px-3 py-1.5 text-caption text-pump-danger hover:bg-pump-danger/10"
-                  >
-                    Sell all ({holdingsCount})
-                  </button>
-                ) : null}
+                <div className="flex flex-wrap items-center justify-end gap-2">
+                  {dustHoldingsCount > 0 ? (
+                    <button
+                      type="button"
+                      onClick={toggleShowDustHoldings}
+                      className={
+                        showDustHoldings ? "chip-button chip-button-active" : "chip-button"
+                      }
+                      aria-pressed={showDustHoldings}
+                    >
+                      {showDustHoldings
+                        ? `Hide dust (<$${PORTFOLIO_DUST_MIN_VALUE_USD})`
+                        : portfolioDustLabel(dustHoldingsCount)}
+                    </button>
+                  ) : null}
+                  {holdingsCount > 0 ? (
+                    <button
+                      type="button"
+                      onClick={() => setSellAllOpen(true)}
+                      className="secondary-button shrink-0 border-pump-danger/35 px-3 py-1.5 text-caption text-pump-danger hover:bg-pump-danger/10"
+                    >
+                      Sell all ({holdingsCount})
+                    </button>
+                  ) : null}
+                </div>
               </div>
               {holdingsCount > 0 ? <HoldingsSwipeHint /> : null}
-              {holdingsEnriching && holdingsCount === 0 ? (
+              {!holdingsReady && holdingsEnriching ? (
                 <section className="panel-surface portfolio-section-surface p-4" aria-busy="true">
                   <p className="text-body-sm text-pump-muted">Loading holdings…</p>
                 </section>
+              ) : awaitingDustFilter ? (
+                <section className="panel-surface portfolio-section-surface p-4" aria-busy="true">
+                  <p className="text-body-sm text-pump-muted">Applying dust filter…</p>
+                </section>
+              ) : holdingsCount === 0 && totalHoldingsCount > 0 ? (
+                <div className="panel-surface empty-state">
+                  <p className="empty-state-copy">
+                    No positions above ${PORTFOLIO_DUST_MIN_VALUE_USD}.{" "}
+                    {dustHoldingsCount > 0 ? (
+                      <button
+                        type="button"
+                        onClick={toggleShowDustHoldings}
+                        className="font-medium text-pump-accent underline-offset-2 hover:underline"
+                      >
+                        {portfolioDustLabel(dustHoldingsCount)}
+                      </button>
+                    ) : null}
+                  </p>
+                </div>
               ) : holdingsCount === 0 ? (
                 <div className="panel-surface empty-state">
                   <p className="empty-state-copy">No open positions. Buy from the Arena.</p>
@@ -1155,10 +1275,10 @@ export function PortfolioPanel() {
                         balance * Number(position.lastPriceBnb),
                         bnbUsd
                       );
-                      const netPnl = balance * Number(position.lastPriceBnb) - remainingCostBasis;
-                      const netPnlUsd = bnbUsd != null ? netPnl * bnbUsd : null;
+                      const netPnlBnb = holdingNetPnlBnb(row.view);
+                      const netPnlUsd = bnbUsd != null ? netPnlBnb * bnbUsd : null;
                       const netPnlPct =
-                        remainingCostBasis > 0 ? (netPnl / remainingCostBasis) * 100 : null;
+                        remainingCostBasis > 0 ? (netPnlBnb / remainingCostBasis) * 100 : null;
 
                       return (
                         <HoldingSwipeRow
@@ -1248,11 +1368,12 @@ export function PortfolioPanel() {
                             balance * Number(position.lastPriceBnb),
                             bnbUsd
                           );
-                          const netPnl =
-                            balance * Number(position.lastPriceBnb) - remainingCostBasis;
-                          const netPnlUsd = bnbUsd != null ? netPnl * bnbUsd : null;
+                          const netPnlBnb = holdingNetPnlBnb(row.view);
+                          const netPnlUsd = bnbUsd != null ? netPnlBnb * bnbUsd : null;
                           const netPnlPct =
-                            remainingCostBasis > 0 ? (netPnl / remainingCostBasis) * 100 : null;
+                            remainingCostBasis > 0
+                              ? (netPnlBnb / remainingCostBasis) * 100
+                              : null;
 
                           return (
                             <tr key={position.tokenAddress} className="group">

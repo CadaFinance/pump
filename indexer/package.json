@@ -12,6 +12,7 @@
     "sync-king": "tsx src/sync-king.ts",
     "sync-missions": "tsx src/sync-missions.ts",
     "backfill-cost-basis": "tsx src/backfill-cost-basis.ts",
+    "backfill-spot-price": "tsx src/backfill-spot-price.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

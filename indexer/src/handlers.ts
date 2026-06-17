@@ -172,7 +172,9 @@ export class LaunchpadEventHandlers {
 
     const tradeEventId = eventId(txHash, logIndex);
     const side = isBuy ? "BUY" : "SELL";
-    const price = ratioWeiToDecimal(zugAmount, tokenAmount);
+    const executionPrice = ratioWeiToDecimal(zugAmount, tokenAmount);
+    const spotPrice = spotPriceBnbFromReserves(reserveZug, soldTokens);
+    const markPrice = spotPrice > 0 ? spotPrice : executionPrice;
 
     const tradeResult = await withTransaction(this.context.launchpadPool, async (client) => {
       const inserted = await client.query<{ id: string }>(
@@ -207,7 +209,7 @@ export class LaunchpadEventHandlers {
           side,
           weiToDecimal(zugAmount),
           weiToDecimal(tokenAmount),
-          price,
+          executionPrice,
           weiToDecimal(feeZug),
           weiToDecimal(feeSplit.creatorFee),
           weiToDecimal(feeSplit.treasuryFee),
@@ -246,7 +248,7 @@ export class LaunchpadEventHandlers {
               updated_at = now()
           WHERE token_address = $1
         `,
-        [token, weiToDecimal(reserveZug), weiToDecimal(soldTokens), price]
+        [token, weiToDecimal(reserveZug), weiToDecimal(soldTokens), markPrice]
       );
 
       await this.updateUserAggregates(client, token, trader, isBuy, zugAmount, feeZug, tokenAmount);
@@ -329,7 +331,7 @@ export class LaunchpadEventHandlers {
         traderAddress: trader,
         zugAmount: weiToDecimal(zugAmount),
         tokenAmount: weiToDecimal(tokenAmount),
-        priceZug: price,
+        priceZug: String(markPrice),
         txHash: txHash.toLowerCase(),
         logIndex,
         blockTime: blockTime.toISOString(),
@@ -371,7 +373,7 @@ export class LaunchpadEventHandlers {
           traderAddress: trader,
           zugAmount: weiToDecimal(zugAmount),
           tokenAmount: weiToDecimal(tokenAmount),
-          priceZug: price,
+          priceZug: String(markPrice),
           txHash: txHash.toLowerCase(),
           logIndex,
           blockTime: blockTime.toISOString(),
@@ -896,6 +898,16 @@ function bytes32ToHex(value: unknown): string {
 
 function unixToDate(seconds: bigint): Date {
   return new Date(Number(seconds) * 1000);
+}
+
+/** Marginal spot BNB/token after trade (matches chart + holders P/L). */
+function spotPriceBnbFromReserves(reserveZug: bigint, soldTokens: bigint): number {
+  const virtualZug = BigInt(process.env.BONDING_VIRTUAL_ZUG_RESERVE_WEI ?? `${5_000n * 10n ** 18n}`);
+  const virtualToken = 1_000_000_000n * 10n ** 18n;
+  const poolZug = virtualZug + reserveZug;
+  const poolTokens = virtualToken - soldTokens;
+  if (poolTokens <= 0n || poolZug <= 0n) return 0;
+  return Number(poolZug) / Number(poolTokens);
 }
 
 /** Factory defaults: virtualZug / 1B token virtual → spot price per token. */

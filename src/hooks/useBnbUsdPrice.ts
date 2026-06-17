@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 
 type BnbPriceResponse = {
   bnbUsd: number | null;
@@ -24,6 +24,7 @@ export function useBnbUsdPrice() {
     staleTime: 30_000,
     refetchInterval: 30_000,
     retry: 1,
+    placeholderData: keepPreviousData,
   });
 
   return {

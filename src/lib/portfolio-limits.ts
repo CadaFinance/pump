@@ -9,3 +9,5 @@ export const PORTFOLIO_CREATOR_WALLET_SCAN_MAX = 60;
 export const PORTFOLIO_ONCHAIN_VERIFY_INITIAL = 20;
 /** Batch size for on-chain balance verification (avoids URL length limits). */
 export const PORTFOLIO_ONCHAIN_BALANCE_CHUNK = 80;
+/** Hide holdings below this USD value by default (toggle to show). */
+export const PORTFOLIO_DUST_MIN_VALUE_USD = 0.1;
