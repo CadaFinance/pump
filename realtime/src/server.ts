@@ -137,7 +137,7 @@ redisSub.on("error", (error: Error) => {
 
 server.listen(PORT, "127.0.0.1", () => {
   console.log(
-    `pump-realtime listening on 127.0.0.1:${PORT} (rooms: ${arenaRoom()}, token:{addr})`
+    `pump-realtime listening on 127.0.0.1:${PORT} (rooms: ${arenaRoom()}, token:{addr}, wallet:{addr})`
   );
 });
 

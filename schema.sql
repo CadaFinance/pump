@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict fI938joxK2mAs6h9jReFibanJ3Bgdko75JShVYM1sAg2I9WjnxyY1TDOdIdM9Q3
+\restrict iijy035clEgXiaqmXrQEKvXjSs6cYZGow0dalJFHZLWZofbSDCgIfNal66zTSYc
 
 -- Dumped from database version 16.14 (Ubuntu 16.14-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.14 (Ubuntu 16.14-0ubuntu0.24.04.1)
@@ -225,7 +225,29 @@ CREATE TABLE public.airdrop_participants (
     social_gate_passed_at timestamp with time zone,
     first_onchain_at timestamp with time zone,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT airdrop_participants_address_check CHECK ((address = lower(address)))
+    social_tasks_total smallint DEFAULT 0 NOT NULL,
+    social_tasks_completed smallint DEFAULT 0 NOT NULL,
+    hold_met boolean DEFAULT false NOT NULL,
+    buy_met boolean DEFAULT false NOT NULL,
+    onchain_qualified boolean DEFAULT false NOT NULL,
+    progress_pct smallint DEFAULT 0 NOT NULL,
+    viewer_rank integer,
+    claimable_amount numeric(78,18),
+    claimed_at timestamp with time zone,
+    CONSTRAINT airdrop_participants_address_check CHECK ((address = lower(address))),
+    CONSTRAINT airdrop_participants_progress_pct_check CHECK (((progress_pct >= 0) AND (progress_pct <= 100)))
+);
+
+
+--
+-- Name: airdrop_saves; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.airdrop_saves (
+    user_address text NOT NULL,
+    airdrop_id bigint NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT airdrop_saves_user_address_check CHECK ((user_address = lower(user_address)))
 );
 
 
@@ -417,58 +439,6 @@ CREATE SEQUENCE public.creator_fee_claims_id_seq
 --
 
 ALTER SEQUENCE public.creator_fee_claims_id_seq OWNED BY public.creator_fee_claims.id;
-
-
---
--- Name: referral_bindings; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.referral_bindings (
-    invitee_address text NOT NULL,
-    referrer_address text NOT NULL,
-    bound_tx_hash text,
-    bound_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT referral_bindings_check CHECK ((invitee_address <> referrer_address)),
-    CONSTRAINT referral_bindings_invitee_address_check CHECK ((invitee_address = lower(invitee_address))),
-    CONSTRAINT referral_bindings_referrer_address_check CHECK ((referrer_address = lower(referrer_address)))
-);
-
-
---
--- Name: referrer_fee_claims; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.referrer_fee_claims (
-    id bigint NOT NULL,
-    referrer_address text NOT NULL,
-    amount_bnb numeric(78,18) NOT NULL,
-    tx_hash text NOT NULL,
-    log_index integer DEFAULT 0 NOT NULL,
-    block_number bigint NOT NULL,
-    block_time timestamp with time zone NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT referrer_fee_claims_amount_bnb_check CHECK ((amount_bnb > (0)::numeric)),
-    CONSTRAINT referrer_fee_claims_referrer_address_check CHECK ((referrer_address = lower(referrer_address)))
-);
-
-
---
--- Name: referrer_fee_claims_id_seq; Type: SEQUENCE; Schema: public; Owner: -
---
-
-CREATE SEQUENCE public.referrer_fee_claims_id_seq
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
---
--- Name: referrer_fee_claims_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
---
-
-ALTER SEQUENCE public.referrer_fee_claims_id_seq OWNED BY public.referrer_fee_claims.id;
 
 
 --
@@ -755,12 +725,12 @@ CREATE TABLE public.trades (
     fee_zug numeric(78,18) DEFAULT 0 NOT NULL,
     creator_fee_zug numeric(78,18) DEFAULT 0 NOT NULL,
     treasury_fee_zug numeric(78,18) DEFAULT 0 NOT NULL,
-    referrer_fee_zug numeric(78,18) DEFAULT 0 NOT NULL,
     tx_hash text NOT NULL,
     log_index integer NOT NULL,
     block_number bigint NOT NULL,
     block_time timestamp with time zone NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
+    referrer_fee_zug numeric(78,18) DEFAULT 0 NOT NULL,
     CONSTRAINT trades_creator_fee_zug_check CHECK ((creator_fee_zug >= (0)::numeric)),
     CONSTRAINT trades_fee_zug_check CHECK ((fee_zug >= (0)::numeric)),
     CONSTRAINT trades_price_zug_check CHECK ((price_zug >= (0)::numeric)),
@@ -768,7 +738,6 @@ CREATE TABLE public.trades (
     CONSTRAINT trades_token_amount_check CHECK ((token_amount >= (0)::numeric)),
     CONSTRAINT trades_trader_address_check CHECK ((trader_address = lower(trader_address))),
     CONSTRAINT trades_treasury_fee_zug_check CHECK ((treasury_fee_zug >= (0)::numeric)),
-    CONSTRAINT trades_referrer_fee_zug_check CHECK ((referrer_fee_zug >= (0)::numeric)),
     CONSTRAINT trades_zug_amount_check CHECK ((zug_amount >= (0)::numeric))
 );
 
@@ -822,6 +791,18 @@ CREATE MATERIALIZED VIEW public.mv_token_trade_stats AS
 
 
 --
+-- Name: platform_settings; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.platform_settings (
+    key text NOT NULL,
+    value text NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_by text
+);
+
+
+--
 -- Name: points_audit_log; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -854,6 +835,53 @@ CREATE SEQUENCE public.points_audit_log_id_seq
 --
 
 ALTER SEQUENCE public.points_audit_log_id_seq OWNED BY public.points_audit_log.id;
+
+
+--
+-- Name: referral_bindings; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.referral_bindings (
+    invitee_address text NOT NULL,
+    referrer_address text NOT NULL,
+    bound_tx_hash text,
+    bound_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT referral_bindings_check CHECK ((invitee_address <> referrer_address)),
+    CONSTRAINT referral_bindings_invitee_address_check CHECK ((invitee_address = lower(invitee_address))),
+    CONSTRAINT referral_bindings_referrer_address_check CHECK ((referrer_address = lower(referrer_address)))
+);
+
+
+--
+-- Name: referrer_fee_claims; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.referrer_fee_claims (
+    id bigint NOT NULL,
+    referrer_address text NOT NULL,
+    amount_bnb numeric(78,18) NOT NULL,
+    tx_hash text NOT NULL,
+    log_index integer DEFAULT 0 NOT NULL,
+    block_number bigint NOT NULL,
+    block_time timestamp with time zone NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT referrer_fee_claims_amount_bnb_check CHECK ((amount_bnb > (0)::numeric)),
+    CONSTRAINT referrer_fee_claims_referrer_address_check CHECK ((referrer_address = lower(referrer_address)))
+);
+
+
+--
+-- Name: referrer_fee_claims_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.referrer_fee_claims ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.referrer_fee_claims_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
 
 
 --
@@ -932,6 +960,7 @@ CREATE TABLE public.user_positions (
     total_bought_zug numeric(78,18) DEFAULT 0 NOT NULL,
     total_sold_zug numeric(78,18) DEFAULT 0 NOT NULL,
     realized_pnl_zug numeric(78,18) DEFAULT 0 NOT NULL,
+    remaining_cost_basis_zug numeric(78,18) DEFAULT 0 NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT user_positions_address_check CHECK ((address = lower(address)))
 );
@@ -1008,13 +1037,6 @@ ALTER TABLE ONLY public.airdrops ALTER COLUMN id SET DEFAULT nextval('public.air
 --
 
 ALTER TABLE ONLY public.creator_fee_claims ALTER COLUMN id SET DEFAULT nextval('public.creator_fee_claims_id_seq'::regclass);
-
-
---
--- Name: referrer_fee_claims id; Type: DEFAULT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.referrer_fee_claims ALTER COLUMN id SET DEFAULT nextval('public.referrer_fee_claims_id_seq'::regclass);
 
 
 --
@@ -1122,6 +1144,14 @@ ALTER TABLE ONLY public.airdrop_participants
 
 
 --
+-- Name: airdrop_saves airdrop_saves_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.airdrop_saves
+    ADD CONSTRAINT airdrop_saves_pkey PRIMARY KEY (user_address, airdrop_id);
+
+
+--
 -- Name: airdrop_social_tasks airdrop_social_tasks_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1199,30 +1229,6 @@ ALTER TABLE ONLY public.creator_fee_claims
 
 ALTER TABLE ONLY public.creator_fee_claims
     ADD CONSTRAINT creator_fee_claims_tx_hash_log_index_key UNIQUE (tx_hash, log_index);
-
-
---
--- Name: referral_bindings referral_bindings_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.referral_bindings
-    ADD CONSTRAINT referral_bindings_pkey PRIMARY KEY (invitee_address);
-
-
---
--- Name: referrer_fee_claims referrer_fee_claims_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.referrer_fee_claims
-    ADD CONSTRAINT referrer_fee_claims_pkey PRIMARY KEY (id);
-
-
---
--- Name: referrer_fee_claims referrer_fee_claims_tx_hash_log_index_key; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.referrer_fee_claims
-    ADD CONSTRAINT referrer_fee_claims_tx_hash_log_index_key UNIQUE (tx_hash, log_index);
 
 
 --
@@ -1330,11 +1336,43 @@ ALTER TABLE ONLY public.launchpad_user_task_completions
 
 
 --
+-- Name: platform_settings platform_settings_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.platform_settings
+    ADD CONSTRAINT platform_settings_pkey PRIMARY KEY (key);
+
+
+--
 -- Name: points_audit_log points_audit_log_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.points_audit_log
     ADD CONSTRAINT points_audit_log_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: referral_bindings referral_bindings_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.referral_bindings
+    ADD CONSTRAINT referral_bindings_pkey PRIMARY KEY (invitee_address);
+
+
+--
+-- Name: referrer_fee_claims referrer_fee_claims_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.referrer_fee_claims
+    ADD CONSTRAINT referrer_fee_claims_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: referrer_fee_claims referrer_fee_claims_tx_hash_log_index_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.referrer_fee_claims
+    ADD CONSTRAINT referrer_fee_claims_tx_hash_log_index_key UNIQUE (tx_hash, log_index);
 
 
 --
@@ -1434,6 +1472,13 @@ ALTER TABLE ONLY public.users
 
 
 --
+-- Name: idx_airdrop_allocations_address; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_airdrop_allocations_address ON public.airdrop_allocations USING btree (address, created_at DESC);
+
+
+--
 -- Name: idx_airdrop_allocations_airdrop_rank; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1445,6 +1490,27 @@ CREATE INDEX idx_airdrop_allocations_airdrop_rank ON public.airdrop_allocations 
 --
 
 CREATE INDEX idx_airdrop_claims_airdrop ON public.airdrop_claims USING btree (airdrop_id, block_time DESC);
+
+
+--
+-- Name: idx_airdrop_participants_address_onchain; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_airdrop_participants_address_onchain ON public.airdrop_participants USING btree (address, first_onchain_at DESC) WHERE (first_onchain_at IS NOT NULL);
+
+
+--
+-- Name: idx_airdrop_participants_address_updated; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_airdrop_participants_address_updated ON public.airdrop_participants USING btree (address, updated_at DESC);
+
+
+--
+-- Name: idx_airdrop_saves_user; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_airdrop_saves_user ON public.airdrop_saves USING btree (user_address, created_at DESC);
 
 
 --
@@ -1466,6 +1532,13 @@ CREATE INDEX idx_airdrop_task_completions_airdrop_address ON public.airdrop_task
 --
 
 CREATE INDEX idx_airdrops_linked_token ON public.airdrops USING btree (linked_token, qualify_end DESC);
+
+
+--
+-- Name: idx_airdrops_linked_token_qualify; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_airdrops_linked_token_qualify ON public.airdrops USING btree (linked_token, qualify_start, qualify_end);
 
 
 --
@@ -1494,20 +1567,6 @@ CREATE INDEX idx_contract_registry_active ON public.contract_registry USING btre
 --
 
 CREATE INDEX idx_creator_fee_claims_creator ON public.creator_fee_claims USING btree (creator_address, block_time DESC);
-
-
---
--- Name: idx_referral_bindings_referrer; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_referral_bindings_referrer ON public.referral_bindings USING btree (referrer_address, bound_at DESC);
-
-
---
--- Name: idx_referrer_fee_claims_referrer; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_referrer_fee_claims_referrer ON public.referrer_fee_claims USING btree (referrer_address, block_time DESC);
 
 
 --
@@ -1567,6 +1626,20 @@ CREATE INDEX idx_points_audit_log_address ON public.points_audit_log USING btree
 
 
 --
+-- Name: idx_referral_bindings_referrer; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_referral_bindings_referrer ON public.referral_bindings USING btree (referrer_address, bound_at DESC);
+
+
+--
+-- Name: idx_referrer_fee_claims_referrer; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_referrer_fee_claims_referrer ON public.referrer_fee_claims USING btree (referrer_address, block_time DESC);
+
+
+--
 -- Name: idx_token_favorites_user; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1599,6 +1672,13 @@ CREATE INDEX idx_tokens_visible_created ON public.tokens USING btree (created_at
 --
 
 CREATE INDEX idx_trades_block ON public.trades USING btree (block_number, log_index);
+
+
+--
+-- Name: idx_trades_block_time; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_trades_block_time ON public.trades USING btree (block_time DESC);
 
 
 --
@@ -1693,6 +1773,14 @@ ALTER TABLE ONLY public.airdrop_claims
 
 ALTER TABLE ONLY public.airdrop_participants
     ADD CONSTRAINT airdrop_participants_airdrop_id_fkey FOREIGN KEY (airdrop_id) REFERENCES public.airdrops(id) ON DELETE CASCADE;
+
+
+--
+-- Name: airdrop_saves airdrop_saves_airdrop_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.airdrop_saves
+    ADD CONSTRAINT airdrop_saves_airdrop_id_fkey FOREIGN KEY (airdrop_id) REFERENCES public.airdrops(id) ON DELETE CASCADE;
 
 
 --
@@ -1795,5 +1883,5 @@ ALTER TABLE ONLY public.user_positions
 -- PostgreSQL database dump complete
 --
 
-\unrestrict fI938joxK2mAs6h9jReFibanJ3Bgdko75JShVYM1sAg2I9WjnxyY1TDOdIdM9Q3
+\unrestrict iijy035clEgXiaqmXrQEKvXjSs6cYZGow0dalJFHZLWZofbSDCgIfNal66zTSYc
 

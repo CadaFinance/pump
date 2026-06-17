@@ -16,3 +16,7 @@ export function webSocketUrl(): string | null {
   const url = process.env.NEXT_PUBLIC_WS_URL?.trim();
   return url || null;
 }
+
+export function walletRoom(address: string): string {
+  return `wallet:${address.toLowerCase()}`;
+}

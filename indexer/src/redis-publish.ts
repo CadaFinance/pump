@@ -66,6 +66,36 @@ export async function publishTrade(payload: TradePublishPayload): Promise<void> 
   }
 }
 
+export type WalletTradePublishPayload = {
+  type: "wallet_trade";
+  walletAddress: string;
+  tokenAddress: string;
+  trade: TradePublishPayload["trade"];
+  position: {
+    tokenBalance: string;
+    remainingCostBasisZug: string;
+    realizedPnlZug: string;
+  };
+  bonding: Pick<TradePublishPayload["bonding"], "lastPriceZug" | "marketCapZug">;
+};
+
+export async function publishWalletTrade(payload: WalletTradePublishPayload): Promise<void> {
+  const client = getRedis();
+  if (!client) return;
+
+  const channel = `pump:wallet:${payload.walletAddress.toLowerCase()}`;
+  const message = JSON.stringify(payload);
+
+  try {
+    if (client.status !== "ready") {
+      await client.connect();
+    }
+    await client.publish(channel, message);
+  } catch (error) {
+    console.warn("redis publish wallet trade failed:", error instanceof Error ? error.message : error);
+  }
+}
+
 export async function publishKoth(payload: Record<string, unknown>): Promise<void> {
   const client = getRedis();
   if (!client) return;

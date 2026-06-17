@@ -36,7 +36,6 @@ import { PctChange } from "@/components/ui/PctChange";
 import { formatCapForBoard } from "@/lib/arena-board-format";
 import {
   PORTFOLIO_CREATOR_WALLET_SCAN_MAX,
-  PORTFOLIO_DERIVED_LOTS_MAX,
   PORTFOLIO_HOLDINGS_INCREMENT,
   PORTFOLIO_HOLDINGS_INITIAL,
   PORTFOLIO_LAUNCHED_INCREMENT,
@@ -48,6 +47,8 @@ import {
   resolveVerifiedTokenBalance,
   scaleCostBasisForBalance,
 } from "@/lib/onchain-balance";
+import { useLiveChannel, resolveLivePollDelay } from "@/hooks/useLiveChannel";
+import { walletRoom } from "@/lib/db/perf-flags";
 
 type PortfolioPosition = {
   tokenAddress: string;
@@ -58,6 +59,7 @@ type PortfolioPosition = {
   totalBoughtBnb: string;
   totalSoldBnb: string;
   realizedPnlBnb: string;
+  remainingCostBasisBnb: string;
   lastPriceBnb: string;
   estimatedValueBnb: number;
 };
@@ -92,29 +94,12 @@ type PortfolioQuickTradeTarget = {
   side: "buy" | "sell";
 };
 
-type TradeRow = {
-  id: string;
-  side: string;
-  traderAddress: string;
-  nativeAmount: string;
-  feeBnb?: string;
-  netBnb?: string;
-  tokenAmount: string;
-  priceBnb: string;
-  txHash: string;
-  blockTime: string;
-};
-
-type DerivedLot = {
-  netTokens: number;
-  remainingCostBnb: number;
-};
-
 type VerifiedPositionView = {
   position: PortfolioPosition;
   balance: number;
   remainingCostBasis: number;
   avgEntry: number | null;
+  realizedPnlBnb: number;
 };
 
 type FlashTone = "up" | "down";
@@ -127,13 +112,10 @@ function flashText(toneValue: FlashTone | undefined): string {
 
 function buildVerifiedPositionView(
   position: PortfolioPosition,
-  lot: DerivedLot | undefined,
   onChainBalances: Record<string, string>
 ): VerifiedPositionView | null {
-  const totalBought = Number(position.totalBoughtBnb);
-  const totalSold = Number(position.totalSoldBnb);
-  const indexedBalance = lot?.netTokens ?? Number(position.tokenBalance);
-  const fullCostBasis = lot?.remainingCostBnb ?? Math.max(0, totalBought - totalSold);
+  const indexedBalance = Number(position.tokenBalance);
+  const fullCostBasis = Math.max(0, Number(position.remainingCostBasisBnb));
   const onChainStr = onChainBalances[position.tokenAddress.toLowerCase()];
   const onChainBalance = onChainStr != null ? Number(onChainStr) : null;
 
@@ -155,6 +137,7 @@ function buildVerifiedPositionView(
     balance: displayBalance,
     remainingCostBasis,
     avgEntry: displayBalance > 0 ? remainingCostBasis / displayBalance : null,
+    realizedPnlBnb: Number(position.realizedPnlBnb),
   };
 }
 
@@ -391,46 +374,7 @@ function buildPortfolioHoldingRows(
   return rows.sort((a, b) => b.estimatedValueBnb - a.estimatedValueBnb);
 }
 
-const BURST_POLL_MS = 1_500;
 const BURST_DURATION_MS = 60_000;
-const NORMAL_POLL_MS = 15_000;
-
-function tradeNetBnb(trade: TradeRow): number {
-  if (trade.netBnb != null) return Math.max(0, Number(trade.netBnb));
-  const gross = Number(trade.nativeAmount);
-  const fee = Number(trade.feeBnb ?? 0);
-  return Math.max(0, gross - fee);
-}
-
-function computeOpenLotForAddress(trades: TradeRow[], walletAddress: string): DerivedLot {
-  const target = walletAddress.toLowerCase();
-  const ordered = [...trades].sort(
-    (a, b) => new Date(a.blockTime).getTime() - new Date(b.blockTime).getTime()
-  );
-
-  let netTokens = 0;
-  let remainingCostBnb = 0;
-
-  for (const trade of ordered) {
-    if (trade.traderAddress.toLowerCase() !== target) continue;
-
-    const tokenAmount = Number(trade.tokenAmount);
-    const bnbAmount = tradeNetBnb(trade);
-
-    if (trade.side === "BUY") {
-      netTokens += tokenAmount;
-      remainingCostBnb += bnbAmount;
-    } else {
-      const tracked = Math.max(netTokens, 0);
-      const sold = Math.min(tokenAmount, tracked);
-      const avgCost = tracked > 0 ? remainingCostBnb / tracked : 0;
-      netTokens = Math.max(0, tracked - sold);
-      remainingCostBnb = Math.max(0, remainingCostBnb - avgCost * sold);
-    }
-  }
-
-  return { netTokens, remainingCostBnb };
-}
 
 async function fetchPortfolioData(
   walletAddress: string,
@@ -509,35 +453,37 @@ async function fetchExtraWalletHoldings(
   return body.data ?? [];
 }
 
-async function fetchDerivedLotsForWallet(
+type HoldingsEnrichmentOptions = {
+  onChainPositionLimit?: number;
+  walletScanLimit?: number;
+};
+
+type VerifiedHoldingsSnapshot = {
+  onChainBalances: Record<string, string>;
+  walletHoldings: WalletLaunchpadHolding[];
+};
+
+async function fetchVerifiedHoldingsSnapshot(
   walletAddress: string,
-  positions: PortfolioPosition[]
-): Promise<Record<string, DerivedLot>> {
-  if (positions.length > PORTFOLIO_DERIVED_LOTS_MAX) {
-    return {};
-  }
+  portfolio: PortfolioData,
+  options?: HoldingsEnrichmentOptions
+): Promise<VerifiedHoldingsSnapshot> {
+  const onChainLimit = options?.onChainPositionLimit;
+  const positionsForOnChain =
+    onChainLimit != null && onChainLimit > 0
+      ? portfolio.positions.slice(0, onChainLimit)
+      : portfolio.positions;
+  const excludeAddresses = portfolio.positions.map((position) => position.tokenAddress);
 
-  const entries = await Promise.all(
-    positions.map(async (position) => {
-      try {
-        const response = await fetch(`/api/tokens/${position.tokenAddress}/chart-trades`, {
-          cache: "no-store",
-        });
-        const body = (await response.json()) as { data?: TradeRow[] };
-        if (!response.ok) return [position.tokenAddress, null] as const;
-        const lot = computeOpenLotForAddress(body.data ?? [], walletAddress);
-        return [position.tokenAddress, lot] as const;
-      } catch {
-        return [position.tokenAddress, null] as const;
-      }
-    })
-  );
+  const [onChainBalances, walletHoldings] = await Promise.all([
+    fetchOnChainBalancesForTokens(
+      walletAddress,
+      positionsForOnChain.map((position) => position.tokenAddress)
+    ),
+    fetchExtraWalletHoldings(walletAddress, excludeAddresses, options?.walletScanLimit),
+  ]);
 
-  const next: Record<string, DerivedLot> = {};
-  for (const [tokenAddress, lot] of entries) {
-    if (lot && lot.netTokens > 0) next[tokenAddress] = lot;
-  }
-  return next;
+  return { onChainBalances, walletHoldings };
 }
 
 type ReferralStats = {
@@ -561,48 +507,6 @@ async function fetchReferralStats(walletAddress: string): Promise<ReferralStats 
   }
 }
 
-type HoldingsEnrichmentOptions = {
-  onChainPositionLimit?: number;
-  walletScanLimit?: number;
-  includeDerivedLots?: boolean;
-};
-
-type VerifiedHoldingsSnapshot = {
-  onChainBalances: Record<string, string>;
-  walletHoldings: WalletLaunchpadHolding[];
-  derivedLots: Record<string, DerivedLot>;
-};
-
-async function fetchVerifiedHoldingsSnapshot(
-  walletAddress: string,
-  portfolio: PortfolioData,
-  options?: HoldingsEnrichmentOptions
-): Promise<VerifiedHoldingsSnapshot> {
-  const onChainLimit = options?.onChainPositionLimit;
-  const positionsForOnChain =
-    onChainLimit != null && onChainLimit > 0
-      ? portfolio.positions.slice(0, onChainLimit)
-      : portfolio.positions;
-  const excludeAddresses = portfolio.positions.map((position) => position.tokenAddress);
-
-  const [onChainBalances, walletHoldings] = await Promise.all([
-    fetchOnChainBalancesForTokens(
-      walletAddress,
-      positionsForOnChain.map((position) => position.tokenAddress)
-    ),
-    fetchExtraWalletHoldings(walletAddress, excludeAddresses, options?.walletScanLimit),
-  ]);
-
-  const derivedLots =
-    options?.includeDerivedLots &&
-    portfolio.positions.length > 0 &&
-    portfolio.positions.length <= PORTFOLIO_DERIVED_LOTS_MAX
-      ? await fetchDerivedLotsForWallet(walletAddress, portfolio.positions)
-      : {};
-
-  return { onChainBalances, walletHoldings, derivedLots };
-}
-
 export function PortfolioPanel() {
   const { address, isConnected } = useAccount();
   const { openConnectModal } = useOpenConnectModal();
@@ -617,7 +521,6 @@ export function PortfolioPanel() {
   const [followModalTab, setFollowModalTab] = useState<"following" | "followers">("following");
   const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
   const { avatarId } = useUserAvatar();
-  const [derivedLots, setDerivedLots] = useState<Record<string, DerivedLot>>({});
   const [walletHoldings, setWalletHoldings] = useState<WalletLaunchpadHolding[]>([]);
   const [onChainBalances, setOnChainBalances] = useState<Record<string, string>>({});
   const [holdingsReady, setHoldingsReady] = useState(false);
@@ -643,6 +546,19 @@ export function PortfolioPanel() {
   const enrichGenerationRef = useRef(0);
   const holdingsReadyRef = useRef(false);
   const isInitialPortfolioLoadRef = useRef(true);
+  const loadPortfolioRef = useRef<(wallet: string, limit?: number) => Promise<void>>(async () => {});
+
+  const { connected: wsConnected } = useLiveChannel({
+    room: address ? walletRoom(address) : "wallet:disconnected",
+    enabled: Boolean(isConnected && address),
+    onMessage: (payload) => {
+      const message = payload as { type?: string };
+      if (message.type === "wallet_trade" && address) {
+        burstUntilRef.current = Date.now() + BURST_DURATION_MS;
+        void loadPortfolioRef.current(address);
+      }
+    },
+  });
 
   const enrichHoldings = useCallback(async (walletAddress: string, portfolio: PortfolioData) => {
     const generation = ++enrichGenerationRef.current;
@@ -652,13 +568,11 @@ export function PortfolioPanel() {
       const snapshot = await fetchVerifiedHoldingsSnapshot(walletAddress, portfolio, {
         onChainPositionLimit: PORTFOLIO_ONCHAIN_VERIFY_INITIAL,
         walletScanLimit: PORTFOLIO_CREATOR_WALLET_SCAN_MAX,
-        includeDerivedLots: false,
       });
       if (generation !== enrichGenerationRef.current) return;
 
       setOnChainBalances(snapshot.onChainBalances);
       setWalletHoldings(snapshot.walletHoldings);
-      setDerivedLots(snapshot.derivedLots);
       holdingsReadyRef.current = true;
       setHoldingsReady(true);
     } catch {
@@ -710,7 +624,6 @@ export function PortfolioPanel() {
           setData(null);
           setOnChainBalances({});
           setWalletHoldings([]);
-          setDerivedLots({});
           holdingsReadyRef.current = true;
           setHoldingsReady(true);
           setHoldingsEnriching(false);
@@ -728,7 +641,6 @@ export function PortfolioPanel() {
           setData(null);
           setWalletHoldings([]);
           setOnChainBalances({});
-          setDerivedLots({});
           holdingsReadyRef.current = false;
           setHoldingsReady(false);
           setHoldingsEnriching(false);
@@ -743,6 +655,8 @@ export function PortfolioPanel() {
     },
     [enrichHoldings]
   );
+
+  loadPortfolioRef.current = loadPortfolio;
 
   const loadMoreCreatedTokens = useCallback(async () => {
     if (!address || loadingMoreCreated || !data) return;
@@ -810,7 +724,6 @@ export function PortfolioPanel() {
       setData(null);
       setWalletHoldings([]);
       setOnChainBalances({});
-      setDerivedLots({});
       setHoldingsReady(false);
       setHoldingsEnriching(false);
       setError(null);
@@ -828,7 +741,6 @@ export function PortfolioPanel() {
     setData(null);
     setWalletHoldings([]);
     setOnChainBalances({});
-    setDerivedLots({});
     setHoldingsReady(false);
     setHoldingsEnriching(false);
     setLoading(true);
@@ -842,12 +754,12 @@ export function PortfolioPanel() {
     if (!address) return;
     if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
 
-    const delay = Date.now() < burstUntilRef.current ? BURST_POLL_MS : NORMAL_POLL_MS;
+    const delay = resolveLivePollDelay(wsConnected, false, burstUntilRef.current);
     pollTimerRef.current = setTimeout(async () => {
       await loadPortfolio(address);
       schedulePoll();
     }, delay);
-  }, [address, loadPortfolio]);
+  }, [address, loadPortfolio, wsConnected]);
 
   useEffect(() => {
     if (!isConnected || !address) return;
@@ -873,7 +785,7 @@ export function PortfolioPanel() {
     const views =
       data.positions
         .map((position) =>
-          buildVerifiedPositionView(position, derivedLots[position.tokenAddress], onChainBalances)
+          buildVerifiedPositionView(position, onChainBalances)
         )
         .filter((view): view is VerifiedPositionView => view != null);
 
@@ -932,7 +844,7 @@ export function PortfolioPanel() {
     }
 
     metricsPrevRef.current = { values, total: totalValue, pnl: totalPnl };
-  }, [data, derivedLots, onChainBalances, walletHoldings]);
+  }, [data, onChainBalances, walletHoldings]);
 
   if (!isConnected || !address) {
     return (
@@ -968,11 +880,7 @@ export function PortfolioPanel() {
   const verifiedPositionViews =
     data.positions
       .map((position) =>
-        buildVerifiedPositionView(
-          position,
-          derivedLots[position.tokenAddress],
-          onChainBalances
-        )
+        buildVerifiedPositionView(position, onChainBalances)
       )
       .filter((view): view is VerifiedPositionView => view != null);
 
@@ -980,10 +888,16 @@ export function PortfolioPanel() {
     (sum, view) => sum + view.balance * Number(view.position.lastPriceBnb),
     0
   );
-  const totalNetPnl = verifiedPositionViews.reduce((sum, view) => {
+  const totalUnrealizedPnl = verifiedPositionViews.reduce((sum, view) => {
     const openValue = view.balance * Number(view.position.lastPriceBnb);
     return sum + (openValue - view.remainingCostBasis);
   }, 0);
+  const totalRealizedPnl = verifiedPositionViews.reduce((sum, view) => {
+    return (
+      sum + view.realizedPnlBnb
+    );
+  }, 0);
+  const totalNetPnl = totalUnrealizedPnl + totalRealizedPnl;
   const totalEstimatedUsd = bnbToUsd(totalEstimated, bnbUsd);
   const totalNetPnlUsd =
     bnbUsd != null && Number.isFinite(totalNetPnl) ? totalNetPnl * bnbUsd : null;
@@ -992,7 +906,7 @@ export function PortfolioPanel() {
     0
   );
   const portfolioValuePct =
-    totalCostBasis > 0 ? (totalNetPnl / totalCostBasis) * 100 : null;
+    totalCostBasis > 0 ? (totalUnrealizedPnl / totalCostBasis) * 100 : null;
   const claimedBnb = data.creatorFeesClaimedBnb ?? 0;
   const pendingBnb = pendingWei != null ? Number(formatEther(pendingWei)) : 0;
   const creatorFeesTotalBnb = claimedBnb + pendingBnb;

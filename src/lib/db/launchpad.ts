@@ -974,6 +974,7 @@ export type TokenHolderSnapshot = {
   totalBoughtBnb: string;
   totalSoldBnb: string;
   realizedPnlBnb: string;
+  remainingCostBasisBnb: string;
 };
 
 export async function getTokenByAddress(address: string): Promise<TokenDetail | null> {
@@ -1125,6 +1126,7 @@ export async function listTokenHolders(
     total_bought_zug: string;
     total_sold_zug: string;
     realized_pnl_zug: string;
+    remaining_cost_basis_zug: string;
   }>(
     `
     SELECT
@@ -1132,7 +1134,8 @@ export async function listTokenHolders(
       p.token_balance::text,
       p.total_bought_zug::text,
       p.total_sold_zug::text,
-      p.realized_pnl_zug::text
+      p.realized_pnl_zug::text,
+      COALESCE(p.remaining_cost_basis_zug, 0)::text AS remaining_cost_basis_zug
     FROM user_positions p
     WHERE p.token_address = $1
       AND p.token_balance > 0
@@ -1148,6 +1151,7 @@ export async function listTokenHolders(
     totalBoughtBnb: row.total_bought_zug,
     totalSoldBnb: row.total_sold_zug,
     realizedPnlBnb: row.realized_pnl_zug,
+    remainingCostBasisBnb: row.remaining_cost_basis_zug,
   }));
 }
 
@@ -1293,6 +1297,7 @@ export type PortfolioPosition = {
   totalBoughtBnb: string;
   totalSoldBnb: string;
   realizedPnlBnb: string;
+  remainingCostBasisBnb: string;
   lastPriceBnb: string;
   progressBps: number;
   estimatedValueBnb: number;
@@ -1634,6 +1639,7 @@ export async function getPortfolioForAddress(
       total_bought_zug: string;
       total_sold_zug: string;
       realized_pnl_zug: string;
+      remaining_cost_basis_zug: string;
       last_price_zug: string;
       progress_bps: number;
     }>(
@@ -1648,6 +1654,7 @@ export async function getPortfolioForAddress(
           p.total_bought_zug::text,
           p.total_sold_zug::text,
           p.realized_pnl_zug::text,
+          COALESCE(p.remaining_cost_basis_zug, 0)::text AS remaining_cost_basis_zug,
           COALESCE(b.last_price_zug, 0)::text AS last_price_zug,
           COALESCE(b.progress_bps, 0) AS progress_bps
         FROM user_positions p
@@ -1696,6 +1703,7 @@ export async function getPortfolioForAddress(
       totalBoughtBnb: row.total_bought_zug,
       totalSoldBnb: row.total_sold_zug,
       realizedPnlBnb: row.realized_pnl_zug,
+      remainingCostBasisBnb: row.remaining_cost_basis_zug,
       lastPriceBnb: row.last_price_zug,
       progressBps: row.progress_bps,
       estimatedValueBnb: balance * price,

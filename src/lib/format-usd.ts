@@ -58,6 +58,58 @@ export function bnbToUsd(bnbAmount: number, bnbUsd: number | null | undefined): 
   return Number.isFinite(usd) ? usd : null;
 }
 
+/** Net BNB moved on the curve for a trade row (after protocol fee). */
+export function tradeNetBnbFromParts(
+  nativeAmount: string,
+  feeBnb?: string | null,
+  netBnb?: string | null
+): number {
+  if (netBnb != null) {
+    const net = Number(netBnb);
+    if (Number.isFinite(net)) return Math.max(0, net);
+  }
+  const fee = Number(feeBnb ?? 0);
+  const gross = Number(nativeAmount);
+  return Math.max(0, gross - fee);
+}
+
+/** Effective fill price (BNB per token) — net notional ÷ tokens; matches Amount column. */
+export function tradeFillPriceBnb(
+  nativeAmount: string,
+  tokenAmount: string,
+  feeBnb?: string | null,
+  netBnb?: string | null,
+  storedPriceBnb?: string | null
+): number | null {
+  const tokens = Number(tokenAmount);
+  if (!Number.isFinite(tokens) || tokens <= 0) return null;
+
+  const net = tradeNetBnbFromParts(nativeAmount, feeBnb, netBnb);
+  if (net > 0) return net / tokens;
+
+  const stored = Number(storedPriceBnb ?? 0);
+  return Number.isFinite(stored) && stored > 0 ? stored : null;
+}
+
+export function formatTradeFillPriceUsd(
+  nativeAmount: string,
+  tokenAmount: string,
+  bnbUsd: number | null | undefined,
+  feeBnb?: string | null,
+  netBnb?: string | null,
+  storedPriceBnb?: string | null
+): string {
+  const priceBnb = tradeFillPriceBnb(
+    nativeAmount,
+    tokenAmount,
+    feeBnb,
+    netBnb,
+    storedPriceBnb
+  );
+  if (priceBnb == null || bnbUsd == null) return "—";
+  return formatUsdReadable(priceBnb * bnbUsd, { compact: true });
+}
+
 export function formatBnbWithUsd(
   bnbAmount: number,
   bnbUsd: number | null | undefined,

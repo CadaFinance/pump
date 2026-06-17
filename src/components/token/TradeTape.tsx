@@ -7,7 +7,7 @@ import { UserAvatarForAddress } from "@/components/user/UserAvatarForAddress";
 import { SectionHeadingIcon } from "@/components/ui/IconLabel";
 import { PctChange } from "@/components/ui/PctChange";
 import { MetricIcons } from "@/lib/metric-icons";
-import { DEFAULT_TOKEN_TOTAL_SUPPLY, bnbToUsd, formatUsdReadable } from "@/lib/format-usd";
+import { DEFAULT_TOKEN_TOTAL_SUPPLY, bnbToUsd, formatUsdReadable, formatTradeFillPriceUsd, tradeNetBnbFromParts } from "@/lib/format-usd";
 import {
   resolveVerifiedTokenBalance,
   scaleCostBasisForBalance,
@@ -31,9 +31,7 @@ const sideCellClass = `${cellClass} w-px whitespace-nowrap !px-1 !pl-0 lg:!px-3 
 const amountCellClass = `${cellClass} whitespace-nowrap !pl-1 financial-value text-pump-text lg:!pl-3`;
 
 function tradeNetBnb(trade: TradeItem): number {
-  if (trade.netBnb != null) return Number(trade.netBnb);
-  const fee = Number(trade.feeBnb ?? 0);
-  return Math.max(0, Number(trade.nativeAmount) - fee);
+  return tradeNetBnbFromParts(trade.nativeAmount, trade.feeBnb, trade.netBnb);
 }
 
 function formatRelativeTime(iso: string): string {
@@ -75,10 +73,7 @@ function mapApiHoldersToRows(holders: TokenHolderSnapshot[]): HolderRow[] {
       );
       if (hidden) return null;
 
-      const fullCostBasis = Math.max(
-        0,
-        Number(holder.totalBoughtBnb) - Number(holder.totalSoldBnb)
-      );
+      const fullCostBasis = Math.max(0, Number(holder.remainingCostBasisBnb));
       const remainingCostBasisBnb = scaleCostBasisForBalance(
         fullCostBasis,
         indexedBalance,
@@ -325,8 +320,6 @@ export function TradeTape({
                 {trades.map((trade) => {
                   const isBuy = trade.side === "BUY";
                   const isOptimistic = trade.id.startsWith("optimistic:");
-                  const tradePriceUsd =
-                    bnbUsd != null ? Number(trade.priceBnb) * bnbUsd : null;
                   const tradeNetUsd = bnbToUsd(tradeNetBnb(trade), bnbUsd);
                   return (
                     <tr
@@ -350,7 +343,14 @@ export function TradeTape({
                         {formatTokenAmount(Number(trade.tokenAmount))}
                       </td>
                       <td className={`${cellClass} financial-value text-pump-text`}>
-                        {formatUsdReadable(tradePriceUsd)}
+                        {formatTradeFillPriceUsd(
+                          trade.nativeAmount,
+                          trade.tokenAmount,
+                          bnbUsd,
+                          trade.feeBnb,
+                          trade.netBnb,
+                          trade.priceBnb
+                        )}
                       </td>
                       <td className={`${cellClass} text-caption text-pump-muted whitespace-nowrap`}>
                         {formatRelativeTime(trade.blockTime)}
