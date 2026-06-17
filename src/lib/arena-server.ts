@@ -1,4 +1,11 @@
 import { fetchBnbUsdPrice } from "@/lib/bnb-price-server";
+import { useRedisArenaCache } from "@/lib/db/perf-flags";
+import {
+  readArenaHomeCache,
+  readTopMcapCache,
+  writeArenaHomeCache,
+  writeTopMcapCache,
+} from "@/lib/redis/arena-cache";
 import {
   getArenaFilterCounts,
   getKothSummary,
@@ -53,7 +60,20 @@ export async function fetchArenaHomePayload(
   const filter = options.filter ?? "new";
   const airdropAddresses = options.airdropAddresses ?? [];
 
-  const [tokens, topByMcap, koth, filterCounts, bnbPrice] = await Promise.all([
+  const fetchOptions: ArenaHomeFetchOptions = {
+    limit,
+    sortKey,
+    sortDir,
+    filter,
+    airdropAddresses,
+  };
+
+  if (useRedisArenaCache()) {
+    const cached = await readArenaHomeCache(fetchOptions);
+    if (cached) return cached;
+  }
+
+  const [tokens, topByMcapFromDb, koth, filterCounts, bnbPrice] = await Promise.all([
     listArenaBoardTokens({
       limit,
       offset: 0,
@@ -62,7 +82,13 @@ export async function fetchArenaHomePayload(
       filter,
       airdropAddresses,
     }),
-    listTopTokensByMcap(TOP_MCAP_LIMIT),
+    (async () => {
+      if (useRedisArenaCache()) {
+        const cachedTop = await readTopMcapCache(TOP_MCAP_LIMIT);
+        if (cachedTop) return cachedTop;
+      }
+      return listTopTokensByMcap(TOP_MCAP_LIMIT);
+    })(),
     getKothSummary(RECENT_STRIP_DESKTOP),
     getArenaFilterCounts(airdropAddresses),
     fetchBnbUsdPrice(),
@@ -76,11 +102,20 @@ export async function fetchArenaHomePayload(
     filterCounts,
   };
 
-  return {
+  const payload: ArenaHomePayload = {
     data: tokens,
-    topByMcap,
+    topByMcap: topByMcapFromDb,
     koth,
     meta,
     bnbUsd: bnbPrice.bnbUsd,
   };
+
+  if (useRedisArenaCache()) {
+    await Promise.all([
+      writeArenaHomeCache(fetchOptions, payload),
+      writeTopMcapCache(TOP_MCAP_LIMIT, topByMcapFromDb),
+    ]);
+  }
+
+  return payload;
 }

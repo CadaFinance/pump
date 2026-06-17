@@ -13,6 +13,7 @@
     "sync-missions": "tsx src/sync-missions.ts",
     "backfill-cost-basis": "tsx src/backfill-cost-basis.ts",
     "backfill-spot-price": "tsx src/backfill-spot-price.ts",
+    "backfill-board-stats": "tsx src/backfill-board-stats.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

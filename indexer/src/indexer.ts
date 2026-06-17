@@ -16,6 +16,7 @@ import { LaunchpadEventHandlers } from "./handlers.js";
 import { PointsBridge } from "./points.js";
 import { scheduleMvRefresh } from "./mv-refresh.js";
 import { closeRedis } from "./redis-publish.js";
+import { closeRedisCache } from "./redis-cache.js";
 
 type IndexedContract = {
   address: Address;
@@ -208,5 +209,6 @@ main()
   })
   .finally(async () => {
     await closeRedis();
+    await closeRedisCache();
     await closePools(pools);
   });

@@ -1,6 +1,6 @@
 import { Pool } from "pg";
 import { parseSocialLinksFromDb, type TokenSocialLinks } from "@/lib/token-social";
-import { useBondingStateCounts, useMvTokenStats } from "@/lib/db/perf-flags";
+import { useBondingStateCounts, useMvTokenStats, useTokenBoardStats } from "@/lib/db/perf-flags";
 import {
   BONDING_TOKEN_SUPPLY_HUMAN,
   BONDING_VIRTUAL_BNB_HUMAN,
@@ -404,7 +404,66 @@ const TOKEN_LIST_SELECT_MV = `
     LEFT JOIN mv_token_price_anchors mpa ON mpa.token_address = bt.address
 `;
 
+const TOKEN_LIST_SELECT_BOARD_STATS = `
+    SELECT
+      bt.address,
+      bt.symbol,
+      bt.name,
+      bt.creator_address,
+      bt.status,
+      bt.created_at,
+      bt.launch_block_number,
+      bt.logo_url,
+      COALESCE(tbs.progress_bps, b.progress_bps, 0) AS progress_bps,
+      COALESCE(tbs.reserve_zug, b.reserve_zug, 0)::text AS reserve_zug,
+      COALESCE(tbs.market_cap_zug, (${SQL_BONDING_MARK_CAP_ZUG}), 0)::text AS market_cap_zug,
+      COALESCE(
+        tbs.ath_market_cap_zug,
+        tbs.ath_price_zug * 1000000000,
+        (${SQL_BONDING_MARK_CAP_ZUG}),
+        0
+      )::text AS ath_market_cap_zug,
+      COALESCE(tbs.trade_count, b.trade_count, 0) AS trade_count,
+      COALESCE(tbs.volume_24h_zug, 0)::text AS volume_24h_zug,
+      COALESCE(tbs.volume_24h_prev_zug, 0)::text AS volume_24h_prev_zug,
+      COALESCE(tbs.trade_count_24h_ago, 0) AS trade_count_24h_ago,
+      COALESCE(tbs.traders_24h, 0) AS traders_24h,
+      CASE
+        WHEN mpa.price_1h_ago IS NOT NULL AND mpa.price_1h_ago > 0
+          THEN ((((${SQL_BONDING_MARK_PRICE_ZUG}) - mpa.price_1h_ago) / mpa.price_1h_ago) * 100)::text
+        ELSE NULL
+      END AS change_1h_pct,
+      CASE
+        WHEN mpa.price_6h_ago IS NOT NULL AND mpa.price_6h_ago > 0
+          THEN ((((${SQL_BONDING_MARK_PRICE_ZUG}) - mpa.price_6h_ago) / mpa.price_6h_ago) * 100)::text
+        ELSE NULL
+      END AS change_6h_pct,
+      CASE
+        WHEN COALESCE(mpa.price_24h_ago, mpa.price_first) IS NOT NULL
+             AND COALESCE(mpa.price_24h_ago, mpa.price_first) > 0
+          THEN (
+            (
+              (${SQL_BONDING_MARK_PRICE_ZUG}) - COALESCE(mpa.price_24h_ago, mpa.price_first)
+            ) / COALESCE(mpa.price_24h_ago, mpa.price_first) * 100
+          )::text
+        ELSE NULL
+      END AS change_24h_pct,
+      COALESCE(tbs.holder_count, b.holder_count, 0) AS holder_count
+    FROM base_tokens bt
+    LEFT JOIN bonding_states b ON b.token_address = bt.address
+    LEFT JOIN token_board_stats tbs ON tbs.token_address = bt.address
+    LEFT JOIN mv_token_price_anchors mpa ON mpa.token_address = bt.address
+`;
+
 function buildTokenListSelectSql(baseTokensInner: string): string {
+  if (useTokenBoardStats()) {
+    return `
+    WITH base_tokens AS (
+      ${baseTokensInner}
+    )
+    ${TOKEN_LIST_SELECT_BOARD_STATS}`;
+  }
+
   if (useMvTokenStats()) {
     return `
     WITH base_tokens AS (

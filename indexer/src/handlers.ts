@@ -10,6 +10,13 @@ import {
   refreshParticipantSnapshotIndexer,
 } from "./airdrop-participant-snapshot.js";
 import { publishTrade, publishWalletTrade } from "./redis-publish.js";
+import {
+  incrementalBoardStatsEnabled,
+  marketCapZugFromSpot,
+  seedBoardStatsOnTokenCreated,
+  upsertBoardStatsAfterTrade,
+} from "./board-stats.js";
+import { invalidateArenaCaches } from "./redis-cache.js";
 import { FIRST_SMART_BUY_MIN_WEI, VOLUME_MONSTER_MIN_BNB } from "./mission-thresholds.js";
 
 type ParsedLaunchpadLog = {
@@ -148,6 +155,14 @@ export class LaunchpadEventHandlers {
       blockTime,
       metadata: { token, source: "TokenCreated" }
     });
+
+    if (incrementalBoardStatsEnabled()) {
+      await seedBoardStatsOnTokenCreated(this.context.launchpadPool, {
+        tokenAddress: token,
+        marketCapZug: startingMarketCapZug(),
+        spotPriceZug: startingSpotPriceZug(),
+      });
+    }
     // KOTH only after trades — create has no real price discovery yet.
   }
 
@@ -293,6 +308,21 @@ export class LaunchpadEventHandlers {
       const b = bonding.rows[0];
       if (!b) return null;
 
+      const tradeNetZug = weiToDecimal(zugAmount - feeZug);
+      await upsertBoardStatsAfterTrade(client, {
+        tokenAddress: token,
+        reserveZug: b.reserve_zug,
+        tokenSold: b.token_sold,
+        spotPriceZug: markPrice,
+        marketCapZug: marketCapZugFromSpot(markPrice),
+        progressBps: b.progress_bps,
+        tradeCount: b.trade_count,
+        holderCount: b.holder_count,
+        tradeNetZug,
+        blockTime,
+        traderAddress: trader,
+      });
+
       return {
         tradeId: inserted.rows[0].id,
         bonding: b,
@@ -348,6 +378,8 @@ export class LaunchpadEventHandlers {
         holderCount: tradeResult.bonding.holder_count,
       },
     });
+
+    await invalidateArenaCaches(token);
 
     const positionRow = await this.context.launchpadPool.query<{
       token_balance: string;

@@ -17,6 +17,21 @@ export function useMvTokenStats(): boolean {
   return perfFlagEnabled("USE_MV_TOKEN_STATS");
 }
 
+/** Indexer-maintained token_board_stats (phase 3 incremental reads). */
+export function useTokenBoardStats(): boolean {
+  return perfFlagEnabled("USE_TOKEN_BOARD_STATS");
+}
+
+/** Redis hot cache for arena board payloads. */
+export function useRedisArenaCache(): boolean {
+  return perfFlagEnabled("USE_REDIS_ARENA_CACHE");
+}
+
+export function redisUrl(): string | null {
+  const url = process.env.REDIS_URL?.trim();
+  return url || null;
+}
+
 export function useWebSocketLive(): boolean {
   return process.env.NEXT_PUBLIC_WS_ENABLED === "true";
 }
