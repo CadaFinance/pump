@@ -1,8 +1,33 @@
 import { Pool } from "pg";
 import { parseSocialLinksFromDb, type TokenSocialLinks } from "@/lib/token-social";
 import { useBondingStateCounts, useMvTokenStats } from "@/lib/db/perf-flags";
+import {
+  BONDING_TOKEN_SUPPLY_HUMAN,
+  BONDING_VIRTUAL_BNB_HUMAN,
+  spotPriceBnbFromBondingDecimals,
+} from "@/lib/bonding-curve";
 
 let pool: Pool | null = null;
+
+/** SQL: marginal spot from bonding_state reserves (human units). */
+const SQL_BONDING_MARK_PRICE_ZUG = `
+  CASE
+    WHEN (${BONDING_TOKEN_SUPPLY_HUMAN}::numeric - COALESCE(b.token_sold, 0)) > 0
+    THEN (${BONDING_VIRTUAL_BNB_HUMAN}::numeric + COALESCE(b.reserve_zug, 0))
+         / (${BONDING_TOKEN_SUPPLY_HUMAN}::numeric - COALESCE(b.token_sold, 0))
+    ELSE COALESCE(b.last_price_zug, 0)
+  END
+`;
+
+function resolvePositionMarkPriceBnb(
+  reserveZug: string | null | undefined,
+  tokenSold: string | null | undefined,
+  fallbackLastPrice: string
+): string {
+  const spot = spotPriceBnbFromBondingDecimals(reserveZug, tokenSold);
+  if (spot > 0) return String(spot);
+  return fallbackLastPrice;
+}
 
 export function getLaunchpadPool(): Pool {
   const url = process.env.LAUNCHPAD_DATABASE_URL;
@@ -1023,7 +1048,7 @@ export async function getTokenByAddress(address: string): Promise<TokenDetail | 
       COALESCE(b.target_zug, 0)::text AS target_zug,
       COALESCE(b.token_sold, 0)::text AS token_sold,
       COALESCE(b.trade_count, 0) AS trade_count,
-      COALESCE(b.last_price_zug, 0)::text AS last_price_zug,
+      COALESCE((${SQL_BONDING_MARK_PRICE_ZUG}), 0)::text AS last_price_zug,
       COALESCE((
         SELECT COUNT(*)::int
         FROM creator_follows cf
@@ -1522,7 +1547,7 @@ export async function listLaunchpadTokensForWalletBalance(): Promise<
         t.symbol,
         t.name,
         t.logo_url,
-        COALESCE(b.last_price_zug, 0)::text AS last_price_zug
+        COALESCE((${SQL_BONDING_MARK_PRICE_ZUG}), 0)::text AS last_price_zug
       FROM tokens t
       LEFT JOIN bonding_states b ON b.token_address = t.address
       WHERE t.is_hidden = false
@@ -1562,7 +1587,7 @@ export async function listLaunchpadTokensByCreatorForWalletBalance(
         t.symbol,
         t.name,
         t.logo_url,
-        COALESCE(b.last_price_zug, 0)::text AS last_price_zug
+        COALESCE((${SQL_BONDING_MARK_PRICE_ZUG}), 0)::text AS last_price_zug
       FROM tokens t
       LEFT JOIN bonding_states b ON b.token_address = t.address
       WHERE t.creator_address = $1
@@ -1583,7 +1608,7 @@ export async function listLaunchpadTokensByCreatorForWalletBalance(
         t.symbol,
         t.name,
         t.logo_url,
-        COALESCE(b.last_price_zug, 0)::text AS last_price_zug
+        COALESCE((${SQL_BONDING_MARK_PRICE_ZUG}), 0)::text AS last_price_zug
       FROM tokens t
       LEFT JOIN bonding_states b ON b.token_address = t.address
       WHERE t.creator_address = $1
@@ -1640,6 +1665,8 @@ export async function getPortfolioForAddress(
       total_sold_zug: string;
       realized_pnl_zug: string;
       remaining_cost_basis_zug: string;
+      reserve_zug: string;
+      token_sold: string;
       last_price_zug: string;
       progress_bps: number;
     }>(
@@ -1655,6 +1682,8 @@ export async function getPortfolioForAddress(
           p.total_sold_zug::text,
           p.realized_pnl_zug::text,
           COALESCE(p.remaining_cost_basis_zug, 0)::text AS remaining_cost_basis_zug,
+          COALESCE(b.reserve_zug, 0)::text AS reserve_zug,
+          COALESCE(b.token_sold, 0)::text AS token_sold,
           COALESCE(b.last_price_zug, 0)::text AS last_price_zug,
           COALESCE(b.progress_bps, 0) AS progress_bps
         FROM user_positions p
@@ -1663,7 +1692,7 @@ export async function getPortfolioForAddress(
         WHERE p.address = $1
           AND p.token_balance > 0
           AND t.is_hidden = false
-        ORDER BY (p.token_balance * COALESCE(b.last_price_zug, 0)) DESC
+        ORDER BY (p.token_balance * (${SQL_BONDING_MARK_PRICE_ZUG})) DESC
       `,
       [normalized]
     ),
@@ -1692,7 +1721,12 @@ export async function getPortfolioForAddress(
 
   const positions: PortfolioPosition[] = positionsResult.rows.map((row) => {
     const balance = Number(row.token_balance);
-    const price = Number(row.last_price_zug);
+    const markPrice = resolvePositionMarkPriceBnb(
+      row.reserve_zug,
+      row.token_sold,
+      row.last_price_zug
+    );
+    const price = Number(markPrice);
     return {
       tokenAddress: row.token_address,
       symbol: row.symbol,
@@ -1704,7 +1738,7 @@ export async function getPortfolioForAddress(
       totalSoldBnb: row.total_sold_zug,
       realizedPnlBnb: row.realized_pnl_zug,
       remainingCostBasisBnb: row.remaining_cost_basis_zug,
-      lastPriceBnb: row.last_price_zug,
+      lastPriceBnb: markPrice,
       progressBps: row.progress_bps,
       estimatedValueBnb: balance * price,
     };

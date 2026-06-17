@@ -9,13 +9,12 @@ import pg from "pg";
 
 const pool = new pg.Pool({ connectionString: process.env.LAUNCHPAD_DATABASE_URL });
 
+const VIRTUAL_BNB = 5;
+const TOKEN_SUPPLY = 1_000_000_000;
+
 function spotPriceFromReserves(reserveZug: number, soldTokens: number): number {
-  const virtualZug = Number(
-    process.env.BONDING_VIRTUAL_ZUG_RESERVE_WEI ?? `${5_000n * 10n ** 18n}`
-  );
-  const virtualToken = Number(1_000_000_000n * 10n ** 18n);
-  const poolZug = virtualZug + reserveZug;
-  const poolTokens = virtualToken - soldTokens;
+  const poolZug = VIRTUAL_BNB + reserveZug;
+  const poolTokens = TOKEN_SUPPLY - soldTokens;
   if (poolTokens <= 0 || poolZug <= 0) return 0;
   return poolZug / poolTokens;
 }

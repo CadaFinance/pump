@@ -173,8 +173,9 @@ export class LaunchpadEventHandlers {
     const tradeEventId = eventId(txHash, logIndex);
     const side = isBuy ? "BUY" : "SELL";
     const executionPrice = ratioWeiToDecimal(zugAmount, tokenAmount);
-    const spotPrice = spotPriceBnbFromReserves(reserveZug, soldTokens);
-    const markPrice = spotPrice > 0 ? spotPrice : executionPrice;
+    const spotPriceStr = spotPriceBnbFromReserves(reserveZug, soldTokens);
+    const markPrice =
+      Number(spotPriceStr) > 0 ? spotPriceStr : executionPrice;
 
     const tradeResult = await withTransaction(this.context.launchpadPool, async (client) => {
       const inserted = await client.query<{ id: string }>(
@@ -331,7 +332,7 @@ export class LaunchpadEventHandlers {
         traderAddress: trader,
         zugAmount: weiToDecimal(zugAmount),
         tokenAmount: weiToDecimal(tokenAmount),
-        priceZug: String(markPrice),
+        priceZug: markPrice,
         txHash: txHash.toLowerCase(),
         logIndex,
         blockTime: blockTime.toISOString(),
@@ -373,7 +374,7 @@ export class LaunchpadEventHandlers {
           traderAddress: trader,
           zugAmount: weiToDecimal(zugAmount),
           tokenAmount: weiToDecimal(tokenAmount),
-          priceZug: String(markPrice),
+          priceZug: markPrice,
           txHash: txHash.toLowerCase(),
           logIndex,
           blockTime: blockTime.toISOString(),
@@ -901,13 +902,13 @@ function unixToDate(seconds: bigint): Date {
 }
 
 /** Marginal spot BNB/token after trade (matches chart + holders P/L). */
-function spotPriceBnbFromReserves(reserveZug: bigint, soldTokens: bigint): number {
+function spotPriceBnbFromReserves(reserveZug: bigint, soldTokens: bigint): string {
   const virtualZug = BigInt(process.env.BONDING_VIRTUAL_ZUG_RESERVE_WEI ?? `${5_000n * 10n ** 18n}`);
   const virtualToken = 1_000_000_000n * 10n ** 18n;
   const poolZug = virtualZug + reserveZug;
   const poolTokens = virtualToken - soldTokens;
-  if (poolTokens <= 0n || poolZug <= 0n) return 0;
-  return Number(poolZug) / Number(poolTokens);
+  if (poolTokens <= 0n || poolZug <= 0n) return "0";
+  return ratioWeiToDecimal(poolZug, poolTokens);
 }
 
 /** Factory defaults: virtualZug / 1B token virtual → spot price per token. */
