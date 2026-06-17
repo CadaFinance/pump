@@ -23,6 +23,15 @@ export type WalletTradeWsPayload = {
   };
 };
 
+const MARK_PRICE_JUMP_REJECT_RATIO = 4;
+
+function isMarkPriceJumpSane(previous: number, next: number): boolean {
+  if (!Number.isFinite(previous) || previous <= 0) return true;
+  if (!Number.isFinite(next) || next <= 0) return false;
+  const ratio = next / previous;
+  return ratio <= MARK_PRICE_JUMP_REJECT_RATIO && ratio >= 1 / MARK_PRICE_JUMP_REJECT_RATIO;
+}
+
 function estimateNetVolumeBnb(trade: NonNullable<WalletTradeWsPayload["trade"]>): number {
   const gross = Number(trade.zugAmount);
   return Number.isFinite(gross) && gross > 0 ? gross : 0;
@@ -42,8 +51,13 @@ function patchPositionRow<T extends {
   if (!pos) return position;
 
   const spot = wsBondingSpotPriceBnb(payload.bonding);
+  const prevPrice = Number(position.lastPriceBnb);
   const lastPriceBnb =
-    spot > 0 ? String(spot) : payload.bonding?.lastPriceZug ?? position.lastPriceBnb;
+    spot > 0 && isMarkPriceJumpSane(prevPrice, spot)
+      ? String(spot)
+      : spot > 0 && !(prevPrice > 0)
+        ? String(spot)
+        : position.lastPriceBnb;
   const balance = Number(pos.tokenBalance);
   const estimatedValueBnb =
     Number.isFinite(balance) && balance > 0 && Number(lastPriceBnb) > 0

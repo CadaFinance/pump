@@ -159,6 +159,42 @@ export async function reconcileBoardStatsRollingWindows(pool: pg.Pool): Promise<
   await pool.query(`
     UPDATE token_board_stats tbs
     SET
+      spot_price_zug = CASE
+        WHEN (1000000000::numeric - COALESCE(b.token_sold, 0)) > 0
+        THEN (5::numeric + COALESCE(b.reserve_zug, 0))
+             / (1000000000::numeric - COALESCE(b.token_sold, 0))
+        ELSE tbs.spot_price_zug
+      END,
+      market_cap_zug = CASE
+        WHEN (1000000000::numeric - COALESCE(b.token_sold, 0)) > 0
+        THEN ((5::numeric + COALESCE(b.reserve_zug, 0))
+             / (1000000000::numeric - COALESCE(b.token_sold, 0)))
+             * 1000000000
+        ELSE tbs.market_cap_zug
+      END,
+      ath_market_cap_zug = GREATEST(
+        tbs.ath_market_cap_zug,
+        CASE
+          WHEN (1000000000::numeric - COALESCE(b.token_sold, 0)) > 0
+          THEN ((5::numeric + COALESCE(b.reserve_zug, 0))
+               / (1000000000::numeric - COALESCE(b.token_sold, 0)))
+               * 1000000000
+          ELSE 0
+        END
+      ),
+      reserve_zug = COALESCE(b.reserve_zug, tbs.reserve_zug),
+      token_sold = COALESCE(b.token_sold, tbs.token_sold),
+      progress_bps = COALESCE(b.progress_bps, tbs.progress_bps),
+      trade_count = COALESCE(b.trade_count, tbs.trade_count),
+      holder_count = COALESCE(b.holder_count, tbs.holder_count),
+      updated_at = now()
+    FROM bonding_states b
+    WHERE b.token_address = tbs.token_address
+  `);
+
+  await pool.query(`
+    UPDATE token_board_stats tbs
+    SET
       volume_24h_zug = COALESCE(agg.volume_24h_zug, 0),
       volume_24h_prev_zug = COALESCE(agg.volume_24h_prev_zug, 0),
       trade_count_24h_ago = COALESCE(agg.trade_count_24h_ago, 0),

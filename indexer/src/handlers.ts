@@ -419,6 +419,8 @@ export class LaunchpadEventHandlers {
           realizedPnlZug: position.realized_pnl_zug,
         },
         bonding: {
+          reserveZug: tradeResult.bonding.reserve_zug,
+          tokenSold: tradeResult.bonding.token_sold,
           lastPriceZug: tradeResult.bonding.last_price_zug,
           marketCapZug: tradeResult.bonding.market_cap_zug,
         },

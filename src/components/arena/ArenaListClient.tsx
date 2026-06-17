@@ -9,6 +9,7 @@ import { useAccount } from "wagmi";
 import { useOpenConnectModal } from "@/hooks/useOpenConnectModal";
 import type { ArenaFilterCounts, KothSummary, TokenListItem } from "@/lib/db/launchpad";
 import { ArenaSkeleton } from "@/components/arena/ArenaSkeleton";
+import { SkeletonBoardTable } from "@/components/ui/skeleton-parts";
 import { ArenaMcapTicker } from "@/components/arena/ArenaMcapTicker";
 import { ArenaShortcutsModal } from "@/components/arena/ArenaShortcutsModal";
 import { ArenaTokenCard } from "@/components/arena/ArenaTokenCard";
@@ -76,6 +77,27 @@ const SERVER_BOARD_FILTERS = new Set<BoardFilter>([
   "kothContenders",
   "hasAirdrop",
 ]);
+
+type BoardCacheEntry = {
+  tokens: TokenListItem[];
+  topByMcap: TokenListItem[];
+  koth: KothSummary | null;
+  hasMore: boolean;
+  serverFilterCounts: ArenaFilterCounts | null;
+};
+
+function boardCacheKey(
+  filter: BoardFilter,
+  sortKey: string,
+  sortDir: string,
+  airdropKey: string
+): string {
+  return `${filter}:${sortKey}:${sortDir}:${airdropKey}`;
+}
+
+function apiBoardFilter(activeFilter: BoardFilter): BoardFilter {
+  return activeFilter === "favorites" ? "all" : activeFilter;
+}
 
 function applyBoardFilterDefaults(filter: BoardFilter): {
   sortKey?: SortKey;
@@ -332,7 +354,12 @@ export function ArenaListClient({
 }: {
   initialPayload?: ArenaHomePayload | null;
 }) {
+  const initialBoardKey = initialPayload
+    ? boardCacheKey("new", "age", "desc", "")
+    : "";
+  const filterCacheRef = useRef(new Map<string, BoardCacheEntry>());
   const [tokens, setTokens] = useState<TokenListItem[] | null>(initialPayload?.data ?? null);
+  const [loadedBoardKey, setLoadedBoardKey] = useState(initialBoardKey);
   const [topByMcap, setTopByMcap] = useState<TokenListItem[]>(initialPayload?.topByMcap ?? []);
   const [kothSummary, setKothSummary] = useState<KothSummary | null>(initialPayload?.koth ?? null);
   const [serverFilterCounts, setServerFilterCounts] = useState<ArenaFilterCounts | null>(
@@ -650,8 +677,34 @@ export function ArenaListClient({
   const airdropFilterKey =
     activeFilter === "hasAirdrop" ? [...airdropTokenAddresses].sort().join("|") : "";
 
+  const currentBoardKey = boardCacheKey(
+    apiBoardFilter(activeFilter),
+    apiSortKey,
+    apiSortDir,
+    airdropFilterKey
+  );
+  const currentBoardKeyRef = useRef(currentBoardKey);
+  currentBoardKeyRef.current = currentBoardKey;
+  const boardDataReady =
+    activeFilter === "favorites" || loadedBoardKey === currentBoardKey;
+
+  useEffect(() => {
+    if (!initialPayload || filterCacheRef.current.has(initialBoardKey)) return;
+    filterCacheRef.current.set(initialBoardKey, {
+      tokens: initialPayload.data,
+      topByMcap: initialPayload.topByMcap,
+      koth: initialPayload.koth,
+      hasMore: initialPayload.meta.hasMore,
+      serverFilterCounts: initialPayload.meta.filterCounts,
+    });
+  }, [initialPayload, initialBoardKey]);
+
   const load = useCallback(
-    async (limit = listLimitRef.current, options: { silent?: boolean } = {}) => {
+    async (
+      limit = listLimitRef.current,
+      options: { silent?: boolean; boardKey?: string } = {}
+    ) => {
+      const requestBoardKey = options.boardKey ?? currentBoardKey;
       const hadData = tokensRef.current !== null;
       if (!options.silent && hadData) {
         setBoardRefreshing(true);
@@ -674,6 +727,10 @@ export function ArenaListClient({
 
         if (!response.ok) {
           throw new Error(body.error ?? "Failed to load tokens");
+        }
+
+        if (requestBoardKey !== currentBoardKeyRef.current) {
+          return;
         }
 
         const nextTokens = body.data ?? [];
@@ -711,6 +768,14 @@ export function ArenaListClient({
           }
           return nextTokens;
         });
+        filterCacheRef.current.set(requestBoardKey, {
+          tokens: nextTokens,
+          topByMcap: body.topByMcap ?? [],
+          koth: body.koth ?? null,
+          hasMore: body.meta?.hasMore ?? false,
+          serverFilterCounts: body.meta?.filterCounts ?? null,
+        });
+        setLoadedBoardKey(requestBoardKey);
         setError(null);
       } catch (err) {
         if (!hadData) {
@@ -721,7 +786,7 @@ export function ArenaListClient({
         setBoardRefreshing(false);
       }
     },
-    [buildTokensUrl, getComparableValues, triggerFlash]
+    [buildTokensUrl, getComparableValues, triggerFlash, currentBoardKey]
   );
 
   tokensRef.current = tokens;
@@ -793,6 +858,7 @@ export function ArenaListClient({
     if (activeFilter === "favorites") {
       setHasMore(false);
       setLoadingMore(false);
+      setLoadedBoardKey("favorites");
       return;
     }
 
@@ -800,21 +866,40 @@ export function ArenaListClient({
     setHasMore(false);
     setLoadingMore(false);
 
+    const key = currentBoardKey;
+    const cached = filterCacheRef.current.get(key);
+
     const ssrDefaultsMatch =
       initialPayloadRef.current != null &&
       activeFilter === "new" &&
       apiSortKey === "age" &&
       apiSortDir === "desc";
 
+    if (cached) {
+      setTokens(cached.tokens);
+      setTopByMcap(cached.topByMcap);
+      setKothSummary(cached.koth);
+      setHasMore(cached.hasMore);
+      if (cached.serverFilterCounts) {
+        setServerFilterCounts(cached.serverFilterCounts);
+      }
+      setLoadedBoardKey(key);
+      void loadRef.current(ARENA_PAGE_INITIAL, { silent: true, boardKey: key });
+      return;
+    }
+
+    setBoardRefreshing(true);
+    setLoadedBoardKey("");
+
     if (ssrDefaultsMatch) {
       initialPayloadRef.current = null;
-      void loadRef.current(ARENA_PAGE_INITIAL, { silent: true });
+      void loadRef.current(ARENA_PAGE_INITIAL, { silent: true, boardKey: key });
       return;
     }
 
     initialPayloadRef.current = null;
-    void loadRef.current(ARENA_PAGE_INITIAL);
-  }, [apiSortKey, apiSortDir, activeFilter, airdropFilterKey, viewMode]);
+    void loadRef.current(ARENA_PAGE_INITIAL, { silent: true, boardKey: key });
+  }, [apiSortKey, apiSortDir, activeFilter, airdropFilterKey, viewMode, currentBoardKey]);
 
   useEffect(() => {
     if (activeFilter === "favorites" || !hasMore || loadingMore) return;
@@ -1062,18 +1147,23 @@ export function ArenaListClient({
     airdropTokenAddresses,
   ]);
 
-  const showLoadMore = activeFilter !== "favorites" && (hasMore || loadingMore);
+  const showExploreBoardSkeleton =
+    activeFilter !== "favorites" && !boardDataReady;
+
+  const exploreBoardTokens = boardDataReady ? marketTokens : [];
+
+  const showLoadMore = activeFilter !== "favorites" && boardDataReady && (hasMore || loadingMore);
 
   const cardsTokens = useMemo(() => {
     if (activeFilter === "favorites") {
-      return sortTokensForCards(marketTokens, cardsSort);
+      return sortTokensForCards(exploreBoardTokens, cardsSort);
     }
-    return marketTokens;
-  }, [marketTokens, cardsSort, activeFilter]);
+    return exploreBoardTokens;
+  }, [exploreBoardTokens, cardsSort, activeFilter]);
 
   const boardKeys = useMemo(
-    () => marketTokens.map((token) => token.address.toLowerCase()),
-    [marketTokens]
+    () => exploreBoardTokens.map((token) => token.address.toLowerCase()),
+    [exploreBoardTokens]
   );
   const boardResetKey = `${activeFilter}|${sortKey}|${sortDir}|${search.trim().toLowerCase()}`;
   const { rowClass: boardRowClass, rankClass: boardRankClass } = useLiveBoardAnimations(
@@ -1465,7 +1555,9 @@ export function ArenaListClient({
           </div>
         ) : null}
 
-        {marketTokens.length === 0 ? (
+        {showExploreBoardSkeleton ? (
+          <SkeletonBoardTable rows={7} />
+        ) : exploreBoardTokens.length === 0 ? (
           <div className="panel-surface empty-state py-8">
             <p className="empty-state-copy text-caption">
               {emptyExploreFilterCopy(activeFilter, {
@@ -1513,7 +1605,7 @@ export function ArenaListClient({
         ) : (
         <section className="arena-explore-board overflow-hidden">
         <div className="arena-explore-list lg:hidden">
-          {marketTokens.map((token, index) => {
+          {exploreBoardTokens.map((token, index) => {
             const addressKey = token.address.toLowerCase();
             const mcapUsd =
               animatedCaps[`${addressKey}:cap:mcap`] ??
@@ -1570,7 +1662,7 @@ export function ArenaListClient({
             </tr>
           </thead>
           <tbody>
-            {marketTokens.map((token, index) => {
+            {exploreBoardTokens.map((token, index) => {
               const addressKey = token.address.toLowerCase();
               const mcapUsd =
                 animatedCaps[`${addressKey}:cap:mcap`] ??

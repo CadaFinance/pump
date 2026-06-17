@@ -416,10 +416,13 @@ const TOKEN_LIST_SELECT_BOARD_STATS = `
       bt.logo_url,
       COALESCE(tbs.progress_bps, b.progress_bps, 0) AS progress_bps,
       COALESCE(tbs.reserve_zug, b.reserve_zug, 0)::text AS reserve_zug,
-      COALESCE(tbs.market_cap_zug, (${SQL_BONDING_MARK_CAP_ZUG}), 0)::text AS market_cap_zug,
+      COALESCE((${SQL_BONDING_MARK_CAP_ZUG}), tbs.market_cap_zug, 0)::text AS market_cap_zug,
       COALESCE(
+        GREATEST(
+          (${SQL_BONDING_MARK_CAP_ZUG}),
+          COALESCE(mts.ath_price_zug * 1000000000, 0)
+        ),
         tbs.ath_market_cap_zug,
-        tbs.ath_price_zug * 1000000000,
         (${SQL_BONDING_MARK_CAP_ZUG}),
         0
       )::text AS ath_market_cap_zug,
@@ -452,6 +455,7 @@ const TOKEN_LIST_SELECT_BOARD_STATS = `
     FROM base_tokens bt
     LEFT JOIN bonding_states b ON b.token_address = bt.address
     LEFT JOIN token_board_stats tbs ON tbs.token_address = bt.address
+    LEFT JOIN mv_token_trade_stats mts ON mts.token_address = bt.address
     LEFT JOIN mv_token_price_anchors mpa ON mpa.token_address = bt.address
 `;
 

@@ -77,7 +77,10 @@ export type WalletTradePublishPayload = {
     remainingCostBasisZug: string;
     realizedPnlZug: string;
   };
-  bonding: Pick<TradePublishPayload["bonding"], "lastPriceZug" | "marketCapZug">;
+  bonding: Pick<
+    TradePublishPayload["bonding"],
+    "lastPriceZug" | "marketCapZug" | "reserveZug" | "tokenSold"
+  >;
 };
 
 export async function publishWalletTrade(payload: WalletTradePublishPayload): Promise<void> {

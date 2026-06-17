@@ -58,7 +58,6 @@ import { useLiveChannel, resolveLivePollDelay } from "@/hooks/useLiveChannel";
 import { walletRoom } from "@/lib/db/perf-flags";
 import {
   patchPortfolioFromWalletTrade,
-  patchWalletHoldingFromWalletTrade,
   type WalletTradeWsPayload,
 } from "@/lib/portfolio-live-delta";
 
@@ -606,20 +605,7 @@ export function PortfolioPanel() {
       portfolioDataRef.current = next;
       setData(next);
 
-      const token = message.tokenAddress?.toLowerCase();
-      const position =
-        next.positions.find((p) => p.tokenAddress.toLowerCase() === token) ??
-        current.positions.find((p) => p.tokenAddress.toLowerCase() === token);
-
-      if (position && message.position) {
-        setWalletHoldings((prev) =>
-          patchWalletHoldingFromWalletTrade(prev, message, {
-            symbol: position.symbol,
-            name: position.name,
-            logoUrl: position.logoUrl,
-          })
-        );
-      }
+      // Indexed positions own the row — never mirror into walletHoldings (causes duplicate "$A" rows).
     },
   });
 
