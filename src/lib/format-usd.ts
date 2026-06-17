@@ -6,6 +6,28 @@ export const DEFAULT_TOKEN_TOTAL_SUPPLY = 1_000_000_000;
 /** Use one decimal ($1234.5) below this; compact K/M above. */
 export const USD_COMPACT_K_THRESHOLD = 10_000;
 
+/** Portfolio holdings: show $X.XX between $1 and this cap (avoids $4.99 → $5.0). */
+export const USD_HOLDINGS_VALUE_TWO_DECIMAL_MAX = 20;
+
+export type FormatUsdReadableOptions = {
+  compact?: boolean;
+  signed?: boolean;
+  fallback?: string;
+  /** With compact: 2 decimals for $1 … max (portfolio row value). */
+  twoDecimalsUnder?: number;
+};
+
+export const PORTFOLIO_HOLDING_VALUE_USD_OPTS: FormatUsdReadableOptions = {
+  compact: true,
+  twoDecimalsUnder: USD_HOLDINGS_VALUE_TWO_DECIMAL_MAX,
+};
+
+export function formatPortfolioHoldingValueUsd(
+  value: number | null | undefined
+): string {
+  return formatUsdReadable(value, PORTFOLIO_HOLDING_VALUE_USD_OPTS);
+}
+
 export function formatUsd(
   value: number | null | undefined,
   opts?: { compact?: boolean }
@@ -25,7 +47,7 @@ export function formatUsd(
 
 export function formatUsdReadable(
   value: number | null | undefined,
-  opts?: { compact?: boolean; signed?: boolean; fallback?: string }
+  opts?: FormatUsdReadableOptions
 ): string {
   if (value == null || !Number.isFinite(value)) return opts?.fallback ?? "—";
 
@@ -35,6 +57,14 @@ export function formatUsdReadable(
   if (opts?.compact && abs >= 1_000_000) return `${sign}$${(abs / 1_000_000).toFixed(2)}M`;
   if (opts?.compact && abs >= USD_COMPACT_K_THRESHOLD) {
     return `${sign}$${(abs / 1_000).toFixed(1)}K`;
+  }
+  if (
+    opts?.compact &&
+    opts.twoDecimalsUnder != null &&
+    abs >= 1 &&
+    abs < opts.twoDecimalsUnder
+  ) {
+    return `${sign}$${abs.toFixed(2)}`;
   }
   if (opts?.compact && abs >= 1) return `${sign}$${abs.toFixed(1)}`;
   if (opts?.compact && abs > 0) return `${sign}${formatPumpSubscriptPrice(abs, "$")}`;

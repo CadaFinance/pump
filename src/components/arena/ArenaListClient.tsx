@@ -58,6 +58,7 @@ import {
   type BoardFilter,
 } from "@/lib/arena-filters";
 import type { AirdropListItem } from "@/lib/db/airdrops";
+import type { ArenaHomePayload } from "@/lib/arena-server";
 
 const ARENA_FILTER_ITEMS = [
   ["new", "New", "Newest"],
@@ -324,14 +325,21 @@ type ArenaQuickTradeTarget = {
   prefill: TradePrefillConfig;
 };
 
-export function ArenaListClient() {
-  const [tokens, setTokens] = useState<TokenListItem[] | null>(null);
-  const [topByMcap, setTopByMcap] = useState<TokenListItem[]>([]);
-  const [kothSummary, setKothSummary] = useState<KothSummary | null>(null);
-  const [serverFilterCounts, setServerFilterCounts] = useState<ArenaFilterCounts | null>(null);
-  const [hasMore, setHasMore] = useState(false);
+export function ArenaListClient({
+  initialPayload = null,
+}: {
+  initialPayload?: ArenaHomePayload | null;
+}) {
+  const [tokens, setTokens] = useState<TokenListItem[] | null>(initialPayload?.data ?? null);
+  const [topByMcap, setTopByMcap] = useState<TokenListItem[]>(initialPayload?.topByMcap ?? []);
+  const [kothSummary, setKothSummary] = useState<KothSummary | null>(initialPayload?.koth ?? null);
+  const [serverFilterCounts, setServerFilterCounts] = useState<ArenaFilterCounts | null>(
+    initialPayload?.meta?.filterCounts ?? null
+  );
+  const [hasMore, setHasMore] = useState(initialPayload?.meta?.hasMore ?? false);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [apiBnbUsd, setApiBnbUsd] = useState<number | null>(null);
+  const [boardRefreshing, setBoardRefreshing] = useState(false);
+  const [apiBnbUsd, setApiBnbUsd] = useState<number | null>(initialPayload?.bnbUsd ?? null);
   const [airdropTokenAddresses, setAirdropTokenAddresses] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const [flashes, setFlashes] = useState<Record<string, FlashTone>>({});
@@ -350,11 +358,13 @@ export function ArenaListClient() {
   const router = useRouter();
   const { openConnectModal } = useOpenConnectModal();
   const { favorites, isFavorite, toggleFavorite } = useFavorites();
-  const { bnbUsd: hookBnbUsd, isLoading: bnbUsdLoading } = useBnbUsdPrice();
+  const { bnbUsd: hookBnbUsd } = useBnbUsdPrice();
   const effectiveBnbUsd = apiBnbUsd ?? hookBnbUsd;
   const flashTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const capAnimFrameRef = useRef<Record<string, number>>({});
   const animatedCapsRef = useRef<Record<string, number>>({});
+  const tokensRef = useRef<TokenListItem[] | null>(initialPayload?.data ?? null);
+  const initialPayloadRef = useRef(initialPayload);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const loadMoreRef = useRef<HTMLDivElement>(null);
   const listLimitRef = useRef(ARENA_PAGE_INITIAL);
@@ -600,7 +610,7 @@ export function ArenaListClient() {
         sortDir: apiSortDir,
         filter: activeFilter === "favorites" ? "all" : activeFilter,
       });
-      if (airdropTokenAddresses.size > 0) {
+      if (activeFilter === "hasAirdrop" && airdropTokenAddresses.size > 0) {
         params.set("airdrop", [...airdropTokenAddresses].join(","));
       }
       return `/api/tokens?${params.toString()}`;
@@ -608,8 +618,15 @@ export function ArenaListClient() {
     [apiSortKey, apiSortDir, activeFilter, airdropTokenAddresses]
   );
 
+  const airdropFilterKey =
+    activeFilter === "hasAirdrop" ? [...airdropTokenAddresses].sort().join("|") : "";
+
   const load = useCallback(
-    async (limit = listLimitRef.current) => {
+    async (limit = listLimitRef.current, options: { silent?: boolean } = {}) => {
+      const hadData = tokensRef.current !== null;
+      if (!options.silent && hadData) {
+        setBoardRefreshing(true);
+      }
       try {
         const response = await fetch(buildTokensUrl(limit), { cache: "no-store" });
         const body = (await response.json()) as {
@@ -667,12 +684,18 @@ export function ArenaListClient() {
         });
         setError(null);
       } catch (err) {
-        setTokens(null);
-        setError(err instanceof Error ? err.message : "Failed to load tokens");
+        if (!hadData) {
+          setTokens(null);
+          setError(err instanceof Error ? err.message : "Failed to load tokens");
+        }
+      } finally {
+        setBoardRefreshing(false);
       }
     },
     [buildTokensUrl, getComparableValues, triggerFlash]
   );
+
+  tokensRef.current = tokens;
 
   const loadMore = useCallback(async () => {
     if (loadingMore || !hasMore) return;
@@ -703,7 +726,7 @@ export function ArenaListClient() {
         payload.type === "board_delta" ||
         payload.type === "koth"
       ) {
-        void loadRef.current(listLimitRef.current);
+        void loadRef.current(listLimitRef.current, { silent: true });
         void loadFavoriteTokensRef.current();
       }
     },
@@ -719,9 +742,22 @@ export function ArenaListClient() {
     listLimitRef.current = ARENA_PAGE_INITIAL;
     setHasMore(false);
     setLoadingMore(false);
-    setTokens(null);
+
+    const ssrDefaultsMatch =
+      initialPayloadRef.current != null &&
+      activeFilter === "new" &&
+      apiSortKey === "age" &&
+      apiSortDir === "desc";
+
+    if (ssrDefaultsMatch) {
+      initialPayloadRef.current = null;
+      void loadRef.current(ARENA_PAGE_INITIAL, { silent: true });
+      return;
+    }
+
+    initialPayloadRef.current = null;
     void loadRef.current(ARENA_PAGE_INITIAL);
-  }, [apiSortKey, apiSortDir, activeFilter, airdropTokenAddresses, viewMode]);
+  }, [apiSortKey, apiSortDir, activeFilter, airdropFilterKey, viewMode]);
 
   useEffect(() => {
     if (activeFilter === "favorites" || !hasMore || loadingMore) return;
@@ -750,7 +786,7 @@ export function ArenaListClient() {
     const schedule = () => {
       const delay = resolveLivePollDelay(wsConnected, false);
       timer = window.setTimeout(() => {
-        void loadRef.current(listLimitRef.current).finally(schedule);
+        void loadRef.current(listLimitRef.current, { silent: true }).finally(schedule);
       }, delay);
     };
 
@@ -1018,14 +1054,11 @@ export function ArenaListClient() {
       headerSortKey === key ? "text-pump-accent" : "text-pump-muted hover:text-pump-text"
     }`;
 
-  const awaitingPrices =
-    tokens !== null && effectiveBnbUsd == null && apiBnbUsd == null && bnbUsdLoading;
-
-  if ((tokens === null && !error) || awaitingPrices) {
+  if (tokens === null && !error) {
     return <ArenaSkeleton />;
   }
 
-  if (error) {
+  if (error && tokens === null) {
     return (
       <div className="notice-error p-4">
         {error}
@@ -1046,7 +1079,10 @@ export function ArenaListClient() {
   }
 
   return (
-    <div className="min-w-0 space-y-3 md:space-y-4">
+    <div
+      className="min-w-0 space-y-3 md:space-y-4"
+      aria-busy={boardRefreshing}
+    >
       <ArenaMcapTicker tokens={mcapRankedTokens} />
 
       <ArenaShortcutsModal open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />

@@ -1,11 +1,20 @@
-/** Feature flags for phased DB performance rollout (default off = legacy behavior). */
+/** Feature flags for phased DB performance rollout. */
 
-export function useBondingStateCounts(): boolean {
-  return process.env.USE_BONDING_STATE_COUNTS === "true";
+function perfFlagEnabled(name: string): boolean {
+  const value = process.env[name];
+  if (value === "false") return false;
+  if (value === "true") return true;
+  return process.env.NODE_ENV === "production";
 }
 
+/** Pre-aggregated bonding_states counts (indexed columns). */
+export function useBondingStateCounts(): boolean {
+  return perfFlagEnabled("USE_BONDING_STATE_COUNTS");
+}
+
+/** Materialized views for trade stats + price anchors (indexer refresh). */
 export function useMvTokenStats(): boolean {
-  return process.env.USE_MV_TOKEN_STATS === "true";
+  return perfFlagEnabled("USE_MV_TOKEN_STATS");
 }
 
 export function useWebSocketLive(): boolean {

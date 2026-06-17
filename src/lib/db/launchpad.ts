@@ -476,7 +476,7 @@ function arenaBoardFilterClause(
         FROM tokens t
         LEFT JOIN bonding_states b ON b.token_address = t.address
         WHERE t.is_hidden = false
-        ORDER BY (${SQL_BONDING_MARK_CAP_ZUG}) DESC
+        ORDER BY COALESCE(b.market_cap_zug, 0) DESC
         LIMIT 5
       )`,
       params: [],
@@ -559,7 +559,7 @@ async function countKothContenders(): Promise<number> {
         FROM tokens t
         LEFT JOIN bonding_states b ON b.token_address = t.address
         WHERE t.is_hidden = false
-        ORDER BY (${SQL_BONDING_MARK_CAP_ZUG}) DESC
+        ORDER BY COALESCE(b.market_cap_zug, 0) DESC
         LIMIT 5
       ) koth
     `
@@ -611,7 +611,7 @@ function arenaListOrderBy(sort: ArenaListSort): string {
   if (sort === "age") {
     return "ORDER BY bt.created_at DESC";
   }
-  return `ORDER BY (${SQL_BONDING_MARK_CAP_ZUG}) DESC, bt.created_at DESC`;
+  return "ORDER BY COALESCE(b.market_cap_zug, 0) DESC, bt.created_at DESC";
 }
 
 export async function listTokensPaginated(

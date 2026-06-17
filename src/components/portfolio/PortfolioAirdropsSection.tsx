@@ -46,11 +46,15 @@ export function PortfolioAirdropsSection({ address }: { address: string }) {
 
     void (async () => {
       setLoading(true);
+      setItems([]);
       try {
         const snapshot = await fetchJoinedAirdrops(address, JOINED_FETCH_LIMIT);
         if (cancelled) return;
         setItems(snapshot);
         setLoading(false);
+
+        const tracked = snapshot.filter(isPortfolioTrackedAirdrop);
+        if (tracked.length === 0) return;
 
         const refreshed = await fetchJoinedAirdrops(address, JOINED_FETCH_LIMIT, {
           refresh: true,
@@ -93,23 +97,7 @@ export function PortfolioAirdropsSection({ address }: { address: string }) {
     [visibleItems]
   );
 
-  if (loading && visibleItems.length === 0) {
-    return (
-      <div className="space-y-2 md:space-y-3">
-        <h3 className="section-heading text-h3 inline-flex items-center gap-2">
-          <MetricIcons.airdrops
-            className="hidden h-[1.05em] w-[1.05em] shrink-0 text-pump-accent sm:block"
-            strokeWidth={ICON_STROKE}
-            aria-hidden
-          />
-          Joined airdrops
-        </h3>
-        <div className="skeleton-shimmer h-16 rounded-lg" />
-      </div>
-    );
-  }
-
-  if (visibleItems.length === 0) {
+  if (loading || visibleItems.length === 0) {
     return null;
   }
 

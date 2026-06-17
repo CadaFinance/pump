@@ -31,7 +31,7 @@ import { TokenAvatar } from "@/components/token/TokenAvatar";
 import { TradeSheet } from "@/components/token/TradeSheet";
 import type { TokenListItem } from "@/lib/db/launchpad";
 import { useBnbUsdPrice } from "@/hooks/useBnbUsdPrice";
-import { bnbToUsd, formatUsdReadable } from "@/lib/format-usd";
+import { bnbToUsd, formatPortfolioHoldingValueUsd, formatUsdReadable } from "@/lib/format-usd";
 import { PctChange } from "@/components/ui/PctChange";
 import { formatCapForBoard } from "@/lib/arena-board-format";
 import {
@@ -306,7 +306,7 @@ function WalletHoldingMobileRow({
         <div className="col-span-2 col-start-2 flex w-full items-center justify-between gap-2 text-[11px] leading-tight">
           <span className="financial-value min-w-0 truncate text-pump-text">
             <span className="text-pump-muted">VAL </span>
-            {formatUsdReadable(positionValueUsd, { compact: true })}
+            {formatPortfolioHoldingValueUsd(positionValueUsd)}
           </span>
           <span className="financial-value min-w-0 truncate text-pump-text">
             <span className="text-pump-muted">BAL </span>
@@ -355,7 +355,7 @@ function WalletHoldingDesktopRow({
         </Link>
       </td>
       <td className="px-4 py-3 financial-value font-semibold text-pump-text">
-        {formatUsdReadable(positionValueUsd, { compact: true })}
+        {formatPortfolioHoldingValueUsd(positionValueUsd)}
       </td>
       <td className="px-4 py-3 financial-value text-pump-text">{formatTokenBalance(balance)}</td>
       <td className="px-4 py-3 financial-value text-pump-muted">—</td>
@@ -530,7 +530,8 @@ export function PortfolioPanel() {
   const { bnbUsd } = useBnbUsdPrice();
   const [data, setData] = useState<PortfolioData | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  // Start in loading mode to avoid a brief error placeholder flash on hard refresh.
+  const [loading, setLoading] = useState(true);
   const [claimOpen, setClaimOpen] = useState(false);
   const [referrerClaimOpen, setReferrerClaimOpen] = useState(false);
   const [referralStats, setReferralStats] = useState<ReferralStats | null>(null);
@@ -682,11 +683,14 @@ export function PortfolioPanel() {
           .join("|");
         const needsEnrich =
           !holdingsReadyRef.current || fingerprint !== lastEnrichFingerprintRef.current;
+        // First paint should be instant from indexed snapshot; verify on-chain in background.
+        if (!holdingsReadyRef.current) {
+          holdingsReadyRef.current = true;
+          setHoldingsReady(true);
+        }
         if (needsEnrich) {
           lastEnrichFingerprintRef.current = fingerprint;
-          void enrichHoldings(walletAddress, portfolio, {
-            silent: holdingsReadyRef.current,
-          });
+          void enrichHoldings(walletAddress, portfolio, { silent: true });
         }
       } catch (err) {
         if (generation !== loadGenerationRef.current) return;
@@ -1143,7 +1147,7 @@ export function PortfolioPanel() {
               icon={MetricIcons.portfolioValue}
               value={
                 <>
-                  <span>{formatUsdReadable(totalEstimatedUsd, { compact: true })}</span>
+                  <span>{formatPortfolioHoldingValueUsd(totalEstimatedUsd)}</span>
                   <PctChange
                     value={portfolioValuePct}
                     className="text-caption font-medium"
@@ -1192,7 +1196,7 @@ export function PortfolioPanel() {
                     strokeWidth={ICON_STROKE}
                     aria-hidden
                   />
-                  Holdings ({!holdingsReady && holdingsEnriching ? "…" : holdingsCount})
+                  Holdings ({holdingsCount})
                 </h3>
                 <div className="flex flex-wrap items-center justify-end gap-2">
                   {dustHoldingsCount > 0 ? (
@@ -1221,11 +1225,7 @@ export function PortfolioPanel() {
                 </div>
               </div>
               {holdingsCount > 0 ? <HoldingsSwipeHint /> : null}
-              {!holdingsReady && holdingsEnriching ? (
-                <section className="panel-surface portfolio-section-surface p-4" aria-busy="true">
-                  <p className="text-body-sm text-pump-muted">Loading holdings…</p>
-                </section>
-              ) : awaitingDustFilter ? (
+              {awaitingDustFilter ? (
                 <section className="panel-surface portfolio-section-surface p-4" aria-busy="true">
                   <p className="text-body-sm text-pump-muted">Applying dust filter…</p>
                 </section>
@@ -1314,7 +1314,7 @@ export function PortfolioPanel() {
                                     holdingFlashes[position.tokenAddress.toLowerCase()]
                                   )}
                                 >
-                                  {formatUsdReadable(positionValueUsd, { compact: true })}
+                                  {formatPortfolioHoldingValueUsd(positionValueUsd)}
                                 </span>
                               </span>
                               <span className="financial-value min-w-0 truncate text-pump-text">
@@ -1399,7 +1399,7 @@ export function PortfolioPanel() {
                                 </Link>
                               </td>
                               <td className={`px-4 py-3 financial-value font-semibold text-pump-text ${flashText(holdingFlashes[position.tokenAddress.toLowerCase()])}`}>
-                                {formatUsdReadable(positionValueUsd, { compact: true })}
+                                {formatPortfolioHoldingValueUsd(positionValueUsd)}
                               </td>
                               <td className="px-4 py-3 financial-value text-pump-text">
                                 {formatTokenBalance(balance)}
