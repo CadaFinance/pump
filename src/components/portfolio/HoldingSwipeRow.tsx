@@ -5,7 +5,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 const ACTION_WIDTH = 92;
 const SNAP_THRESHOLD = 44;
 const PEEK_OFFSET = -28;
-const SWIPE_HINT_KEY = "pump-holdings-swipe-hint";
+const SWIPE_HINT_KEY = "pump-swipe-trade-hint";
 
 export function isHoldingsSwipeHintDismissed(): boolean {
   if (typeof window === "undefined") return true;
@@ -20,16 +20,26 @@ type HoldingSwipeRowProps = {
   children: ReactNode;
   onBuyMax: () => void;
   onSellMax: () => void;
+  buyLabel?: string;
+  sellLabel?: string;
   disabled?: boolean;
   peekOnMount?: boolean;
+  dataBoardKey?: string;
+  rowClassName?: string;
+  contentClassName?: string;
 };
 
 export function HoldingSwipeRow({
   children,
   onBuyMax,
   onSellMax,
+  buyLabel = "Buy max",
+  sellLabel = "Sell max",
   disabled = false,
   peekOnMount = false,
+  dataBoardKey,
+  rowClassName = "",
+  contentClassName = "bg-pump-card",
 }: HoldingSwipeRowProps) {
   const [offset, setOffset] = useState(0);
   const [dragging, setDragging] = useState(false);
@@ -39,6 +49,7 @@ export function HoldingSwipeRow({
   const startOffset = useRef(0);
   const axisLock = useRef<"x" | "y" | null>(null);
   const peekPlayedRef = useRef(false);
+  const offsetRef = useRef(0);
 
   const clamp = useCallback(
     (value: number) => Math.max(-ACTION_WIDTH, Math.min(ACTION_WIDTH, value)),
@@ -46,6 +57,22 @@ export function HoldingSwipeRow({
   );
 
   const close = useCallback(() => setOffset(0), []);
+
+  const triggerBuy = useCallback(() => {
+    close();
+    dismissHoldingsSwipeHint();
+    onBuyMax();
+  }, [close, onBuyMax]);
+
+  const triggerSell = useCallback(() => {
+    close();
+    dismissHoldingsSwipeHint();
+    onSellMax();
+  }, [close, onSellMax]);
+
+  useEffect(() => {
+    offsetRef.current = offset;
+  }, [offset]);
 
   useEffect(() => {
     if (!peekOnMount || disabled || peekPlayedRef.current) return;
@@ -104,47 +131,50 @@ export function HoldingSwipeRow({
   const onTouchEnd = () => {
     setDragging(false);
     axisLock.current = null;
-    setOffset((current) => {
-      if (current <= -SNAP_THRESHOLD) return -ACTION_WIDTH;
-      if (current >= SNAP_THRESHOLD) return ACTION_WIDTH;
-      return 0;
-    });
+    const current = offsetRef.current;
+
+    if (current <= -SNAP_THRESHOLD) {
+      if (!disabled) triggerSell();
+      setOffset(0);
+      return;
+    }
+    if (current >= SNAP_THRESHOLD) {
+      if (!disabled) triggerBuy();
+      setOffset(0);
+      return;
+    }
+    setOffset(0);
   };
 
   return (
-    <div className="relative overflow-hidden">
+    <div
+      className={`relative overflow-hidden ${rowClassName}`.trim()}
+      {...(dataBoardKey ? { "data-board-key": dataBoardKey } : {})}
+    >
       {!disabled ? (
         <>
           <div className="absolute inset-y-0 left-0 flex w-[92px] items-stretch">
             <button
               type="button"
-              onClick={() => {
-                close();
-                dismissHoldingsSwipeHint();
-                onBuyMax();
-              }}
+              onClick={triggerBuy}
               className="flex flex-1 items-center justify-center bg-pump-success px-2 text-center text-caption font-semibold leading-tight text-pump-accent-foreground"
             >
-              Buy max
+              {buyLabel}
             </button>
           </div>
           <div className="absolute inset-y-0 right-0 flex w-[92px] items-stretch">
             <button
               type="button"
-              onClick={() => {
-                close();
-                dismissHoldingsSwipeHint();
-                onSellMax();
-              }}
+              onClick={triggerSell}
               className="flex flex-1 items-center justify-center bg-pump-danger px-2 text-center text-caption font-semibold leading-tight text-white"
             >
-              Sell max
+              {sellLabel}
             </button>
           </div>
         </>
       ) : null}
       <div
-        className={`relative bg-pump-card ${dragging ? "" : "transition-transform duration-200 ease-out"}`}
+        className={`relative z-[1] w-full ${contentClassName} ${dragging ? "" : "transition-transform duration-200 ease-out"}`.trim()}
         style={{ transform: `translateX(${offset}px)` }}
         onTouchStart={onTouchStart}
         onTouchMove={onTouchMove}

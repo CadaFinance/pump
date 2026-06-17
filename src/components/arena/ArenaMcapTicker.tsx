@@ -6,7 +6,7 @@ import type { TokenListItem } from "@/lib/db/launchpad";
 import { TokenAvatar } from "@/components/token/TokenAvatar";
 import { IconLabel } from "@/components/ui/IconLabel";
 import { MetricIcons } from "@/lib/metric-icons";
-import { formatSignedPct, pctTone } from "@/lib/arena-board-format";
+import { PctChange } from "@/components/ui/PctChange";
 
 const MCAP_TICKER_LIMIT = 20;
 const TICKER_LOOP_MS = 40_000;
@@ -27,11 +27,7 @@ function TickerItem({ token }: { token: TokenListItem }) {
         size={18}
       />
       <span className="mcap-ticker-symbol">{symbolLabel}</span>
-      <span
-        className={`financial-value mcap-ticker-pct ${pctTone(token.change24hPct ?? null)}`}
-      >
-        {formatSignedPct(token.change24hPct ?? null)}
-      </span>
+      <PctChange value={token.change24hPct ?? null} className="mcap-ticker-pct" />
     </Link>
   );
 }

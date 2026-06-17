@@ -32,7 +32,8 @@ import { TradeSheet } from "@/components/token/TradeSheet";
 import type { TokenListItem } from "@/lib/db/launchpad";
 import { useBnbUsdPrice } from "@/hooks/useBnbUsdPrice";
 import { bnbToUsd, formatUsdReadable } from "@/lib/format-usd";
-import { formatCapForBoard, formatSignedPct, pctTone } from "@/lib/arena-board-format";
+import { PctChange } from "@/components/ui/PctChange";
+import { formatCapForBoard } from "@/lib/arena-board-format";
 import {
   PORTFOLIO_CREATOR_WALLET_SCAN_MAX,
   PORTFOLIO_DERIVED_LOTS_MAX,
@@ -219,9 +220,11 @@ function PnlCell({
       <span className={`financial-value text-body-sm font-semibold ${tone}`}>
         {formatUsdReadable(usd, { compact: true, signed: true })}
       </span>
-      <span className={`financial-value text-caption font-medium ${tone}`}>
-        {formatSignedPct(pct)}
-      </span>
+      <PctChange
+        value={pct}
+        className="text-caption font-medium"
+        toneClassName={tone}
+      />
     </div>
   );
 }
@@ -1142,11 +1145,11 @@ export function PortfolioPanel() {
               value={
                 <>
                   <span>{formatUsdReadable(totalEstimatedUsd, { compact: true })}</span>
-                  <span
-                    className={`text-caption font-medium ${pnlTone(portfolioValuePct ?? totalNetPnl)}`}
-                  >
-                    {formatSignedPct(portfolioValuePct)}
-                  </span>
+                  <PctChange
+                    value={portfolioValuePct}
+                    className="text-caption font-medium"
+                    toneClassName={pnlTone(portfolioValuePct ?? totalNetPnl)}
+                  />
                 </>
               }
               valueClassName={`inline-flex flex-wrap items-baseline gap-x-2 gap-y-0.5 financial-value text-body-sm font-semibold text-pump-text ${flashText(totalValueFlash)}`}
@@ -1462,11 +1465,12 @@ export function PortfolioPanel() {
                               <span className="text-pump-muted">VOL </span>
                               {formatUsdReadable(vol24hUsd, { compact: true })}
                             </span>
-                            <span
-                              className={`financial-value shrink-0 text-right ${pctTone(token.change24hPct ?? null)}`}
-                            >
+                            <span className="financial-value shrink-0 text-right">
                               <span className="text-pump-muted">24H </span>
-                              {formatSignedPct(token.change24hPct ?? null)}
+                              <PctChange
+                                value={token.change24hPct ?? null}
+                                className="inline-flex"
+                              />
                             </span>
                           </div>
                         </article>

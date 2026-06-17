@@ -4,10 +4,12 @@ import { fetchBnbUsdPrice } from "@/lib/bnb-price-server";
 import {
   getArenaFilterCounts,
   getKothSummary,
-  listTokensPaginated,
+  listArenaBoardTokens,
   listTopTokensByMcap,
+  type ArenaBoardFilter,
+  type ArenaBoardSortDir,
+  type ArenaBoardSortKey,
   type ArenaListMeta,
-  type ArenaListSort,
   type KothSummary,
   type TokenListItem,
 } from "@/lib/db/launchpad";
@@ -17,6 +19,27 @@ const CACHE_MS = 2_000;
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 500;
 const TOP_MCAP_LIMIT = 20;
+
+const BOARD_SORT_KEYS: ArenaBoardSortKey[] = [
+  "mcap",
+  "ath",
+  "age",
+  "txns",
+  "vol24h",
+  "traders",
+  "h1",
+  "h6",
+  "h24",
+];
+
+const BOARD_FILTERS: ArenaBoardFilter[] = [
+  "all",
+  "new",
+  "highVol",
+  "movers",
+  "kothContenders",
+  "hasAirdrop",
+];
 
 type TokensCacheEntry = {
   expiresAt: number;
@@ -35,8 +58,20 @@ function parseLimit(value: string | null): number {
   return Math.min(parsed, MAX_LIMIT);
 }
 
-function parseSort(value: string | null): ArenaListSort {
-  return value === "mcap" ? "mcap" : "age";
+function parseSortKey(value: string | null): ArenaBoardSortKey {
+  return BOARD_SORT_KEYS.includes(value as ArenaBoardSortKey)
+    ? (value as ArenaBoardSortKey)
+    : "age";
+}
+
+function parseSortDir(value: string | null): ArenaBoardSortDir {
+  return value === "asc" ? "asc" : "desc";
+}
+
+function parseFilter(value: string | null): ArenaBoardFilter {
+  return BOARD_FILTERS.includes(value as ArenaBoardFilter)
+    ? (value as ArenaBoardFilter)
+    : "all";
 }
 
 function parseAirdropAddresses(value: string | null): string[] {
@@ -47,18 +82,35 @@ function parseAirdropAddresses(value: string | null): string[] {
     .filter((address) => /^0x[a-f0-9]{40}$/.test(address));
 }
 
-function cacheKey(limit: number, sort: ArenaListSort, airdropKey: string): string {
-  return `${limit}:${sort}:${airdropKey}`;
+function filterCountKey(filter: ArenaBoardFilter): keyof ArenaListMeta["filterCounts"] {
+  if (filter === "highVol") return "highVol";
+  if (filter === "movers") return "movers";
+  if (filter === "kothContenders") return "kothContenders";
+  if (filter === "hasAirdrop") return "hasAirdrop";
+  if (filter === "new") return "new";
+  return "all";
+}
+
+function cacheKey(
+  limit: number,
+  sortKey: ArenaBoardSortKey,
+  sortDir: ArenaBoardSortDir,
+  filter: ArenaBoardFilter,
+  airdropKey: string
+): string {
+  return `${limit}:${sortKey}:${sortDir}:${filter}:${airdropKey}`;
 }
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const limit = parseLimit(searchParams.get("limit"));
-    const sort = parseSort(searchParams.get("sort"));
+    const sortKey = parseSortKey(searchParams.get("sortKey"));
+    const sortDir = parseSortDir(searchParams.get("sortDir"));
+    const filter = parseFilter(searchParams.get("filter"));
     const airdropAddresses = parseAirdropAddresses(searchParams.get("airdrop"));
     const airdropKey = airdropAddresses.join("|");
-    const key = cacheKey(limit, sort, airdropKey);
+    const key = cacheKey(limit, sortKey, sortDir, filter, airdropKey);
     const now = Date.now();
     const cached = tokensCache.get(key);
 
@@ -76,17 +128,25 @@ export async function GET(request: NextRequest) {
     }
 
     const [tokens, topByMcap, koth, filterCounts, bnbPrice] = await Promise.all([
-      listTokensPaginated({ limit, offset: 0, sort }),
+      listArenaBoardTokens({
+        limit,
+        offset: 0,
+        sortKey,
+        sortDir,
+        filter,
+        airdropAddresses,
+      }),
       listTopTokensByMcap(TOP_MCAP_LIMIT),
       getKothSummary(RECENT_STRIP_DESKTOP),
       getArenaFilterCounts(airdropAddresses),
       fetchBnbUsdPrice(),
     ]);
 
+    const filteredTotal = filterCounts[filterCountKey(filter)];
     const meta: ArenaListMeta = {
       total: filterCounts.all,
       limit,
-      hasMore: limit < filterCounts.all,
+      hasMore: limit < filteredTotal,
       filterCounts,
     };
 

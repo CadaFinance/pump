@@ -5,6 +5,7 @@ import type { TokenHolderSnapshot, TradeItem } from "@/lib/db/launchpad";
 import { explorerTxUrl, shortAddress } from "@/config/chain";
 import { UserAvatarForAddress } from "@/components/user/UserAvatarForAddress";
 import { SectionHeadingIcon } from "@/components/ui/IconLabel";
+import { PctChange } from "@/components/ui/PctChange";
 import { MetricIcons } from "@/lib/metric-icons";
 import { DEFAULT_TOKEN_TOTAL_SUPPLY, bnbToUsd, formatUsdReadable } from "@/lib/format-usd";
 import {
@@ -53,11 +54,6 @@ function formatTokenAmount(value: number): string {
   if (value >= 1) return value.toFixed(2);
   if (value > 0) return value.toFixed(4);
   return "0";
-}
-
-function formatPercent(value: number | null): string {
-  if (value == null || !Number.isFinite(value)) return "—";
-  return `${value >= 0 ? "+" : ""}${value.toFixed(2)}%`;
 }
 
 function formatSupplyShare(balance: number): string {
@@ -295,9 +291,11 @@ export function TradeTape({
                             <span className={`financial-value text-caption font-semibold lg:text-body-sm ${pnlTone}`}>
                               {formatUsdReadable(unrealizedPnlUsd)}
                             </span>
-                            <span className={`financial-value text-[11px] lg:text-caption ${pnlTone}`}>
-                              {formatPercent(unrealizedPnlPct)}
-                            </span>
+                            <PctChange
+                              value={unrealizedPnlPct}
+                              className="text-[11px] lg:text-caption"
+                              toneClassName={pnlTone}
+                            />
                           </div>
                         </td>
                       </tr>

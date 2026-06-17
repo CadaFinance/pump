@@ -1,4 +1,4 @@
-import { formatUsdReadable } from "@/lib/format-usd";
+import { formatUsdReadable, tokenPriceUsd, DEFAULT_TOKEN_TOTAL_SUPPLY } from "@/lib/format-usd";
 
 export function formatAge(createdAt: string): string {
   const ms = Date.now() - new Date(createdAt).getTime();
@@ -14,8 +14,36 @@ export function formatAge(createdAt: string): string {
 
 export function formatSignedPct(value: number | null): string {
   if (value == null || !Number.isFinite(value)) return "—";
-  const sign = value >= 0 ? "+" : "";
-  return `${sign}${value.toFixed(2)}%`;
+  return `${Math.abs(value).toFixed(2)}%`;
+}
+
+/** @deprecated Use `<PctChange />` in UI. String helper for non-React surfaces. */
+export function formatPctWithTriangle(value: number | null): string {
+  return formatSignedPct(value);
+}
+
+export function listTokenPriceUsd(
+  marketCapBnb: string,
+  bnbUsd: number | null | undefined
+): number | null {
+  const mcapBnb = Number(marketCapBnb);
+  if (!Number.isFinite(mcapBnb) || mcapBnb <= 0 || bnbUsd == null) return null;
+  const priceBnb = mcapBnb / DEFAULT_TOKEN_TOTAL_SUPPLY;
+  return tokenPriceUsd(priceBnb, bnbUsd);
+}
+
+export function formatExploreListPrice(
+  marketCapBnb: string,
+  bnbUsd: number | null | undefined
+): string {
+  const priceUsd = listTokenPriceUsd(marketCapBnb, bnbUsd);
+  return formatUsdReadable(priceUsd, { compact: true });
+}
+
+export function formatExploreMcapLabel(mcapUsd: number | null): string {
+  const cap = formatCapForBoard(mcapUsd);
+  if (cap === "—") return cap;
+  return `${cap} MKT CAP`;
 }
 
 export function pctTone(value: number | null): string {
@@ -27,7 +55,8 @@ export function formatCapForBoard(value: number | null): string {
   if (value == null || !Number.isFinite(value)) return "—";
   const abs = Math.abs(value);
   const sign = value < 0 ? "-" : "";
-  if (abs > 9_999) return `${sign}$${(abs / 1_000).toFixed(2)}K`;
-  if (abs >= 1) return `${sign}$${abs.toFixed(0)}`;
+  if (abs >= 1_000_000) return `${sign}$${(abs / 1_000_000).toFixed(2)}M`;
+  if (abs >= 1_000) return `${sign}$${(abs / 1_000).toFixed(1)}K`;
+  if (abs >= 1) return `${sign}$${Math.round(abs)}`;
   return formatUsdReadable(value);
 }

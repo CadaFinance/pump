@@ -181,7 +181,20 @@ async function finalizeOne(
     .slice(0, 100);
 
   if (qualified.length === 0) {
-    console.warn(`airdrop ${airdrop.id}: no qualified winners, skipping finalize`);
+    console.warn(
+      `airdrop ${airdrop.id}: no qualified winners, marking CLOSED in DB (on-chain finalize requires winners; sweep after claim window)`
+    );
+    await pools.launchpad.query(
+      `
+        UPDATE airdrops
+        SET status = 'CLOSED',
+            total_allocated = 0,
+            updated_at = now()
+        WHERE id = $1
+          AND merkle_root IS NULL
+      `,
+      [airdrop.id]
+    );
     return;
   }
 

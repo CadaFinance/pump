@@ -4,11 +4,10 @@ import { TokenAvatar } from "@/components/token/TokenAvatar";
 import { TableHeaderLabel } from "@/components/ui/IconLabel";
 import { MetricIcons } from "@/lib/metric-icons";
 import { bnbToUsd, formatUsdReadable } from "@/lib/format-usd";
+import { PctChange } from "@/components/ui/PctChange";
 import {
   formatAge,
   formatCapForBoard,
-  formatSignedPct,
-  pctTone,
 } from "@/lib/arena-board-format";
 
 function TrendSparkline({
@@ -140,14 +139,14 @@ export function TokenBoardTable({
                     <td className="px-4 py-3 financial-value text-pump-text">
                       {token.traders24h ?? 0}
                     </td>
-                    <td className={`px-4 py-3 financial-value ${pctTone(token.change1hPct ?? null)}`}>
-                      {formatSignedPct(token.change1hPct ?? null)}
+                    <td className="px-4 py-3">
+                      <PctChange value={token.change1hPct ?? null} />
                     </td>
-                    <td className={`px-4 py-3 financial-value ${pctTone(token.change6hPct ?? null)}`}>
-                      {formatSignedPct(token.change6hPct ?? null)}
+                    <td className="px-4 py-3">
+                      <PctChange value={token.change6hPct ?? null} />
                     </td>
-                    <td className={`px-4 py-3 financial-value ${pctTone(token.change24hPct ?? null)}`}>
-                      {formatSignedPct(token.change24hPct ?? null)}
+                    <td className="px-4 py-3">
+                      <PctChange value={token.change24hPct ?? null} />
                     </td>
                   </>
                 ) : null}

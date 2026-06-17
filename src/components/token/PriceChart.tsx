@@ -25,6 +25,7 @@ import {
   type VolumeBar,
 } from "@/lib/candles";
 import { useTheme } from "@/components/theme/ThemeProvider";
+import { PctChange } from "@/components/ui/PctChange";
 import {
   bnbToUsd,
   DEFAULT_TOKEN_TOTAL_SUPPLY,
@@ -546,16 +547,6 @@ export function PriceChart({
       ? (currentPriceUsd != null ? formatPumpSubscriptPrice(currentPriceUsd, "$") : "—")
       : (currentMcapUsd != null ? formatUsd(currentMcapUsd, { compact: true }) ?? "—" : "—");
   const summaryDeltaPct = price24hChangePct;
-  const summaryDeltaTone =
-    summaryDeltaPct == null
-      ? "text-pump-muted"
-      : summaryDeltaPct >= 0
-        ? "text-pump-success"
-        : "text-pump-danger";
-  const summaryDeltaPctText =
-    summaryDeltaPct == null
-      ? "—"
-      : `${summaryDeltaPct >= 0 ? "+" : ""}${summaryDeltaPct.toFixed(2)}%`;
 
   const volumeUsd = bnbToUsd(volume24hBnb, bnbUsd);
   const volumeUsdLabel =
@@ -605,11 +596,10 @@ export function PriceChart({
               <p className="financial-value text-[1.625rem] font-semibold leading-none text-pump-text sm:text-[1.75rem] md:text-[1.875rem]">
                 {summaryValue}
               </p>
-              <span
-                className={`financial-value pb-px text-[11px] font-semibold leading-none sm:text-body-sm ${summaryDeltaTone}`}
-              >
-                {summaryDeltaPctText}
-              </span>
+              <PctChange
+                value={summaryDeltaPct}
+                className="pb-px text-[11px] font-semibold leading-none sm:text-body-sm"
+              />
             </div>
             <div className="flex shrink-0 items-center gap-x-1 whitespace-nowrap text-[10px] leading-none sm:text-[11px] md:text-caption">
               <span className="text-pump-muted">Vol</span>

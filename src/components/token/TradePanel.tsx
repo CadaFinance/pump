@@ -184,6 +184,8 @@ export function TradePanel({
   const [amount, setAmount] = useState("");
   const prefillAppliedRef = useRef(false);
   const sellMaxPendingRef = useRef(false);
+  const sellPercentPendingRef = useRef(false);
+  const sellPercentTargetRef = useRef(100);
   const buyMaxPendingRef = useRef(false);
   const autoSubmitPendingRef = useRef(false);
   const autoSubmitTriggeredRef = useRef(false);
@@ -213,6 +215,10 @@ export function TradePanel({
       setSellInputMode(prefill.buyMode ?? "token");
       if (prefill.sellMax) {
         sellMaxPendingRef.current = true;
+      }
+      if (prefill.sellPercent != null) {
+        sellPercentPendingRef.current = true;
+        sellPercentTargetRef.current = prefill.sellPercent;
       }
     }
     if (prefill.amount) {
@@ -1149,6 +1155,14 @@ export function TradePanel({
     if (!bondingCurve || protocolFeeBps === undefined) return;
     sellMaxPendingRef.current = false;
     applySellTokenWei(maxSellTokenWei);
+  }, [side, maxSellTokenWei, bondingCurve, protocolFeeBps]);
+
+  useEffect(() => {
+    if (!sellPercentPendingRef.current || side !== "sell") return;
+    if (maxSellTokenWei === 0n) return;
+    if (!bondingCurve || protocolFeeBps === undefined) return;
+    sellPercentPendingRef.current = false;
+    applySellSliderPercent(sellPercentTargetRef.current);
   }, [side, maxSellTokenWei, bondingCurve, protocolFeeBps]);
 
   useEffect(() => {

@@ -8,7 +8,8 @@ import type { TokenListItem } from "@/lib/db/launchpad";
 import { TokenAvatar } from "@/components/token/TokenAvatar";
 import { useFavorites } from "@/components/favorites/FavoritesProvider";
 import { bnbToUsd } from "@/lib/format-usd";
-import { formatCapForBoard, formatSignedPct, pctTone } from "@/lib/arena-board-format";
+import { PctChange } from "@/components/ui/PctChange";
+import { formatCapForBoard } from "@/lib/arena-board-format";
 import { ICON_STROKE } from "@/lib/icons";
 
 type FlashTone = "up" | "down";
@@ -115,13 +116,10 @@ export function WatchlistContent({
                     {formatCapForBoard(mcapUsd)}
                   </span>
                 </span>
-                <span
-                  className={`financial-value toolbar-sheet-row__pct ${pctTone(
-                    token.change24hPct ?? null
-                  )}`}
-                >
-                  {formatSignedPct(token.change24hPct ?? null)}
-                </span>
+                <PctChange
+                  value={token.change24hPct ?? null}
+                  className="toolbar-sheet-row__pct"
+                />
               </Link>
             </div>
           </li>

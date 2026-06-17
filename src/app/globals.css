@@ -27,9 +27,9 @@ html[data-theme="light"] {
   --mobile-token-footer-height: var(--mobile-trade-dock-height);
 
   --modal-overlay-color: 0 0 0;
-  --modal-overlay-opacity: 0.48;
-  --modal-overlay-blur: 16px;
-  --modal-overlay-saturate: 125%;
+  --modal-overlay-opacity: 0.58;
+  --modal-overlay-blur: 36px;
+  --modal-overlay-saturate: 150%;
 
   --radius-sm: 4px;
   --radius-md: 6px;
@@ -175,9 +175,9 @@ code,
 
   @media (max-width: 639px) {
     .modal-backdrop {
-      --modal-overlay-opacity: 0.36;
-      --modal-overlay-blur: 10px;
-      --modal-overlay-saturate: 110%;
+      --modal-overlay-opacity: 0.62;
+      --modal-overlay-blur: 40px;
+      --modal-overlay-saturate: 135%;
     }
   }
 
@@ -1423,6 +1423,86 @@ code,
     background: rgb(var(--pump-accent) / 0.05);
   }
 
+  .arena-board-quick-cell {
+    width: 11.5rem;
+    min-width: 11.5rem;
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+  }
+
+  .arena-board-quick-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.12s ease;
+  }
+
+  .sheet-grid tbody tr:hover .arena-board-quick-actions,
+  .arena-board-quick-actions:focus-within {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .arena-board-quick-btn {
+    min-height: 1.875rem;
+    border-radius: var(--radius-sm);
+    padding: 0.3125rem 0.75rem;
+    font-size: var(--text-caption);
+    line-height: 1.2;
+    font-weight: 600;
+    white-space: nowrap;
+    transition: background-color 0.12s ease, color 0.12s ease;
+  }
+
+  .arena-board-quick-btn--buy {
+    background: rgb(var(--pump-success));
+    color: rgb(var(--pump-accent-foreground));
+  }
+
+  .arena-board-quick-btn--buy:hover {
+    filter: brightness(1.06);
+  }
+
+  .arena-board-quick-btn--sell {
+    background: rgb(var(--pump-danger));
+    color: white;
+  }
+
+  .arena-board-quick-btn--sell:hover {
+    filter: brightness(1.06);
+  }
+
+  .arena-board-row--clickable {
+    cursor: pointer;
+  }
+
+  .arena-card-quick-actions {
+    position: absolute;
+    right: 0.75rem;
+    bottom: 0.75rem;
+    z-index: 2;
+  }
+
+  .arena-token-card .arena-board-quick-actions {
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.12s ease;
+  }
+
+  .arena-token-card:hover .arena-board-quick-actions,
+  .arena-token-card .arena-board-quick-actions:focus-within {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .arena-token-card--compact .arena-card-quick-actions {
+    right: 0.625rem;
+    bottom: 0.625rem;
+  }
+
   .sheet-list {
     border: 1px solid rgb(var(--pump-border) / 0.35);
     border-radius: var(--radius-lg);
@@ -1440,6 +1520,53 @@ code,
 
   .sheet-list > *:nth-child(even) {
     background: rgb(var(--pump-border) / 0.04);
+  }
+
+  .arena-explore-list {
+    overflow: hidden;
+    padding: 0.25rem 0.75rem;
+  }
+
+  .arena-explore-list > * {
+    border-bottom: 1px solid rgb(var(--pump-border) / 0.2);
+    background: transparent;
+  }
+
+  .arena-explore-list > *:last-child {
+    border-bottom: none;
+  }
+
+  .arena-explore-list > *:nth-child(even) {
+    background: transparent;
+  }
+
+  .arena-explore-row {
+    padding: 0.875rem 0;
+  }
+
+  .arena-explore-board {
+    overflow: hidden;
+    border: 1px solid rgb(var(--pump-border) / 0.35);
+    border-radius: var(--radius-lg);
+    background: rgb(var(--pump-card));
+    box-shadow: none;
+  }
+
+  .pct-change-arrow {
+    display: inline-block;
+    width: 0;
+    height: 0;
+    flex-shrink: 0;
+    border-left: 0.3em solid transparent;
+    border-right: 0.3em solid transparent;
+    border-bottom: 0.42em solid currentColor;
+    transform: translateY(-0.1em);
+  }
+
+  .pct-change-arrow--down {
+    border-bottom: none;
+    border-top: 0.42em solid currentColor;
+    transform: translateY(0.08em);
   }
 
   .sheet-link {
@@ -2719,11 +2846,13 @@ code,
 
   /* Mobile board rows: avoid translate/scale land — they stack with poll reordering */
   @media (max-width: 1023px) {
-    .sheet-list > [data-board-key] {
+    .sheet-list > [data-board-key],
+    .arena-explore-list > [data-board-key] {
       will-change: auto;
     }
 
-    .sheet-list > [data-board-key].live-land-in {
+    .sheet-list > [data-board-key].live-land-in,
+    .arena-explore-list > [data-board-key].live-land-in {
       animation: live-land-in-mobile 0.55s ease-out forwards;
     }
 

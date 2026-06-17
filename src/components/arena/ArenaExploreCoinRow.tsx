@@ -1,0 +1,62 @@
+"use client";
+
+import Link from "next/link";
+import type { TokenListItem } from "@/lib/db/launchpad";
+import { TokenAvatar } from "@/components/token/TokenAvatar";
+import { PctChange } from "@/components/ui/PctChange";
+import {
+  formatExploreListPrice,
+  formatExploreMcapLabel,
+} from "@/lib/arena-board-format";
+
+type FlashTone = "up" | "down";
+
+function flashText(toneValue: FlashTone | undefined): string {
+  if (toneValue === "up") return "live-metric-flash-up";
+  if (toneValue === "down") return "live-metric-flash-down";
+  return "";
+}
+
+type ArenaExploreCoinRowProps = {
+  token: TokenListItem;
+  mcapUsd: number | null;
+  bnbUsd: number | null;
+  mcapFlash?: FlashTone;
+  change24hPct: number | null;
+};
+
+export function ArenaExploreCoinRow({
+  token,
+  mcapUsd,
+  bnbUsd,
+  mcapFlash,
+  change24hPct,
+}: ArenaExploreCoinRowProps) {
+  const change = change24hPct ?? token.change24hPct ?? null;
+
+  return (
+    <article className="arena-explore-row grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3">
+      <TokenAvatar
+        address={token.address}
+        symbol={token.symbol}
+        logoUrl={token.logoUrl}
+        size={40}
+        className="ring-1 ring-pump-border/25"
+      />
+      <Link href={`/token/${token.address}`} className="min-w-0">
+        <p className="truncate text-body font-semibold leading-tight text-pump-text">{token.symbol}</p>
+        <p
+          className={`financial-value mt-0.5 truncate text-caption leading-tight text-pump-muted ${flashText(mcapFlash)}`}
+        >
+          {formatExploreMcapLabel(mcapUsd)}
+        </p>
+      </Link>
+      <div className="text-right">
+        <p className="financial-value text-body-sm font-medium leading-tight text-pump-text">
+          {formatExploreListPrice(token.marketCapBnb, bnbUsd)}
+        </p>
+        <PctChange value={change} className="mt-0.5 text-caption leading-tight" />
+      </div>
+    </article>
+  );
+}

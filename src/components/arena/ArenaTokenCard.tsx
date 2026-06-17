@@ -1,7 +1,11 @@
-import Link from "next/link";
+"use client";
+
+import { useRouter } from "next/navigation";
 import type { TokenListItem } from "@/lib/db/launchpad";
+import { ArenaBoardRowQuickActions } from "@/components/arena/ArenaBoardRowQuickActions";
 import { TokenAvatar } from "@/components/token/TokenAvatar";
-import { formatCapForBoard, formatSignedPct, pctTone } from "@/lib/arena-board-format";
+import { PctChange } from "@/components/ui/PctChange";
+import { formatCapForBoard } from "@/lib/arena-board-format";
 
 type FlashTone = "up" | "down";
 
@@ -51,6 +55,8 @@ type ArenaTokenCardProps = {
   mcapFlash?: FlashTone;
   isFavorite: boolean;
   onToggleFavorite: (address: string) => void;
+  onBuy: () => void;
+  onSell: () => void;
   compact?: boolean;
 };
 
@@ -62,8 +68,11 @@ export function ArenaTokenCard({
   mcapFlash,
   isFavorite,
   onToggleFavorite,
+  onBuy,
+  onSell,
   compact = false,
 }: ArenaTokenCardProps) {
+  const router = useRouter();
   const trendPoints = [
     token.change24hPct ?? 0,
     token.change6hPct ?? 0,
@@ -73,14 +82,28 @@ export function ArenaTokenCard({
   const trendPositive = (token.change24hPct ?? 0) >= 0;
   const avatarSize = compact ? 32 : 40;
 
+  const openDetail = () => {
+    router.push(`/token/${token.address.toLowerCase()}`);
+  };
+
   return (
     <article
-      className={`arena-token-card panel-interactive flex h-full flex-col gap-3 p-3 md:gap-4 md:p-4 ${
+      className={`arena-token-card panel-interactive relative flex h-full cursor-pointer flex-col gap-3 p-3 md:gap-4 md:p-4 ${
         compact ? "arena-token-card--compact" : ""
       }`}
+      onClick={openDetail}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          openDetail();
+        }
+      }}
+      tabIndex={0}
+      role="link"
+      aria-label={`View ${token.symbol}`}
     >
       <div className="flex items-start justify-between gap-2">
-        <Link href={`/token/${token.address}`} className="flex min-w-0 items-center gap-3">
+        <div className="flex min-w-0 items-center gap-3">
           <TokenAvatar
             address={token.address}
             symbol={token.symbol}
@@ -91,7 +114,7 @@ export function ArenaTokenCard({
             <p className="truncate text-body-sm font-semibold text-pump-text">{token.name}</p>
             <p className="text-caption text-pump-muted">${token.symbol}</p>
           </div>
-        </Link>
+        </div>
         <div className="flex shrink-0 flex-col items-end gap-1.5">
           {isKoth ? (
             <span className="status-badge border-pump-accent/40 bg-pump-accent/12 text-[10px] text-pump-accent">
@@ -102,7 +125,10 @@ export function ArenaTokenCard({
           ) : null}
           <button
             type="button"
-            onClick={() => onToggleFavorite(token.address)}
+            onClick={(event) => {
+              event.stopPropagation();
+              onToggleFavorite(token.address);
+            }}
             className={`text-lg leading-none transition ${
               isFavorite ? "text-pump-accent" : "text-pump-muted hover:text-pump-text"
             }`}
@@ -121,11 +147,18 @@ export function ArenaTokenCard({
           >
             {formatCapForBoard(mcapUsd)}
           </p>
-          <p className={`financial-value text-caption font-medium ${pctTone(token.change24hPct ?? null)}`}>
-            {formatSignedPct(token.change24hPct ?? null)} 24h
-          </p>
+          <PctChange value={token.change24hPct ?? null} className="text-caption font-medium" />{" "}
+          <span className="text-caption text-pump-muted">24h</span>
         </div>
         <TrendSparkline points={trendPoints} positive={trendPositive} />
+      </div>
+
+      <div
+        className="arena-card-quick-actions"
+        onClick={(event) => event.stopPropagation()}
+        onKeyDown={(event) => event.stopPropagation()}
+      >
+        <ArenaBoardRowQuickActions onBuy={onBuy} onSell={onSell} />
       </div>
     </article>
   );

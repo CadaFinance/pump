@@ -6,6 +6,8 @@ export type TradePrefillConfig = {
   amount?: string;
   /** Prefill sell with full on-chain token balance. */
   sellMax?: boolean;
+  /** Prefill sell with a percentage of on-chain token balance (1–100). */
+  sellPercent?: number;
   /** Prefill buy with max spend (BNB balance minus gas). */
   buyMax?: boolean;
   /** After prefill (and sellMax/buyMax), submit the trade once quotes are ready. */

@@ -106,19 +106,15 @@ export function SkeletonArenaToolbar({ withViewToggle = true }: { withViewToggle
 
 export function SkeletonBoardRow() {
   return (
-    <div className="grid grid-cols-[0.875rem_1.75rem_1fr_auto] gap-x-2 gap-y-2 p-2.5 md:p-3">
-      <Skeleton variant="line" className="h-3 w-3 self-center" />
-      <Skeleton variant="circle" className="row-span-2 h-7 w-7 self-start" />
-      <div className="flex min-w-0 items-baseline gap-2 self-center">
-        <Skeleton className="h-4 w-24" />
-        <Skeleton variant="line" className="h-3 w-10" />
+    <div className="arena-explore-row grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3">
+      <Skeleton variant="circle" className="h-10 w-10" />
+      <div className="min-w-0 space-y-1">
+        <Skeleton className="h-4 w-20" />
+        <Skeleton variant="line" className="h-3 w-24" />
       </div>
-      <Skeleton variant="line" className="h-4 w-4 self-center" />
-      <div className="col-span-3 col-start-2 flex w-full items-center justify-between gap-1">
-        <Skeleton variant="line" className="h-3 w-16" />
-        <Skeleton variant="line" className="h-3 w-14" />
-        <Skeleton variant="line" className="hidden h-3 w-10 md:block" />
-        <Skeleton variant="line" className="h-3 w-12" />
+      <div className="space-y-1 text-right">
+        <Skeleton className="ml-auto h-4 w-16" />
+        <Skeleton variant="line" className="ml-auto h-3 w-14" />
       </div>
     </div>
   );
@@ -126,11 +122,18 @@ export function SkeletonBoardRow() {
 
 export function SkeletonBoardTable({ rows = 8 }: { rows?: number }) {
   return (
-    <section className="panel-surface overflow-hidden" aria-hidden>
-      <div className="sheet-list">
+    <section className="arena-explore-board overflow-hidden" aria-hidden>
+      <div className="arena-explore-list lg:hidden">
         {Array.from({ length: rows }).map((_, index) => (
           <SkeletonBoardRow key={index} />
         ))}
+      </div>
+      <div className="hidden lg:block overflow-x-auto">
+        <div className="sheet-list border-0 rounded-none bg-transparent">
+          {Array.from({ length: rows }).map((_, index) => (
+            <SkeletonBoardRow key={`desktop-${index}`} />
+          ))}
+        </div>
       </div>
     </section>
   );

@@ -62,6 +62,36 @@ export type KothSummary = {
 
 export type ArenaListSort = "age" | "mcap";
 
+export type ArenaBoardSortKey =
+  | "mcap"
+  | "ath"
+  | "age"
+  | "txns"
+  | "vol24h"
+  | "traders"
+  | "h1"
+  | "h6"
+  | "h24";
+
+export type ArenaBoardSortDir = "asc" | "desc";
+
+export type ArenaBoardFilter =
+  | "all"
+  | "new"
+  | "highVol"
+  | "movers"
+  | "kothContenders"
+  | "hasAirdrop";
+
+export type ArenaBoardListOptions = {
+  limit?: number;
+  offset?: number;
+  sortKey?: ArenaBoardSortKey;
+  sortDir?: ArenaBoardSortDir;
+  filter?: ArenaBoardFilter;
+  airdropAddresses?: string[];
+};
+
 export type ArenaFilterCounts = {
   all: number;
   new: number;
@@ -348,33 +378,127 @@ const TOKEN_LIST_SELECT_MV = `
     LEFT JOIN mv_token_price_anchors mpa ON mpa.token_address = bt.address
 `;
 
-function buildTokenListSql(baseTokensInner: string, orderBy: string): string {
+function buildTokenListSelectSql(baseTokensInner: string): string {
   if (useMvTokenStats()) {
     return `
     WITH base_tokens AS (
       ${baseTokensInner}
     )
-    ${TOKEN_LIST_SELECT_MV}
-    ${orderBy}
-    `;
+    ${TOKEN_LIST_SELECT_MV}`;
   }
 
   const select = useBondingStateCounts() ? TOKEN_LIST_SELECT_BONDING : TOKEN_LIST_SELECT;
-  const order = useBondingStateCounts()
-    ? orderBy.replace(
-        "(COALESCE(b.last_price_zug, 0) * 1000000000)",
-        "COALESCE(b.market_cap_zug, 0)"
-      )
-    : orderBy;
-
   return `
     WITH base_tokens AS (
       ${baseTokensInner}
     ),
     ${TOKEN_TRADE_STATS_CTE}
-    ${select}
-    ${order}
-    `;
+    ${select}`;
+}
+
+function buildTokenListSql(baseTokensInner: string, orderBy: string): string {
+  const order =
+    useBondingStateCounts() && !useMvTokenStats()
+      ? orderBy.replace(
+          "(COALESCE(b.last_price_zug, 0) * 1000000000)",
+          "COALESCE(b.market_cap_zug, 0)"
+        )
+      : orderBy;
+  return `${buildTokenListSelectSql(baseTokensInner)}
+    ${order}`;
+}
+
+function arenaBoardOrderClause(
+  sortKey: ArenaBoardSortKey,
+  sortDir: ArenaBoardSortDir
+): string {
+  const dir = sortDir === "asc" ? "ASC" : "DESC";
+  const nulls = sortDir === "asc" ? "NULLS FIRST" : "NULLS LAST";
+  const columnBySort: Record<ArenaBoardSortKey, string> = {
+    mcap: "market_cap_zug::numeric",
+    ath: "ath_market_cap_zug::numeric",
+    age: "created_at",
+    txns: "trade_count",
+    vol24h: "volume_24h_zug::numeric",
+    traders: "traders_24h",
+    h1: "change_1h_pct::numeric",
+    h6: "change_6h_pct::numeric",
+    h24: "change_24h_pct::numeric",
+  };
+  const primary = columnBySort[sortKey];
+  const tieBreaker = sortKey === "age" ? "" : ", created_at DESC";
+  return `ORDER BY ${primary} ${dir} ${nulls}${tieBreaker}`;
+}
+
+function arenaBoardFilterClause(
+  filter: ArenaBoardFilter,
+  airdropAddresses: string[]
+): { clause: string; params: string[] } {
+  if (filter === "highVol") {
+    return { clause: "WHERE volume_24h_zug::numeric >= 0.5", params: [] };
+  }
+  if (filter === "movers") {
+    return {
+      clause:
+        "WHERE change_24h_pct IS NOT NULL AND ABS(change_24h_pct::numeric) >= 1",
+      params: [],
+    };
+  }
+  if (filter === "hasAirdrop" && airdropAddresses.length > 0) {
+    return {
+      clause: "WHERE LOWER(address) = ANY($3::text[])",
+      params: airdropAddresses.map((address) => address.toLowerCase()),
+    };
+  }
+  if (filter === "kothContenders") {
+    return {
+      clause: `WHERE address IN (
+        SELECT t.address
+        FROM tokens t
+        LEFT JOIN bonding_states b ON b.token_address = t.address
+        WHERE t.is_hidden = false
+        ORDER BY COALESCE(
+          b.market_cap_zug,
+          COALESCE(b.last_price_zug, 0) * 1000000000,
+          0
+        ) DESC
+        LIMIT 5
+      )`,
+      params: [],
+    };
+  }
+  return { clause: "", params: [] };
+}
+
+export async function listArenaBoardTokens(
+  options: ArenaBoardListOptions = {}
+): Promise<TokenListItem[]> {
+  const limit = options.limit ?? 50;
+  const offset = options.offset ?? 0;
+  const sortKey = options.sortKey ?? "age";
+  const sortDir = options.sortDir ?? "desc";
+  const filter = options.filter ?? "all";
+  const airdropAddresses = options.airdropAddresses ?? [];
+
+  const { clause: filterClause, params: filterParams } = arenaBoardFilterClause(
+    filter,
+    airdropAddresses
+  );
+  const sql = `
+    SELECT *
+    FROM (
+      ${buildTokenListSelectSql(ARENA_TOKEN_BASE_INNER)}
+    ) arena_list
+    ${filterClause}
+    ${arenaBoardOrderClause(sortKey, sortDir)}
+    LIMIT $1 OFFSET $2
+  `;
+
+  const db = getLaunchpadPool();
+  const queryParams =
+    filterParams.length > 0 ? [limit, offset, filterParams] : [limit, offset];
+  const result = await db.query<TokenListQueryRow>(sql, queryParams);
+  return result.rows.map(mapTokenListRow);
 }
 
 const TOKEN_TRADE_STATS_CTE = `

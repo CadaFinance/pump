@@ -92,7 +92,7 @@ export default async function TokenOpenGraphImage({ params }: ImageProps) {
   const change24h = token.change24hPct;
   const changeLabel =
     change24h != null && Number.isFinite(change24h)
-      ? `${change24h >= 0 ? "+" : ""}${change24h.toFixed(2)}%`
+      ? `${change24h >= 0 ? "▲" : "▼"} ${Math.abs(change24h).toFixed(2)}%`
       : "—";
   const changeColor =
     change24h != null && Number.isFinite(change24h)
