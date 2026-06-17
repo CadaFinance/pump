@@ -62,8 +62,8 @@ async function main(): Promise<void> {
         COALESCE(b.progress_bps, 0) AS progress_bps,
         COALESCE(b.trade_count, 0) AS trade_count,
         COALESCE(b.holder_count, 0) AS holder_count,
-        COALESCE(ts.volume_24h_zug, 0) AS volume_24h_zug,
-        COALESCE(ts.volume_24h_prev_zug, 0) AS volume_24h_prev_zug,
+        COALESCE(ts.volume_24h_zug::numeric, 0) AS volume_24h_zug,
+        COALESCE(ts.volume_24h_prev_zug::numeric, 0) AS volume_24h_prev_zug,
         COALESCE(ts.trade_count_24h_ago, 0) AS trade_count_24h_ago,
         COALESCE(ts.traders_24h, 0) AS traders_24h,
         now() AS updated_at
