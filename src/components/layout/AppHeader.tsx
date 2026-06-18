@@ -15,8 +15,7 @@ function navLinkClass(active: boolean): string {
   return `header-nav-link ${active ? "header-nav-link-active" : "header-nav-link-idle"}`;
 }
 
-export function AppHeader() {
-  const pathname = usePathname();
+export function AppHeaderView({ pathname }: { pathname: string }) {
   const { address } = useAccount();
   const showAdminLink = isAdminWallet(address);
 
@@ -75,4 +74,9 @@ export function AppHeader() {
       </div>
     </header>
   );
+}
+
+export function AppHeader() {
+  const pathname = usePathname();
+  return <AppHeaderView pathname={pathname} />;
 }

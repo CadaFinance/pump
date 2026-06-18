@@ -13,9 +13,7 @@ function isNavActive(pathname: string, href: string): boolean {
 const BEFORE_CREATE = APP_NAV_ITEMS.slice(0, 2);
 const AFTER_CREATE = APP_NAV_ITEMS.slice(2);
 
-export function AppNav() {
-  const pathname = usePathname();
-
+export function AppNavView({ pathname }: { pathname: string }) {
   if (pathname.startsWith("/token/")) {
     return null;
   }
@@ -80,4 +78,9 @@ export function AppNav() {
       })}
     </nav>
   );
+}
+
+export function AppNav() {
+  const pathname = usePathname();
+  return <AppNavView pathname={pathname} />;
 }

@@ -2,8 +2,8 @@
 
 import { usePathname } from "next/navigation";
 import { useEffect, useLayoutEffect } from "react";
-import { AppHeader } from "@/components/layout/AppHeader";
-import { AppNav } from "@/components/layout/AppNav";
+import { AppHeaderView } from "@/components/layout/AppHeader";
+import { AppNavView } from "@/components/layout/AppNav";
 import { shellMaxWidthClassForPath, shellPaddingXClass, shellWideMaxWidthClass } from "@/components/layout/layout-shell";
 import { noteNavFromCurrentPath, syncNavHistory } from "@/lib/nav-history";
 
@@ -13,11 +13,32 @@ type AppShellProps = {
   wide?: boolean;
 };
 
-export function AppShell({ children, wide = false }: AppShellProps) {
-  const pathname = usePathname();
+type AppShellFrameProps = AppShellProps & {
+  /** Static pathname for prerender / loading fallbacks (no usePathname). */
+  pathname: string;
+};
+
+/** Prerender-safe shell — use in route `loading.tsx` and Suspense fallbacks. */
+export function AppShellFrame({ children, wide = false, pathname }: AppShellFrameProps) {
   const mainMaxWidth = wide ? shellWideMaxWidthClass : shellMaxWidthClassForPath(pathname);
   const onTokenPage = pathname.startsWith("/token/");
   const mobileBottomOffset = onTokenPage ? "" : "pb-[var(--mobile-bottom-nav-height)]";
+
+  return (
+    <div className="flex min-h-screen flex-col">
+      <AppHeaderView pathname={pathname} />
+      <main
+        className={`mx-auto w-full flex-1 py-5 md:py-8 ${mobileBottomOffset} md:pb-8 ${mainMaxWidth} ${shellPaddingXClass}`}
+      >
+        {children}
+      </main>
+      <AppNavView pathname={pathname} />
+    </div>
+  );
+}
+
+export function AppShell({ children, wide = false }: AppShellProps) {
+  const pathname = usePathname();
 
   useLayoutEffect(() => {
     syncNavHistory(pathname);
@@ -37,14 +58,8 @@ export function AppShell({ children, wide = false }: AppShellProps) {
   }, []);
 
   return (
-    <div className="flex min-h-screen flex-col">
-      <AppHeader />
-      <main
-        className={`mx-auto w-full flex-1 py-5 md:py-8 ${mobileBottomOffset} md:pb-8 ${mainMaxWidth} ${shellPaddingXClass}`}
-      >
-        {children}
-      </main>
-      <AppNav />
-    </div>
+    <AppShellFrame wide={wide} pathname={pathname}>
+      {children}
+    </AppShellFrame>
   );
 }

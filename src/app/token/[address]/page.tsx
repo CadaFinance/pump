@@ -1,6 +1,6 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
-import { AppShell } from "@/components/layout/AppShell";
+import { AppShellFrame } from "@/components/layout/AppShell";
 import { TokenDetailPageLoader } from "@/components/token/TokenDetailPageLoader";
 import { TokenDetailBodySkeleton } from "@/components/token/TokenDetailBodySkeleton";
 import { PageBackLink } from "@/components/ui/PageBackLink";
@@ -59,10 +59,10 @@ export default async function TokenDetailPage({ params }: PageProps) {
   return (
     <Suspense
       fallback={
-        <AppShell wide>
+        <AppShellFrame wide pathname="/token">
           <PageBackLink href="/" />
           <TokenDetailBodySkeleton />
-        </AppShell>
+        </AppShellFrame>
       }
     >
       <TokenDetailPageLoader address={address} />
