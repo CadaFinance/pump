@@ -1218,12 +1218,17 @@ export function AirdropDetailPanel({ airdropId }: { airdropId: string }) {
         {/* Mobile hero */}
         <div className="border-b border-pump-border/15 bg-gradient-to-br from-pump-accent/10 via-pump-card/80 to-pump-surface/55 p-3 md:hidden">
           <div className="flex items-center gap-2.5">
-            <TokenAvatar
-              address={detail.linkedToken}
-              symbol={symbol}
-              size={40}
-              className="koth-banner__logo shrink-0 !ring-0"
-            />
+            <div className="relative shrink-0">
+              <TokenAvatar
+                address={detail.linkedToken}
+                symbol={symbol}
+                size={40}
+                className="koth-banner__logo shrink-0 !ring-0"
+              />
+              <span className="status-badge absolute -bottom-1 left-1/2 z-[1] -translate-x-1/2 whitespace-nowrap border-pump-success/40 bg-pump-card px-1.5 py-0 text-[9px] text-pump-success">
+                100% guaranteed
+              </span>
+            </div>
             <div className="min-w-0 flex-1">
               <h1 className="featured-airdrop-banner__title">{title}</h1>
               {detail.description ? (
@@ -1262,12 +1267,17 @@ export function AirdropDetailPanel({ airdropId }: { airdropId: string }) {
         {/* Desktop hero */}
         <div className="hidden border-b border-pump-border/15 bg-gradient-to-br from-pump-accent/10 via-pump-card/80 to-pump-surface/55 p-4 md:block md:px-5 md:py-4">
           <div className="flex min-w-0 items-center gap-3 lg:gap-4">
-            <TokenAvatar
-              address={detail.linkedToken}
-              symbol={symbol}
-              size={56}
-              className="koth-banner__logo shrink-0"
-            />
+            <div className="relative shrink-0">
+              <TokenAvatar
+                address={detail.linkedToken}
+                symbol={symbol}
+                size={56}
+                className="koth-banner__logo shrink-0"
+              />
+              <span className="status-badge absolute -bottom-1 left-1/2 z-[1] -translate-x-1/2 whitespace-nowrap border-pump-success/40 bg-pump-card px-1.5 py-0 text-[10px] text-pump-success">
+                100% guaranteed
+              </span>
+            </div>
 
             <div className="flex min-w-0 flex-1 gap-3 lg:gap-4">
               <div className="flex min-w-0 flex-1 flex-col gap-1">
