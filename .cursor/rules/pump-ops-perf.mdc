@@ -1,0 +1,25 @@
+---
+description: VM ops, perf SLO, tier status, and weekly ritual for pump-tma
+alwaysApply: true
+---
+
+# Pump ops & perf tracking
+
+Before VM/perf/deploy advice, read **`docs/ops-perf-playbook.md`** (source of truth).
+
+## Current state (2026-06-18)
+
+- **Tiers 1–4 code:** done on `main`
+- **VM Tier 3:** active (PgBouncer, PM2 2×2, read URL, watchBlocks, Redis arena cache)
+- **Post-Tier 4 focus:** weekly SLO ritual + UX polish — **not** Zero / Edge WS / PG 18 yet
+- **VM:** `104.207.64.115:22022` · playbook has SSH commands and alarm thresholds
+
+## Weekly ritual
+
+Update `docs/perf-baseline.md` after running `deploy/vm/system-health.sh` and `phase-0-observability.sh`.
+
+## Big-move gates (only when SLO breached)
+
+- Zero → favorites/portfolio/cross-device slow
+- Edge WS → concurrent WS > 2000 or WS P95 > 100 ms
+- PG 18 pg_trickle → CPU > 70% driven by MV refresh

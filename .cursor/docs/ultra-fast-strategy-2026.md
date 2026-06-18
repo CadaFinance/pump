@@ -251,6 +251,8 @@ Next.js (Tier 1+):
 | `ultra-fast-architecture-phases-2-6.md` | Detaylı faz planı |
 | `price-accuracy-contract.md` | Spot / Quote / Fill sözleşmesi |
 | Bu dosya | Strateji + sektör karşılaştırma + tier öncelik |
+| `docs/ops-perf-playbook.md` | **VM durumu, haftalık ritüel, SLO alarmları, Adım 3 kapıları** |
+| `docs/perf-baseline.md` | Haftalık ölçüm logu |
 
 ---
 
