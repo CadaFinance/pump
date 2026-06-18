@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ChevronRight, LayoutGrid, Table2 } from "lucide-react";
@@ -8,8 +8,6 @@ import type { LucideIcon } from "lucide-react";
 import { useAccount } from "wagmi";
 import { useOpenConnectModal } from "@/hooks/useOpenConnectModal";
 import type { ArenaFilterCounts, KothSummary, TokenListItem } from "@/lib/db/launchpad";
-import { ArenaSkeleton } from "@/components/arena/ArenaSkeleton";
-import { SkeletonBoardTable } from "@/components/ui/skeleton-parts";
 import { ArenaMcapTicker } from "@/components/arena/ArenaMcapTicker";
 import { ArenaShortcutsModal } from "@/components/arena/ArenaShortcutsModal";
 import { ArenaTokenCard } from "@/components/arena/ArenaTokenCard";
@@ -20,6 +18,7 @@ import { ICON_STROKE } from "@/lib/icons";
 import { MetricIcons } from "@/lib/metric-icons";
 import { useFavorites } from "@/components/favorites/FavoritesProvider";
 import { TokenAvatar } from "@/components/token/TokenAvatar";
+import { tokenDetailPath } from "@/lib/token-routes";
 import { TradeSheet } from "@/components/token/TradeSheet";
 import { ArenaBoardRowQuickActions } from "@/components/arena/ArenaBoardRowQuickActions";
 import { ArenaExploreCoinRow } from "@/components/arena/ArenaExploreCoinRow";
@@ -393,6 +392,8 @@ export function ArenaListClient({
   const [favoriteListTokens, setFavoriteListTokens] = useState<TokenListItem[]>([]);
   const { address, isConnected } = useAccount();
   const router = useRouter();
+  const [navigatingTo, setNavigatingTo] = useState<string | null>(null);
+  const [, startTokenNavigation] = useTransition();
   const { openConnectModal } = useOpenConnectModal();
   const { favorites, isFavorite, toggleFavorite } = useFavorites();
   const { bnbUsd: hookBnbUsd } = useBnbUsdPrice();
@@ -463,9 +464,20 @@ export function ArenaListClient({
     [isConnected, openConnectModal]
   );
 
+  const prefetchTokenDetail = useCallback(
+    (tokenAddress: string) => {
+      router.prefetch(tokenDetailPath(tokenAddress));
+    },
+    [router]
+  );
+
   const openTokenDetail = useCallback(
     (tokenAddress: string) => {
-      router.push(`/token/${tokenAddress.toLowerCase()}`);
+      const key = tokenAddress.toLowerCase();
+      setNavigatingTo(key);
+      startTokenNavigation(() => {
+        router.push(tokenDetailPath(tokenAddress));
+      });
     },
     [router]
   );
@@ -693,8 +705,6 @@ export function ArenaListClient({
   );
   const currentBoardKeyRef = useRef(currentBoardKey);
   currentBoardKeyRef.current = currentBoardKey;
-  const boardDataReady =
-    activeFilter === "favorites" || loadedBoardKey === currentBoardKey;
 
   useEffect(() => {
     if (!initialPayload || filterCacheRef.current.has(initialBoardKey)) return;
@@ -914,8 +924,6 @@ export function ArenaListClient({
     }
 
     setBoardRefreshing(true);
-    setLoadedBoardKey("");
-
     initialPayloadRef.current = null;
     void loadRef.current(ARENA_PAGE_INITIAL, { silent: true, boardKey: key });
   }, [apiSortKey, apiSortDir, activeFilter, airdropFilterKey, viewMode, currentBoardKey]);
@@ -1166,12 +1174,13 @@ export function ArenaListClient({
     airdropTokenAddresses,
   ]);
 
-  const showExploreBoardSkeleton =
-    activeFilter !== "favorites" && !boardDataReady;
+  const exploreBoardTokens =
+    activeFilter === "favorites" || tokens !== null ? marketTokens : [];
 
-  const exploreBoardTokens = boardDataReady ? marketTokens : [];
-
-  const showLoadMore = activeFilter !== "favorites" && boardDataReady && (hasMore || loadingMore);
+  const showLoadMore =
+    activeFilter !== "favorites" &&
+    loadedBoardKey === currentBoardKey &&
+    (hasMore || loadingMore);
 
   const cardsTokens = useMemo(() => {
     if (activeFilter === "favorites") {
@@ -1219,10 +1228,6 @@ export function ArenaListClient({
     `inline-flex items-center gap-1 rounded-sm px-1 py-0.5 transition ${
       headerSortKey === key ? "text-pump-accent" : "text-pump-muted hover:text-pump-text"
     }`;
-
-  if (tokens === null && !error) {
-    return <ArenaSkeleton />;
-  }
 
   if (error && tokens === null) {
     return (
@@ -1574,9 +1579,7 @@ export function ArenaListClient({
           </div>
         ) : null}
 
-        {showExploreBoardSkeleton ? (
-          <SkeletonBoardTable rows={7} />
-        ) : exploreBoardTokens.length === 0 ? (
+        {exploreBoardTokens.length === 0 ? (
           <div className="panel-surface empty-state py-8">
             <p className="empty-state-copy text-caption">
               {emptyExploreFilterCopy(activeFilter, {
@@ -1696,8 +1699,12 @@ export function ArenaListClient({
                 <tr
                   key={token.address}
                   data-board-key={addressKey}
-                  className={`${boardRowClass(addressKey)} arena-board-row--clickable`}
+                  className={`${boardRowClass(addressKey)} arena-board-row--clickable ${
+                    navigatingTo === addressKey ? "arena-board-row--navigating" : ""
+                  }`}
                   onClick={() => openTokenDetail(token.address)}
+                  onMouseEnter={() => prefetchTokenDetail(token.address)}
+                  onFocus={() => prefetchTokenDetail(token.address)}
                   onKeyDown={(event) => {
                     if (event.key === "Enter" || event.key === " ") {
                       event.preventDefault();

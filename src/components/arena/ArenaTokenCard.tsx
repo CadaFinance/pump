@@ -1,9 +1,9 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import type { TokenListItem } from "@/lib/db/launchpad";
 import { ArenaBoardRowQuickActions } from "@/components/arena/ArenaBoardRowQuickActions";
 import { TokenAvatar } from "@/components/token/TokenAvatar";
+import { TokenDetailLink } from "@/components/token/TokenDetailLink";
 import { PctChange } from "@/components/ui/PctChange";
 import { formatCapForBoard } from "@/lib/arena-board-format";
 
@@ -72,7 +72,6 @@ export function ArenaTokenCard({
   onSell,
   compact = false,
 }: ArenaTokenCardProps) {
-  const router = useRouter();
   const trendPoints = [
     token.change24hPct ?? 0,
     token.change6hPct ?? 0,
@@ -82,24 +81,12 @@ export function ArenaTokenCard({
   const trendPositive = (token.change24hPct ?? 0) >= 0;
   const avatarSize = compact ? 32 : 40;
 
-  const openDetail = () => {
-    router.push(`/token/${token.address.toLowerCase()}`);
-  };
-
   return (
-    <article
-      className={`arena-token-card panel-interactive relative flex h-full cursor-pointer flex-col gap-3 p-3 md:gap-4 md:p-4 ${
+    <TokenDetailLink
+      address={token.address}
+      className={`arena-token-card panel-interactive relative flex h-full cursor-pointer flex-col gap-3 p-3 no-underline md:gap-4 md:p-4 ${
         compact ? "arena-token-card--compact" : ""
       }`}
-      onClick={openDetail}
-      onKeyDown={(event) => {
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          openDetail();
-        }
-      }}
-      tabIndex={0}
-      role="link"
       aria-label={`View ${token.symbol}`}
     >
       <button
@@ -163,6 +150,6 @@ export function ArenaTokenCard({
       >
         <ArenaBoardRowQuickActions onBuy={onBuy} onSell={onSell} />
       </div>
-    </article>
+    </TokenDetailLink>
   );
 }

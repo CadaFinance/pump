@@ -1477,6 +1477,24 @@ code,
 
   .arena-board-row--clickable {
     cursor: pointer;
+    transition: background-color 0.1s ease, opacity 0.1s ease;
+  }
+
+  .arena-board-row--clickable:active {
+    background: rgb(var(--pump-border) / 0.1);
+  }
+
+  .arena-board-row--navigating {
+    opacity: 0.72;
+    pointer-events: none;
+  }
+
+  .arena-token-card:active {
+    opacity: 0.92;
+  }
+
+  .arena-explore-row:active {
+    opacity: 0.88;
   }
 
   .arena-card-quick-actions {

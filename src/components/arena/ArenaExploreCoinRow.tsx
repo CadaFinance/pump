@@ -1,8 +1,8 @@
 "use client";
 
-import Link from "next/link";
 import type { TokenListItem } from "@/lib/db/launchpad";
 import { TokenAvatar } from "@/components/token/TokenAvatar";
+import { TokenDetailLink } from "@/components/token/TokenDetailLink";
 import { PctChange } from "@/components/ui/PctChange";
 import {
   formatExploreMcapLabel,
@@ -42,7 +42,11 @@ export function ArenaExploreCoinRow({
     priceUsd ?? listTokenPriceUsd(token.marketCapBnb, bnbUsd);
 
   return (
-    <article className="arena-explore-row grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3">
+    <TokenDetailLink
+      address={token.address}
+      className="arena-explore-row grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 text-inherit no-underline"
+      aria-label={`View ${token.symbol}`}
+    >
       <TokenAvatar
         address={token.address}
         symbol={token.symbol}
@@ -50,14 +54,14 @@ export function ArenaExploreCoinRow({
         size={40}
         className="ring-1 ring-pump-border/25"
       />
-      <Link href={`/token/${token.address}`} className="min-w-0">
+      <div className="min-w-0">
         <p className="truncate text-body font-semibold leading-tight text-pump-text">{token.symbol}</p>
         <p
           className={`financial-value mt-0.5 truncate text-caption leading-tight text-pump-muted ${flashText(mcapFlash)}`}
         >
           {formatExploreMcapLabel(mcapUsd)}
         </p>
-      </Link>
+      </div>
       <div className="text-right">
         <p
           className={`financial-value text-body-sm font-medium leading-tight text-pump-text ${flashText(priceFlash)}`}
@@ -66,6 +70,6 @@ export function ArenaExploreCoinRow({
         </p>
         <PctChange value={change} className="mt-0.5 text-caption leading-tight" />
       </div>
-    </article>
+    </TokenDetailLink>
   );
 }
