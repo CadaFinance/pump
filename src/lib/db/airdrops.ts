@@ -6,7 +6,7 @@ import {
   deriveAirdropNextAction,
   type AirdropNextAction,
 } from "@/lib/airdrop-participant-snapshot";
-import { getAirdropDisplayStatus, type AirdropDisplayStatus } from "@/lib/airdrop-status";
+import { getAirdropDisplayStatus, isPromotableAirdropStatus, type AirdropDisplayStatus } from "@/lib/airdrop-status";
 import { getLaunchpadPool } from "@/lib/db/launchpad";
 
 export type AirdropListItem = {
@@ -173,28 +173,22 @@ export type TokenAirdropPromo = {
 function pickPrimaryOpenAirdrop(
   items: Array<TokenAirdropPromo & { rewardUsd: number }>
 ): TokenAirdropPromo | null {
-  const open = items.filter((item) => item.displayStatus !== "CLOSED");
-  if (!open.length) return null;
+  const promotable = items.filter((item) => isPromotableAirdropStatus(item.displayStatus));
+  if (!promotable.length) return null;
 
-  const byPriority = (list: typeof open) =>
+  const byPriority = (list: typeof promotable) =>
     [...list].sort((a, b) => b.rewardUsd - a.rewardUsd)[0] ?? null;
 
-  const qualifying = open.filter((i) => i.displayStatus === "QUALIFYING");
+  const qualifying = promotable.filter((i) => i.displayStatus === "QUALIFYING");
   if (qualifying.length) return byPriority(qualifying);
 
-  const claimable = open.filter((i) => i.displayStatus === "CLAIMABLE");
-  if (claimable.length) return byPriority(claimable);
-
-  const upcoming = open.filter((i) => i.displayStatus === "UPCOMING");
+  const upcoming = promotable.filter((i) => i.displayStatus === "UPCOMING");
   if (upcoming.length) return byPriority(upcoming);
-
-  const finalizing = open.filter((i) => i.displayStatus === "FINALIZING");
-  if (finalizing.length) return byPriority(finalizing);
 
   return null;
 }
 
-/** Active campaigns for a launchpad token (excludes CLOSED / ended). */
+/** Upcoming or qualifying campaign for a launchpad token. */
 export async function getPrimaryOpenAirdropForToken(
   linkedToken: string
 ): Promise<TokenAirdropPromo | null> {
@@ -238,7 +232,7 @@ export async function getPrimaryOpenAirdropForToken(
         qualifyEnd,
         claimEnd,
       });
-      if (displayStatus === "CLOSED") return null;
+      if (!isPromotableAirdropStatus(displayStatus)) return null;
 
       const promo: TokenAirdropPromo = {
         id: row.id,

@@ -51,6 +51,11 @@ export function getAirdropDisplayStatus(input: StatusInput): AirdropDisplayStatu
   return "FINALIZING";
 }
 
+/** Arena gift icon + token detail banner — upcoming or qualifying only. */
+export function isPromotableAirdropStatus(status: AirdropDisplayStatus): boolean {
+  return status === "UPCOMING" || status === "QUALIFYING";
+}
+
 export function formatAirdropDisplayStatus(status: AirdropDisplayStatus): string {
   switch (status) {
     case "UPCOMING":
