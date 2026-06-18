@@ -1952,7 +1952,8 @@ export async function listFollowedCreatorAddresses(userAddress: string): Promise
 
 export async function toggleCreatorFollow(
   followerAddress: string,
-  creatorAddress: string
+  creatorAddress: string,
+  tokenAddress?: string | null
 ): Promise<boolean> {
   const db = getLaunchpadWritePool();
   const follower = followerAddress.toLowerCase();
@@ -1975,18 +1976,35 @@ export async function toggleCreatorFollow(
     return false;
   }
 
-  const creatorToken = await db.query(`SELECT 1 FROM tokens WHERE creator_address = $1 LIMIT 1`, [
-    creator,
-  ]);
-  if (creatorToken.rows.length === 0) {
-    throw new Error("Creator not found");
-  }
+  await assertFollowableCreator(db, creator, tokenAddress);
 
   await db.query(
     `INSERT INTO creator_follows (follower_address, creator_address) VALUES ($1, $2)`,
     [follower, creator]
   );
   return true;
+}
+
+async function assertFollowableCreator(
+  db: ReturnType<typeof getLaunchpadWritePool>,
+  creator: string,
+  tokenAddress?: string | null
+): Promise<void> {
+  const byCreator = await db.query(
+    `SELECT 1 FROM tokens WHERE creator_address = $1 LIMIT 1`,
+    [creator]
+  );
+  if (byCreator.rows.length > 0) return;
+
+  if (tokenAddress) {
+    const viaToken = await db.query<{ creator_address: string }>(
+      `SELECT creator_address FROM tokens WHERE address = $1 LIMIT 1`,
+      [tokenAddress.toLowerCase()]
+    );
+    if (viaToken.rows[0]?.creator_address?.toLowerCase() === creator) return;
+  }
+
+  throw new Error("Creator not found");
 }
 
 export async function getCreatorCardData(

@@ -713,6 +713,7 @@ export function TokenDetailLive({
             creatorAddress={liveToken.creatorAddress}
             launchTxHash={liveToken.launchTxHash}
             followerCount={liveToken.creatorFollowerCount}
+            tokenAddress={tokenAddress}
             onAddressClick={setProfileAddress}
           />
           {liveToken.description ? (

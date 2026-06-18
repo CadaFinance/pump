@@ -10,13 +10,19 @@ import {
   useState,
 } from "react";
 import { subscribeUserBootstrap } from "@/lib/user-bootstrap";
+import { normalizeAddressParam } from "@/lib/address";
 import { useOpenConnectModal } from "@/hooks/useOpenConnectModal";
 import { useAccount } from "wagmi";
+
+type CreatorFollowOptions = {
+  /** Token page context — verifies creator against this token row if needed. */
+  tokenAddress?: string;
+};
 
 type CreatorFollowsContextValue = {
   follows: Set<string>;
   isFollowing: (creatorAddress: string) => boolean;
-  toggleFollow: (creatorAddress: string) => void;
+  toggleFollow: (creatorAddress: string, options?: CreatorFollowOptions) => void;
   loading: boolean;
 };
 
@@ -79,14 +85,19 @@ export function CreatorFollowsProvider({ children }: { children: React.ReactNode
   );
 
   const toggleFollow = useCallback(
-    (creatorAddress: string) => {
+    (creatorAddress: string, options?: CreatorFollowOptions) => {
       if (!isConnected || !address) {
         if (openConnectModal) openConnectModal();
         return;
       }
 
-      const key = creatorAddress.toLowerCase();
-      if (key === address.toLowerCase()) return;
+      const follower = normalizeAddressParam(address);
+      const creator = normalizeAddressParam(creatorAddress);
+      const tokenAddress = normalizeAddressParam(options?.tokenAddress);
+      if (!follower || !creator) return;
+      if (creator === follower) return;
+
+      const key = creator;
       if (pendingRef.current.has(key)) return;
 
       const wasFollowing = follows.has(key);
@@ -104,7 +115,11 @@ export function CreatorFollowsProvider({ children }: { children: React.ReactNode
           const response = await fetch("/api/creators/follow/toggle", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ address, creatorAddress: key }),
+            body: JSON.stringify({
+              address: follower,
+              creatorAddress: creator,
+              tokenAddress: tokenAddress ?? undefined,
+            }),
           });
           const body = (await response.json()) as { data?: { following?: boolean }; error?: string };
           if (!response.ok) {

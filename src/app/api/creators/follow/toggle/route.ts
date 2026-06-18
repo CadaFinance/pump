@@ -7,10 +7,12 @@ export async function POST(request: Request) {
     const body = (await request.json()) as {
       address?: string;
       creatorAddress?: string;
+      tokenAddress?: string;
     };
 
     const address = normalizeAddressParam(body.address);
     const creatorAddress = normalizeAddressParam(body.creatorAddress);
+    const tokenAddress = normalizeAddressParam(body.tokenAddress);
 
     if (!address || !creatorAddress) {
       return NextResponse.json(
@@ -19,7 +21,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const following = await toggleCreatorFollow(address, creatorAddress);
+    const following = await toggleCreatorFollow(address, creatorAddress, tokenAddress);
     return NextResponse.json({ data: { following } });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";

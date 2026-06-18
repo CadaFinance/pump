@@ -24,6 +24,7 @@ type CreatorRewardsCardProps = {
   creatorAddress: string;
   launchTxHash: string;
   followerCount: number;
+  tokenAddress?: string;
   onAddressClick?: (address: string) => void;
 };
 
@@ -31,6 +32,7 @@ export function CreatorRewardsCard({
   creatorAddress,
   launchTxHash,
   followerCount,
+  tokenAddress,
   onAddressClick,
 }: CreatorRewardsCardProps) {
   const { address } = useAccount();
@@ -90,7 +92,7 @@ export function CreatorRewardsCard({
         {!isSelf ? (
           <button
             type="button"
-            onClick={() => toggleFollow(creatorAddress)}
+            onClick={() => toggleFollow(creatorAddress, { tokenAddress })}
             className={
               following
                 ? "secondary-button shrink-0 px-4 py-2 text-body-sm font-semibold"
