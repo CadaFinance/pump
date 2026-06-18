@@ -1,10 +1,4 @@
-import { AppShell } from "@/components/layout/AppShell";
-import { ArenaSkeleton } from "@/components/arena/ArenaSkeleton";
-
+/** Route transition only — hard refresh shows SSR/PPR shell, not a skeleton flash. */
 export default function Loading() {
-  return (
-    <AppShell>
-      <ArenaSkeleton />
-    </AppShell>
-  );
+  return null;
 }

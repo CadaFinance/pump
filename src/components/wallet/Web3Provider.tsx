@@ -45,10 +45,12 @@ export function Web3Provider({
       })
   );
 
-  const initialState = useMemo(
-    () => cookieToInitialState(wagmiAdapter.wagmiConfig as Config, cookies),
-    [cookies]
-  );
+  const initialState = useMemo(() => {
+    const cookieHeader =
+      cookies ??
+      (typeof document !== "undefined" ? document.cookie || undefined : undefined);
+    return cookieToInitialState(wagmiAdapter.wagmiConfig as Config, cookieHeader);
+  }, [cookies]);
 
   return (
     <WagmiProvider config={wagmiAdapter.wagmiConfig as Config} initialState={initialState}>

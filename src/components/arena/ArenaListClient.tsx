@@ -906,14 +906,15 @@ export function ArenaListClient({
       return;
     }
 
-    setBoardRefreshing(true);
-    setLoadedBoardKey("");
-
     if (ssrDefaultsMatch) {
+      setLoadedBoardKey(key);
       initialPayloadRef.current = null;
       void loadRef.current(ARENA_PAGE_INITIAL, { silent: true, boardKey: key });
       return;
     }
+
+    setBoardRefreshing(true);
+    setLoadedBoardKey("");
 
     initialPayloadRef.current = null;
     void loadRef.current(ARENA_PAGE_INITIAL, { silent: true, boardKey: key });

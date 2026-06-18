@@ -1,6 +1,4 @@
 import type { Metadata } from "next";
-import { Suspense } from "react";
-import { RootLoadingShell } from "@/components/layout/RootLoadingShell";
 import { RootProviders } from "@/components/layout/RootProviders";
 import { ThemeProvider } from "@/components/theme/ThemeProvider";
 import { ibmPlexMono, inter } from "@/lib/fonts";
@@ -57,9 +55,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           }}
         />
         <ThemeProvider>
-          <Suspense fallback={<RootLoadingShell />}>
-            <RootProviders>{children}</RootProviders>
-          </Suspense>
+          <RootProviders>{children}</RootProviders>
         </ThemeProvider>
       </body>
     </html>
