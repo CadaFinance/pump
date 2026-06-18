@@ -1128,7 +1128,11 @@ export async function getTokenByAddress(address: string): Promise<TokenDetail | 
   };
 }
 
-export async function listTradesForToken(address: string, limit = 20): Promise<TradeItem[]> {
+export async function listTradesForToken(
+  address: string,
+  limit = 20,
+  offset = 0
+): Promise<TradeItem[]> {
   const db = getLaunchpadReadPool();
   const result = await db.query<{
     id: string;
@@ -1155,9 +1159,9 @@ export async function listTradesForToken(address: string, limit = 20): Promise<T
     FROM trades
     WHERE token_address = $1
     ORDER BY block_number DESC, log_index DESC
-    LIMIT $2
+    LIMIT $2 OFFSET $3
     `,
-    [address.toLowerCase(), limit]
+    [address.toLowerCase(), limit, offset]
   );
 
   return result.rows.map((row) => {
@@ -1179,9 +1183,19 @@ export async function listTradesForToken(address: string, limit = 20): Promise<T
   });
 }
 
+export async function countTradesForToken(address: string): Promise<number> {
+  const db = getLaunchpadReadPool();
+  const result = await db.query<{ count: string }>(
+    `SELECT COUNT(*)::text AS count FROM trades WHERE token_address = $1`,
+    [address.toLowerCase()]
+  );
+  return Number(result.rows[0]?.count ?? 0);
+}
+
 export async function listTokenHolders(
   tokenAddress: string,
-  limit = 200
+  limit = 20,
+  offset = 0
 ): Promise<TokenHolderSnapshot[]> {
   const db = getLaunchpadReadPool();
   const normalized = tokenAddress.toLowerCase();
@@ -1205,9 +1219,9 @@ export async function listTokenHolders(
     WHERE p.token_address = $1
       AND p.token_balance > 0
     ORDER BY p.token_balance DESC
-    LIMIT $2
+    LIMIT $2 OFFSET $3
     `,
-    [normalized, limit]
+    [normalized, limit, offset]
   );
 
   return result.rows.map((row) => ({
@@ -1218,6 +1232,20 @@ export async function listTokenHolders(
     realizedPnlBnb: row.realized_pnl_zug,
     remainingCostBasisBnb: row.remaining_cost_basis_zug,
   }));
+}
+
+export async function countTokenHolders(tokenAddress: string): Promise<number> {
+  const db = getLaunchpadReadPool();
+  const result = await db.query<{ count: string }>(
+    `
+    SELECT COUNT(*)::text AS count
+    FROM user_positions p
+    WHERE p.token_address = $1
+      AND p.token_balance > 0
+    `,
+    [tokenAddress.toLowerCase()]
+  );
+  return Number(result.rows[0]?.count ?? 0);
 }
 
 /** All bonding trades for chart (ascending time). */

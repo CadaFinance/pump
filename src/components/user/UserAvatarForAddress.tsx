@@ -3,8 +3,7 @@
 import { useEffect, useState } from "react";
 import type { UserAvatarId } from "@/lib/user-avatars";
 import { UserAvatar } from "@/components/user/UserAvatar";
-
-const avatarIdCache = new Map<string, UserAvatarId>();
+import { fetchUserAvatarId, getCachedUserAvatarId } from "@/lib/user-avatar-cache";
 
 type UserAvatarForAddressProps = {
   address: string;
@@ -19,32 +18,20 @@ export function UserAvatarForAddress({
 }: UserAvatarForAddressProps) {
   const normalized = address.toLowerCase();
   const [avatarId, setAvatarId] = useState<UserAvatarId | null>(
-    () => avatarIdCache.get(normalized) ?? null
+    () => getCachedUserAvatarId(normalized)
   );
 
   useEffect(() => {
-    const cached = avatarIdCache.get(normalized);
+    const cached = getCachedUserAvatarId(normalized);
     if (cached) {
       setAvatarId(cached);
       return;
     }
 
     let cancelled = false;
-    void (async () => {
-      try {
-        const response = await fetch(
-          `/api/user/avatar?address=${encodeURIComponent(normalized)}`,
-          { cache: "no-store" }
-        );
-        const body = (await response.json()) as { data?: { avatarId?: UserAvatarId } };
-        if (!cancelled && response.ok && body.data?.avatarId) {
-          avatarIdCache.set(normalized, body.data.avatarId);
-          setAvatarId(body.data.avatarId);
-        }
-      } catch {
-        // ignore
-      }
-    })();
+    void fetchUserAvatarId(normalized).then((next) => {
+      if (!cancelled && next) setAvatarId(next);
+    });
 
     return () => {
       cancelled = true;

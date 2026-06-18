@@ -20,6 +20,6 @@ export function setHoldersCache<T>(key: string, data: T): void {
   store.set(key, { data, expiresAt: Date.now() + TTL_MS });
 }
 
-export function holdersCacheKey(tokenAddress: string): string {
-  return `holders:${tokenAddress.toLowerCase()}`;
+export function holdersCacheKey(tokenAddress: string, limit: number, offset: number): string {
+  return `holders:${tokenAddress.toLowerCase()}:${limit}:${offset}`;
 }

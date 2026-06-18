@@ -45,7 +45,7 @@ import { CreatorProfileModal } from "@/components/creators/CreatorProfileModal";
 import { CreatorRewardsCard } from "@/components/creators/CreatorRewardsCard";
 import { ShareSheetModal } from "@/components/ui/ShareSheetModal";
 import { TokenSocialLinksBar } from "@/components/token/TokenSocialLinksBar";
-import { TokenLinkedAirdropStrip } from "@/components/token/TokenLinkedAirdropStrip";
+import { TokenAirdropLinkChip } from "@/components/token/TokenLinkedAirdropStrip";
 import { UserAvatarForAddress } from "@/components/user/UserAvatarForAddress";
 import { hasSocialLinks } from "@/lib/token-social";
 import { copyToClipboard } from "@/lib/copy-to-clipboard";
@@ -493,11 +493,27 @@ export function TokenDetailLive({
   );
   const priceUsd = tokenPriceUsd(displayPrice, bnbUsd);
   const fdvUsd = estimateFdvUsd(displayPrice, bnbUsd);
-  const volume24hBnb = useMemo(() => computeVolumeWindowBnb(trades, 86_400_000), [trades]);
-  const change24h = useMemo(
-    () => compute24hPriceChange(trades, displayPrice, bnbUsd),
-    [trades, displayPrice, bnbUsd]
-  );
+  const volume24hBnb = useMemo(() => {
+    const fromTape = computeVolumeWindowBnb(trades, 86_400_000);
+    const fromToken = Number(liveToken.volume24hBnb ?? 0);
+    return Math.max(fromTape, fromToken);
+  }, [trades, liveToken.volume24hBnb]);
+
+  const change24h = useMemo(() => {
+    const computed = compute24hPriceChange(trades, displayPrice, bnbUsd);
+    if (computed) return computed;
+    const pct = liveToken.change24hPct;
+    if (pct == null || !Number.isFinite(pct)) return null;
+    const referencePrice =
+      displayPrice > 0 ? displayPrice / (1 + pct / 100) : null;
+    if (referencePrice == null || referencePrice <= 0) return null;
+    const changeBnb = displayPrice - referencePrice;
+    return {
+      changeBnb,
+      changePct: pct,
+      changeUsd: bnbUsd != null ? changeBnb * bnbUsd : null,
+    };
+  }, [trades, displayPrice, bnbUsd, liveToken.change24hPct]);
 
   const sharePayload = useMemo(
     () => tokenSharePayload(liveToken),
@@ -576,6 +592,7 @@ export function TokenDetailLive({
   const tokenMetaLine = (
     <div className="flex min-w-0 items-center gap-x-2 overflow-hidden text-caption text-pump-muted">
       <span className="financial-value shrink-0 font-medium text-pump-text">${liveToken.symbol}</span>
+      <TokenAirdropLinkChip tokenAddress={tokenAddress} />
       <span className="shrink-0 text-pump-muted/45" aria-hidden>
         ·
       </span>
@@ -594,9 +611,12 @@ export function TokenDetailLive({
             size={44}
           />
           <div className="min-w-0 flex-1">
-            <h1 className="financial-value truncate text-h2 font-semibold tracking-tight text-pump-text">
-              ${liveToken.symbol}
-            </h1>
+            <div className="flex min-w-0 items-center gap-2">
+              <h1 className="financial-value min-w-0 truncate text-h2 font-semibold tracking-tight text-pump-text">
+                ${liveToken.symbol}
+              </h1>
+              <TokenAirdropLinkChip tokenAddress={tokenAddress} className="lg:hidden" />
+            </div>
             <div className="mt-0.5 min-w-0 overflow-hidden">
               {creatorElapsedMeta}
             </div>
@@ -662,8 +682,6 @@ export function TokenDetailLive({
         </div>
       </header>
 
-      <TokenLinkedAirdropStrip tokenAddress={tokenAddress} />
-
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
         <div className="min-w-0 space-y-6">
           <PriceChart
@@ -689,7 +707,7 @@ export function TokenDetailLive({
               tokenAddress={tokenAddress}
               creatorAddress={liveToken.creatorAddress}
               symbol={liveToken.symbol}
-              trades={trades}
+              headTrades={trades}
               wsConnected={wsConnected}
               holdersRefreshKey={holdersRefreshKey}
               initialHolders={initialHolders}

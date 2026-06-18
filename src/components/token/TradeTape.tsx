@@ -1,18 +1,20 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { TokenHolderSnapshot, TradeItem } from "@/lib/db/launchpad";
 import { explorerTxUrl, shortAddress } from "@/config/chain";
 import { UserAvatarForAddress } from "@/components/user/UserAvatarForAddress";
 import { SectionHeadingIcon } from "@/components/ui/IconLabel";
 import { PctChange } from "@/components/ui/PctChange";
 import { MetricIcons } from "@/lib/metric-icons";
+import { ACTIVITY_PAGE_SIZE } from "@/lib/activity-page-size";
 import { DEFAULT_TOKEN_TOTAL_SUPPLY, bnbToUsd, formatUsdReadable, formatTradeFillPriceUsd, tradeNetBnbFromParts } from "@/lib/format-usd";
 import {
   resolveVerifiedTokenBalance,
   scaleCostBasisForBalance,
 } from "@/lib/onchain-balance";
 import { useLiveTradeAnimations } from "@/hooks/useLiveTradeAnimations";
+import { useInfiniteScrollSentinel } from "@/hooks/useInfiniteScrollSentinel";
 
 type ActivityTab = "holders" | "trades";
 
@@ -21,6 +23,11 @@ type HolderRow = {
   netTokens: number;
   remainingCostBasisBnb: number;
   avgEntryBnb: number | null;
+};
+
+type PagedMeta = {
+  hasMore: boolean;
+  offset: number;
 };
 
 const activityTableScrollClass =
@@ -61,6 +68,22 @@ function formatSupplyShare(balance: number): string {
   return `${pct.toFixed(4)}%`;
 }
 
+function mergeTradesByTxHash(...groups: TradeItem[][]): TradeItem[] {
+  const seen = new Set<string>();
+  const merged: TradeItem[] = [];
+  for (const group of groups) {
+    for (const trade of group) {
+      const key = trade.txHash.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      merged.push(trade);
+    }
+  }
+  return merged.sort(
+    (a, b) => new Date(b.blockTime).getTime() - new Date(a.blockTime).getTime()
+  );
+}
+
 function mapApiHoldersToRows(holders: TokenHolderSnapshot[]): HolderRow[] {
   return holders
     .map((holder) => {
@@ -90,6 +113,17 @@ function mapApiHoldersToRows(holders: TokenHolderSnapshot[]): HolderRow[] {
     })
     .filter((row): row is HolderRow => row != null)
     .sort((a, b) => b.netTokens - a.netTokens);
+}
+
+function mergeHolderRows(existing: HolderRow[], incoming: HolderRow[]): HolderRow[] {
+  const byAddress = new Map<string, HolderRow>();
+  for (const row of existing) {
+    byAddress.set(row.address.toLowerCase(), row);
+  }
+  for (const row of incoming) {
+    byAddress.set(row.address.toLowerCase(), row);
+  }
+  return [...byAddress.values()].sort((a, b) => b.netTokens - a.netTokens);
 }
 
 function CreatorBadge() {
@@ -132,11 +166,25 @@ function TradeSideLabel({ isBuy }: { isBuy: boolean }) {
   );
 }
 
+function LoadMoreSentinel({
+  loading,
+  label,
+}: {
+  loading: boolean;
+  label: string;
+}) {
+  return (
+    <div className="flex justify-center py-3 text-caption text-pump-muted">
+      {loading ? label : null}
+    </div>
+  );
+}
+
 export function TradeTape({
   tokenAddress,
   creatorAddress,
   symbol,
-  trades,
+  headTrades,
   wsConnected = false,
   holdersRefreshKey = 0,
   initialHolders,
@@ -147,7 +195,8 @@ export function TradeTape({
   tokenAddress: string;
   creatorAddress: string;
   symbol: string;
-  trades: TradeItem[];
+  /** Latest trades from live poll + optimistic layer (tape head). */
+  headTrades: TradeItem[];
   wsConnected?: boolean;
   holdersRefreshKey?: number;
   initialHolders?: TokenHolderSnapshot[];
@@ -157,80 +206,145 @@ export function TradeTape({
 }) {
   const creatorKey = creatorAddress.toLowerCase();
   const [tab, setTab] = useState<ActivityTab>("trades");
+
+  const [olderTrades, setOlderTrades] = useState<TradeItem[]>([]);
+  const [tradeOffset, setTradeOffset] = useState(ACTIVITY_PAGE_SIZE);
+  const [hasMoreTrades, setHasMoreTrades] = useState(headTrades.length >= ACTIVITY_PAGE_SIZE);
+  const [loadingMoreTrades, setLoadingMoreTrades] = useState(false);
+
   const [holderRows, setHolderRows] = useState<HolderRow[]>(() =>
     initialHolders?.length ? mapApiHoldersToRows(initialHolders) : []
   );
+  const [holderOffset, setHolderOffset] = useState(
+    initialHolders?.length ? initialHolders.length : ACTIVITY_PAGE_SIZE
+  );
+  const [hasMoreHolders, setHasMoreHolders] = useState(
+    Boolean(initialHolders && initialHolders.length >= ACTIVITY_PAGE_SIZE)
+  );
+  const [loadingMoreHolders, setLoadingMoreHolders] = useState(false);
   const [holdersReady, setHoldersReady] = useState(
     Boolean(initialHolders && initialHolders.length > 0)
   );
 
-  const tradeIds = useMemo(() => trades.map((t) => t.id), [trades]);
+  const displayedTrades = useMemo(
+    () => mergeTradesByTxHash(headTrades, olderTrades),
+    [headTrades, olderTrades]
+  );
+
+  const tradeIds = useMemo(() => displayedTrades.map((t) => t.id), [displayedTrades]);
   const { rowClass: tradeRowClass } = useLiveTradeAnimations(tradeIds);
+
+  const loadMoreTrades = useCallback(async () => {
+    if (loadingMoreTrades || !hasMoreTrades) return;
+    setLoadingMoreTrades(true);
+    try {
+      const response = await fetch(
+        `/api/tokens/${tokenAddress}/trades?limit=${ACTIVITY_PAGE_SIZE}&offset=${tradeOffset}`,
+        { cache: "no-store" }
+      );
+      const body = (await response.json()) as {
+        data?: TradeItem[];
+        meta?: PagedMeta;
+      };
+      if (!response.ok) return;
+      const next = body.data ?? [];
+      setOlderTrades((prev) => mergeTradesByTxHash(prev, next));
+      setTradeOffset((prev) => prev + next.length);
+      setHasMoreTrades(body.meta?.hasMore ?? next.length >= ACTIVITY_PAGE_SIZE);
+    } finally {
+      setLoadingMoreTrades(false);
+    }
+  }, [hasMoreTrades, loadingMoreTrades, tokenAddress, tradeOffset]);
+
+  const fetchHoldersPage = useCallback(
+    async (offset: number, append: boolean) => {
+      const response = await fetch(
+        `/api/tokens/${tokenAddress}/holders?limit=${ACTIVITY_PAGE_SIZE}&offset=${offset}`,
+        { cache: "no-store" }
+      );
+      const body = (await response.json()) as {
+        data?: TokenHolderSnapshot[];
+        meta?: PagedMeta;
+      };
+      if (!response.ok) return null;
+      const rows = mapApiHoldersToRows(body.data ?? []);
+      setHolderRows((prev) => {
+        if (append) return mergeHolderRows(prev, rows);
+        if (offset === 0 && prev.length > ACTIVITY_PAGE_SIZE) {
+          return mergeHolderRows(rows, prev.slice(ACTIVITY_PAGE_SIZE));
+        }
+        return rows;
+      });
+      setHolderOffset(offset + rows.length);
+      setHasMoreHolders(body.meta?.hasMore ?? rows.length >= ACTIVITY_PAGE_SIZE);
+      setHoldersReady(true);
+      return rows;
+    },
+    [tokenAddress]
+  );
+
+  const loadMoreHolders = useCallback(async () => {
+    if (loadingMoreHolders || !hasMoreHolders) return;
+    setLoadingMoreHolders(true);
+    try {
+      await fetchHoldersPage(holderOffset, true);
+    } finally {
+      setLoadingMoreHolders(false);
+    }
+  }, [fetchHoldersPage, hasMoreHolders, holderOffset, loadingMoreHolders]);
+
+  const tradeSentinelRef = useInfiniteScrollSentinel({
+    enabled: tab === "trades",
+    hasMore: hasMoreTrades,
+    loading: loadingMoreTrades,
+    onLoadMore: loadMoreTrades,
+  });
+
+  const holderSentinelRef = useInfiniteScrollSentinel({
+    enabled: tab === "holders",
+    hasMore: hasMoreHolders,
+    loading: loadingMoreHolders,
+    onLoadMore: loadMoreHolders,
+  });
 
   useEffect(() => {
     if (initialHolders?.length) {
       setHolderRows(mapApiHoldersToRows(initialHolders));
+      setHolderOffset(initialHolders.length);
+      setHasMoreHolders(initialHolders.length >= ACTIVITY_PAGE_SIZE);
       setHoldersReady(true);
     }
   }, [initialHolders]);
 
   useEffect(() => {
+    if (initialHolders?.length) return;
     let cancelled = false;
 
-    async function loadHolders(isInitial: boolean) {
-      try {
-        const response = await fetch(`/api/tokens/${tokenAddress}/holders`, {
-          cache: "no-store",
-        });
-        const body = (await response.json()) as { data?: TokenHolderSnapshot[] };
-        if (!response.ok || cancelled) return;
-        setHolderRows(mapApiHoldersToRows(body.data ?? []));
+    void (async () => {
+      const rows = await fetchHoldersPage(0, false);
+      if (!cancelled && rows == null) {
+        setHolderRows([]);
         setHoldersReady(true);
-      } catch {
-        if (cancelled) return;
-        if (isInitial) {
-          setHolderRows([]);
-          setHoldersReady(true);
-        }
       }
-    }
+    })();
 
-    void loadHolders(!initialHolders?.length);
-    if (wsConnected) {
-      return () => {
-        cancelled = true;
-      };
-    }
-    const timer = window.setInterval(() => void loadHolders(false), 15_000);
     return () => {
       cancelled = true;
-      window.clearInterval(timer);
     };
-  }, [tokenAddress, wsConnected, initialHolders?.length]);
+  }, [fetchHoldersPage, initialHolders?.length, tokenAddress]);
+
+  useEffect(() => {
+    if (tab !== "holders" || !wsConnected) return;
+    const timer = window.setInterval(() => {
+      void fetchHoldersPage(0, false);
+    }, 30_000);
+    return () => window.clearInterval(timer);
+  }, [fetchHoldersPage, tab, tokenAddress, wsConnected]);
 
   useEffect(() => {
     if (holdersRefreshKey <= 0) return;
-    let cancelled = false;
-
-    async function refreshHolders() {
-      try {
-        const response = await fetch(`/api/tokens/${tokenAddress}/holders`, {
-          cache: "no-store",
-        });
-        const body = (await response.json()) as { data?: TokenHolderSnapshot[] };
-        if (!response.ok || cancelled) return;
-        setHolderRows(mapApiHoldersToRows(body.data ?? []));
-        setHoldersReady(true);
-      } catch {
-        // Keep last snapshot.
-      }
-    }
-
-    void refreshHolders();
-    return () => {
-      cancelled = true;
-    };
-  }, [holdersRefreshKey, tokenAddress]);
+    void fetchHoldersPage(0, false);
+  }, [fetchHoldersPage, holdersRefreshKey]);
 
   return (
     <section className="space-y-3">
@@ -335,9 +449,12 @@ export function TradeTape({
                   })}
                 </tbody>
               </table>
+              <div ref={holderSentinelRef}>
+                <LoadMoreSentinel loading={loadingMoreHolders} label="Loading holders…" />
+              </div>
             </div>
           )
-        ) : trades.length === 0 ? (
+        ) : displayedTrades.length === 0 ? (
           <p className="px-4 py-6 text-body-sm text-pump-muted">No trades yet.</p>
         ) : (
           <div className={activityTableScrollClass}>
@@ -354,7 +471,7 @@ export function TradeTape({
                 </tr>
               </thead>
               <tbody>
-                {trades.map((trade) => {
+                {displayedTrades.map((trade) => {
                   const isBuy = trade.side === "BUY";
                   const isOptimistic = trade.id.startsWith("optimistic:");
                   const tradeNetUsd = bnbToUsd(tradeNetBnb(trade), bnbUsd);
@@ -407,6 +524,9 @@ export function TradeTape({
                 })}
               </tbody>
             </table>
+            <div ref={tradeSentinelRef}>
+              <LoadMoreSentinel loading={loadingMoreTrades} label="Loading trades…" />
+            </div>
           </div>
         )}
       </div>

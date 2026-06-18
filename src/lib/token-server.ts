@@ -1,5 +1,6 @@
 import { cacheLife, cacheTag } from "next/cache";
 import type { TokenDetail, TokenHolderSnapshot, TradeItem } from "@/lib/db/launchpad";
+import { ACTIVITY_PAGE_SIZE } from "@/lib/activity-page-size";
 import { getTokenByAddress, listTokenHolders, listTradesForToken } from "@/lib/db/launchpad";
 import { normalizeAddressParam } from "@/lib/address";
 import {
@@ -37,8 +38,8 @@ async function fetchTokenDetailBundleCached(
 
   const [token, trades, holders] = await Promise.all([
     getTokenByAddress(normalized),
-    listTradesForToken(normalized, 100),
-    listTokenHolders(normalized, 300),
+    listTradesForToken(normalized, ACTIVITY_PAGE_SIZE, 0),
+    listTokenHolders(normalized, ACTIVITY_PAGE_SIZE, 0),
   ]);
 
   if (!token) return null;

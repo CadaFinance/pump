@@ -2,17 +2,17 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { ChevronRight } from "lucide-react";
 import { isPromotableAirdropStatus } from "@/lib/airdrop-status";
 import type { TokenAirdropPromo } from "@/lib/db/airdrops";
-import { ICON_STROKE } from "@/lib/icons";
 import { AirdropGiftIcon } from "@/components/ui/AirdropGiftIcon";
 
-type TokenLinkedAirdropStripProps = {
+type TokenAirdropLinkChipProps = {
   tokenAddress: string;
+  className?: string;
 };
 
-export function TokenLinkedAirdropStrip({ tokenAddress }: TokenLinkedAirdropStripProps) {
+/** Compact header chip — links to the token's open airdrop campaign. */
+export function TokenAirdropLinkChip({ tokenAddress, className = "" }: TokenAirdropLinkChipProps) {
   const [campaign, setCampaign] = useState<TokenAirdropPromo | null>(null);
   const [loaded, setLoaded] = useState(false);
 
@@ -46,13 +46,14 @@ export function TokenLinkedAirdropStrip({ tokenAddress }: TokenLinkedAirdropStri
   return (
     <Link
       href={`/airdrops/${campaign.id}`}
-      className="token-airdrop-banner flex items-center gap-2 rounded-md border border-pump-accent/20 bg-pump-accent/[0.06] px-3 py-2 transition-colors hover:bg-pump-accent/10"
+      className={`inline-flex shrink-0 items-center gap-1 rounded-sm border border-pump-border/35 bg-pump-surface/55 px-1.5 py-0.5 text-label font-medium text-pump-accent transition-colors hover:border-pump-accent/30 hover:bg-pump-accent/8 ${className}`}
+      aria-label="View airdrop campaign"
     >
-      <AirdropGiftIcon size={14} />
-      <span className="min-w-0 flex-1 truncate text-caption font-medium text-pump-text">
-        Guaranteed airdrop
-      </span>
-      <ChevronRight className="h-3.5 w-3.5 shrink-0 text-pump-muted" strokeWidth={ICON_STROKE} aria-hidden />
+      <AirdropGiftIcon size={10} />
+      <span>Airdrop</span>
     </Link>
   );
 }
+
+/** @deprecated Use TokenAirdropLinkChip */
+export const TokenLinkedAirdropStrip = TokenAirdropLinkChip;
