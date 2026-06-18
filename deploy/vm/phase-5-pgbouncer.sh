@@ -11,7 +11,36 @@ sudo -u postgres psql -d pump_db -f db/migrations/012_tier3_scale_indexes.sql
 echo "==> PgBouncer (manual if not installed)"
 echo "  sudo apt install -y pgbouncer"
 echo "  sudo cp deploy/pgbouncer.ini.snippet /etc/pgbouncer/pgbouncer.ini"
-echo "  sudo systemctl enable --now pgbouncer"
+
+sync_pgbouncer_userlist() {
+  local dest="/etc/pgbouncer/userlist.txt"
+  local tmp
+  tmp="$(mktemp)"
+  if ! sudo -u postgres psql -d postgres -tAc \
+    "SELECT concat('\"', usename, '\" \"', passwd, '\"') FROM pg_shadow WHERE usename IN ('pump_app', 'pump_indexer') ORDER BY usename" \
+    >"$tmp"; then
+    echo "ERROR: failed to read pg_shadow for PgBouncer userlist"
+    rm -f "$tmp"
+    return 1
+  fi
+  if [[ ! -s "$tmp" ]]; then
+    echo "ERROR: userlist empty — create pump_app and pump_indexer roles first"
+    rm -f "$tmp"
+    return 1
+  fi
+  sudo install -o postgres -g postgres -m 0600 "$tmp" "$dest"
+  rm -f "$tmp"
+  echo "==> Wrote $dest ($(wc -l <"$dest" | tr -d ' ') users)"
+}
+
+if command -v pgbouncer >/dev/null 2>&1; then
+  sync_pgbouncer_userlist
+  sudo systemctl enable --now pgbouncer
+  sudo systemctl reload pgbouncer 2>/dev/null || sudo systemctl restart pgbouncer
+else
+  echo "  sudo apt install -y pgbouncer"
+  echo "  Then re-run this script to sync userlist from pg_shadow"
+fi
 
 ENV_FILE="${ENV_FILE:-/var/www/pump/tma/.env}"
 if [[ -f "$ENV_FILE" ]]; then

@@ -258,14 +258,20 @@ idx_active="$(systemctl is-active pump-indexer 2>/dev/null || echo inactive)"
 systemctl_ms=$(( $(now_ms_fn) - idx_started ))
 query_started="$(now_ms_fn)"
 indexer_info="$(sudo -u postgres psql -d pump_db -tAc "SELECT key, last_block_number, EXTRACT(EPOCH FROM (now()-updated_at))::int FROM indexer_state ORDER BY updated_at DESC LIMIT 1" 2>/dev/null | tr '|' ' ' || true)"
+indexer_mode="$(journalctl -u pump-indexer -n 80 --no-pager 2>/dev/null | grep 'launchpad indexer ready' | tail -1 | sed -n 's/.*mode=\([^,]*\).*/\1/p' || true)"
+indexer_detail="${indexer_info}${indexer_mode:+ · mode=${indexer_mode}}"
 query_ms=$(( $(now_ms_fn) - query_started ))
 timings_json="$(make_timings "{\"systemctl\":${systemctl_ms},\"dbQuery\":${query_ms}}")"
 if [[ "$idx_active" == "active" ]]; then
   age="$(echo "$indexer_info" | awk '{print $NF}')"
-  status="healthy"; summary="active · db query ${query_ms}ms"
+  status="healthy"; summary="active · db query ${query_ms}ms${indexer_mode:+ · ${indexer_mode}}"
   if [[ -n "$age" && "$age" -gt 600 ]]; then status="down"; summary="stale ${age}s · db ${query_ms}ms"; fi
   if [[ -n "$age" && "$age" -gt 180 && "$age" -le 600 ]]; then status="degraded"; summary="slow ${age}s · db ${query_ms}ms"; fi
-  append_check "pump_indexer" "Indexer" "$status" "$summary" "$probe" "$indexer_info" "$query_ms" "$logs_json" "$timings_json"
+  if [[ -z "$indexer_mode" ]]; then
+    status="degraded"
+    summary="active · missing mode= in log (run indexer-deploy)"
+  fi
+  append_check "pump_indexer" "Indexer" "$status" "$summary" "$probe" "$indexer_detail" "$query_ms" "$logs_json" "$timings_json"
 else
   append_check "pump_indexer" "Indexer" "down" "systemd=$idx_active" "$probe" "$indexer_info" "$query_ms" "$logs_json" "$timings_json"
 fi

@@ -23,7 +23,7 @@ Resmi strateji dokümanı. Slogan sözleşmesi, sektör karşılaştırması, me
 | DB | PostgreSQL 16 (`pg` pool) |
 | Cache | Redis (arena 2s TTL), API in-memory Map |
 | Realtime | `pump-realtime` (ws + Redis Pub/Sub) |
-| Indexer | Node ESM, BSC RPC poll, incremental `token_board_stats` |
+| Indexer | Node ESM, `watchBlocks` (opt-in) or RPC poll, incremental `token_board_stats` |
 | Deploy | Tek VM, PM2 (`pump-tma` + `pump-realtime`) |
 
 ### Veri akışı
@@ -173,7 +173,7 @@ Redis Pub/Sub → pump-realtime → Browser WS rooms → delta patches
 | 13 | PG tuning + partial index audit | ✅ `012_tier3_scale_indexes.sql` |
 | 14 | PM2: 2× realtime + 2× Next | ✅ `ecosystem.config.cjs` cluster |
 | 15 | Read replica (arena read-only) | ✅ `LAUNCHPAD_DATABASE_READ_URL` |
-| 16 | Indexer: `watchBlocks` (eth_subscribe heads) | ✅ `INDEXER_USE_WS_BLOCKS` |
+| 16 | Indexer: `watchBlocks` (eth_subscribe heads) | ✅ prod VM + `deploy/vm/indexer-deploy.sh` |
 
 ### Tier 4 — Cesur yenilikler ✅ (kod — infra kısmi)
 
@@ -227,7 +227,11 @@ USE_REDIS_ARENA_CACHE=true
 INCREMENTAL_BOARD_STATS=true
 REDIS_PUBLISH_ENABLED=true
 NEXT_PUBLIC_WS_ENABLED=true
+INDEXER_USE_WS_BLOCKS=true
+BSC_WS_URL=wss://bsc-testnet-rpc.publicnode.com
 ```
+
+Deploy: `./deploy/tma-deploy.sh` (TMA + realtime + indexer sync). Indexer only: `bash deploy/vm/indexer-deploy.sh`.
 
 Next.js (Tier 1+):
 

@@ -88,6 +88,14 @@ if [ "$realtime_ok" -ne 1 ]; then
   exit 1
 fi
 
+if [[ "${SKIP_INDEXER_DEPLOY:-}" != "1" ]] && [[ -f "$APP_DIR/deploy/vm/indexer-deploy.sh" ]]; then
+  log "Deploying indexer (sync + rebuild + restart)"
+  chmod +x "$APP_DIR/deploy/vm/indexer-deploy.sh"
+  bash "$APP_DIR/deploy/vm/indexer-deploy.sh"
+else
+  log "Skipping indexer deploy (SKIP_INDEXER_DEPLOY=1 or script missing)"
+fi
+
 log "Deploy finished successfully"
 
 # Referral system (BondingCurveManager redeploy) — run separately BEFORE app deploy:
