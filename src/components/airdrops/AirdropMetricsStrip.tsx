@@ -10,40 +10,25 @@ type AirdropMetricsStripProps = {
   participants?: ReactNode;
   footer?: ReactNode;
   className?: string;
-  /** Compact row aligned to the end — featured campaign hero card */
-  variant?: "default" | "hero";
-  /** Detail page mobile: reward + participants top row, progress full width below */
-  compactMobile?: boolean;
+  /** Featured list card — reward + progress only, full-width row */
+  layout?: "featured" | "detail";
   /** Detail page: status shown in hero header */
   hideStatus?: boolean;
-  /** Inline hourglass + bar + pct on one row (detail page) */
-  progressInline?: boolean;
 };
 
 function MetricBlock({
   label,
   children,
   className = "",
-  hero = false,
-  hideLabel = false,
 }: {
   label: string;
   children: ReactNode;
   className?: string;
-  hero?: boolean;
-  hideLabel?: boolean;
 }) {
   return (
-    <div
-      className={`min-w-0 text-left ${hero ? "airdrop-metrics-strip__block--hero" : ""} ${className}`}
-    >
-      <p
-        className={`koth-banner__tag m-0 ${hideLabel ? "invisible" : ""}`}
-        aria-hidden={hideLabel}
-      >
-        {label}
-      </p>
-      <div className="airdrop-metrics-strip__value mt-1">{children}</div>
+    <div className={`airdrop-metrics-strip__block min-w-0 ${className}`}>
+      <p className="koth-banner__tag m-0">{label}</p>
+      <div className="airdrop-metrics-strip__value">{children}</div>
     </div>
   );
 }
@@ -56,64 +41,49 @@ export function AirdropMetricsStrip({
   participants,
   footer,
   className = "",
-  variant = "default",
-  compactMobile = false,
+  layout = "detail",
   hideStatus = false,
-  progressInline = false,
 }: AirdropMetricsStripProps) {
-  const isHero = variant === "hero";
-  const detailGridClass = [
-    "airdrop-metrics-strip__detail-grid",
-    compactMobile ? "airdrop-metrics-strip__detail-grid--compact" : "",
-    hideStatus ? "airdrop-metrics-strip__detail-grid--no-status" : "",
-  ]
-    .filter(Boolean)
-    .join(" ");
+  const isFeatured = layout === "featured";
+  const gridClass = isFeatured
+    ? "airdrop-metrics-strip__featured-grid"
+    : [
+        "airdrop-metrics-strip__detail-grid",
+        hideStatus ? "airdrop-metrics-strip__detail-grid--no-status" : "",
+        participants ? "airdrop-metrics-strip__detail-grid--with-participants" : "",
+      ]
+        .filter(Boolean)
+        .join(" ");
 
   return (
-    <div
-      className={`airdrop-metrics-strip${isHero ? " airdrop-metrics-strip--hero" : ""}${
-        progressInline ? " airdrop-metrics-strip--progress-inline" : ""
-      } ${className}`}
-    >
-      <div className={isHero ? "airdrop-metrics-strip__hero-row" : detailGridClass}>
-        <MetricBlock
-          label="Reward pool"
-          hero={isHero}
-          className={
-            compactMobile
-              ? "airdrop-metrics-strip__block--reward"
-              : undefined
-          }
-        >
+    <div className={`airdrop-metrics-strip ${className}`}>
+      <div className={gridClass}>
+        <MetricBlock label="Reward pool" className="airdrop-metrics-strip__block--reward">
           {reward}
         </MetricBlock>
-        <MetricBlock
-          label="Progress"
-          hero={isHero}
-          className={compactMobile ? "airdrop-metrics-strip__block--progress" : undefined}
-        >
+        <MetricBlock label="Progress" className="airdrop-metrics-strip__block--progress">
           {progress}
         </MetricBlock>
         {participants ? (
           <MetricBlock
             label="Participants"
-            hero={isHero}
-            className={compactMobile ? "airdrop-metrics-strip__block--participants" : undefined}
+            className="airdrop-metrics-strip__block--participants"
           >
             {participants}
           </MetricBlock>
         ) : null}
-        <MetricBlock label="Pool token" hero={isHero} className={isHero ? "hidden" : "max-md:hidden"}>
-          {poolToken}
-        </MetricBlock>
-        {!hideStatus ? (
-          <MetricBlock label="Status" hero={isHero} className={isHero ? "hidden" : "max-md:hidden"}>
+        {!isFeatured ? (
+          <MetricBlock label="Pool token" className="airdrop-metrics-strip__block--pool">
+            {poolToken}
+          </MetricBlock>
+        ) : null}
+        {!hideStatus && !isFeatured ? (
+          <MetricBlock label="Status" className="airdrop-metrics-strip__block--status max-lg:hidden">
             {status}
           </MetricBlock>
         ) : null}
       </div>
-      {!isHero && footer ? (
+      {footer ? (
         <p className="mt-3 text-caption leading-snug text-pump-muted">{footer}</p>
       ) : null}
     </div>

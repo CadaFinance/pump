@@ -13,7 +13,7 @@ import {
   AirdropStatusMetric,
   airdropDetailRewardProps,
 } from "@/components/airdrops/AirdropMetricCells";
-import { AirdropGuaranteedBadge } from "@/components/airdrops/AirdropGuaranteedBadge";
+import { AirdropTrustBadge } from "@/components/airdrops/AirdropTrustBadge";
 import { type ReactNode, useCallback, useEffect, useState } from "react";
 import { parseEther } from "viem";
 import { useOpenConnectModal } from "@/hooks/useOpenConnectModal";
@@ -1216,76 +1216,36 @@ export function AirdropDetailPanel({ airdropId }: { airdropId: string }) {
       ) : null}
 
       <section className="panel-surface overflow-hidden">
-        {/* Mobile hero */}
-        <div className="border-b border-pump-border/15 bg-gradient-to-br from-pump-accent/10 via-pump-card/80 to-pump-surface/55 p-3 md:hidden">
-          <div className="flex items-center gap-2.5">
+        <div className="airdrop-detail-hero__head border-b border-pump-border/15 bg-gradient-to-br from-pump-accent/10 via-pump-card/80 to-pump-surface/55 p-3 md:p-4 md:px-5">
+          <div className="flex min-w-0 items-start gap-3">
             <TokenAvatar
               address={detail.linkedToken}
               symbol={symbol}
-              size={40}
-              className="koth-banner__logo shrink-0 !ring-0"
+              size={44}
+              className="koth-banner__logo shrink-0 !ring-0 md:hidden"
             />
+            <TokenAvatar
+              address={detail.linkedToken}
+              symbol={symbol}
+              size={52}
+              className="koth-banner__logo hidden shrink-0 md:block"
+            />
+
             <div className="min-w-0 flex-1">
-              <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-                <h1 className="featured-airdrop-banner__title min-w-0">{title}</h1>
-                <AirdropGuaranteedBadge />
-              </div>
-              {detail.description ? (
-                <p className="mt-0.5 text-caption leading-snug text-pump-muted line-clamp-2">
-                  {detail.description}
-                </p>
-              ) : null}
-            </div>
-          </div>
-
-          <div className="mt-2.5 flex items-stretch gap-2">
-            <span
-              className={`${airdropStatusBadgeClass(displayStatus)} h-8 min-w-0 flex-1 items-center justify-center`}
-            >
-              {formatAirdropDisplayStatus(displayStatus)}
-            </span>
-            <button
-              type="button"
-              onClick={() => toggleSave(airdropId)}
-              className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-sm border transition ${
-                saved
-                  ? "border-pump-accent/35 bg-pump-accent/15 text-pump-accent"
-                  : "border-pump-border/25 bg-pump-surface/65 text-pump-muted hover:text-pump-text"
-              }`}
-              aria-label={saved ? "Remove from saved" : "Save campaign"}
-            >
-              <Bookmark
-                className={`h-4 w-4 ${saved ? "fill-current" : ""}`}
-                strokeWidth={ICON_STROKE}
-                aria-hidden
-              />
-            </button>
-          </div>
-        </div>
-
-        {/* Desktop hero */}
-        <div className="hidden border-b border-pump-border/15 bg-gradient-to-br from-pump-accent/10 via-pump-card/80 to-pump-surface/55 p-4 md:block md:px-5 md:py-4">
-          <div className="flex min-w-0 items-center gap-3 lg:gap-4">
-            <TokenAvatar
-              address={detail.linkedToken}
-              symbol={symbol}
-              size={56}
-              className="koth-banner__logo shrink-0"
-            />
-
-            <div className="flex min-w-0 flex-1 gap-3 lg:gap-4">
-              <div className="flex min-w-0 flex-1 flex-col gap-1">
-                <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-                  <h1 className="featured-airdrop-banner__title truncate">{title}</h1>
-                  <AirdropGuaranteedBadge />
+              <div className="flex min-w-0 items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <h1 className="featured-airdrop-card__title truncate">{title}</h1>
+                  <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                    <AirdropTrustBadge />
+                  </div>
+                  {detail.description ? (
+                    <p className="mt-1.5 text-caption leading-snug text-pump-muted line-clamp-2 md:line-clamp-none md:text-body-sm md:leading-relaxed">
+                      {detail.description}
+                    </p>
+                  ) : null}
                 </div>
-                {detail.description ? (
-                  <p className="text-body-sm leading-relaxed text-pump-muted">{detail.description}</p>
-                ) : null}
-              </div>
 
-              <div className="flex shrink-0 flex-col items-end gap-1.5">
-                <div className="flex items-center gap-1.5">
+                <div className="flex shrink-0 items-center gap-1.5">
                   <button
                     type="button"
                     onClick={() => toggleSave(airdropId)}
@@ -1306,24 +1266,15 @@ export function AirdropDetailPanel({ airdropId }: { airdropId: string }) {
                     {formatAirdropDisplayStatus(displayStatus)}
                   </span>
                 </div>
-
-                <Link
-                  href={`/token/${detail.linkedToken}`}
-                  className="inline-flex min-w-0 items-center gap-1 text-caption font-medium text-pump-accent hover:underline"
-                >
-                  <TokenAvatar address={detail.linkedToken} symbol={symbol} size={14} className="!ring-0" />
-                  <span>{symbol}</span>
-                </Link>
               </div>
             </div>
           </div>
         </div>
 
-        <div className="p-3 md:p-5">
+        <div className="airdrop-detail-hero__stats p-3 md:p-4 md:px-5">
           <AirdropMetricsStrip
-            compactMobile
+            layout="detail"
             hideStatus
-            progressInline
             reward={<AirdropRewardPoolMetric {...airdropDetailRewardProps(detail, bnbUsd)} />}
             progress={
               <AirdropProgressMetric

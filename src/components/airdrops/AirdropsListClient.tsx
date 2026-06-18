@@ -14,14 +14,13 @@ import {
 import {
   airdropRewardUsd,
   airdropTimelineProgress,
-  formatAirdropReward,
   formatDurationUntil,
   formatQualifyDateTime,
   formatTimeRemaining,
   isEndingSoon,
   showAirdropProgressBar,
 } from "@/lib/airdrop-board-format";
-import { Plus, Bookmark } from "lucide-react";
+import { Plus, Bookmark, ChevronRight } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useOpenConnectModal } from "@/hooks/useOpenConnectModal";
 import { useAccount } from "wagmi";
@@ -42,10 +41,9 @@ import {
   AirdropStatusMetric,
   airdropListRewardProps,
 } from "@/components/airdrops/AirdropMetricCells";
-import { AirdropGuaranteedBadge } from "@/components/airdrops/AirdropGuaranteedBadge";
+import { AirdropTrustBadge } from "@/components/airdrops/AirdropTrustBadge";
 import { AirdropMetricsStrip } from "@/components/airdrops/AirdropMetricsStrip";
 import { TokenAvatar } from "@/components/token/TokenAvatar";
-import { BnbLogo } from "@/components/token/BnbLogo";
 import { useBnbUsdPrice } from "@/hooks/useBnbUsdPrice";
 import { formatUsdReadable } from "@/lib/format-usd";
 
@@ -183,52 +181,14 @@ function poolSymbol(item: AirdropListItem): string {
   return item.linkedSymbol ?? shortAddress(item.linkedToken);
 }
 
-function BnbRewardIcon({ size = 18 }: { size?: number }) {
-  return <BnbLogo size={size} />;
-}
-
 function RewardPoolDisplay({
   item,
   bnbUsd,
-  avatarSize = 18,
-  showUsd = false,
-  amountClassName = "financial-value truncate text-caption font-semibold text-pump-text",
 }: {
   item: AirdropListItem;
   bnbUsd: number | null;
-  avatarSize?: number;
-  showUsd?: boolean;
-  amountClassName?: string;
 }) {
-  const isBnb = !item.rewardToken;
-  const usd = airdropRewardUsd(item, bnbUsd);
-
-  return (
-    <div className="flex min-w-0 items-center gap-1.5">
-      {isBnb ? (
-        <BnbRewardIcon size={avatarSize} />
-      ) : (
-        <TokenAvatar
-          address={item.rewardToken!}
-          symbol={item.rewardSymbol ?? "?"}
-          size={avatarSize}
-        />
-      )}
-      <div className="flex min-w-0 items-baseline gap-1.5">
-        <span className={amountClassName}>
-          {formatAirdropReward(item.totalFunded, {
-            isBnb,
-            symbol: item.rewardSymbol,
-          })}
-        </span>
-        {showUsd && usd != null ? (
-          <span className="shrink-0 text-caption text-pump-muted">
-            {formatUsdReadable(usd, { compact: true })}
-          </span>
-        ) : null}
-      </div>
-    </div>
-  );
+  return <AirdropRewardPoolMetric {...airdropListRewardProps(item, bnbUsd)} />;
 }
 
 function matchesFilter(
@@ -325,12 +285,6 @@ function MobileAirdropBoardRow({
   bnbUsd: number | null;
 }) {
   const symbol = poolSymbol(item);
-  const isBnb = !item.rewardToken;
-  const usd = airdropRewardUsd(item, bnbUsd);
-  const poolLabel = formatAirdropReward(item.totalFunded, {
-    isBnb,
-    symbol: item.rewardSymbol,
-  });
   const timeCaption = airdropTimeCaption(item);
   const href = `/airdrops/${item.id}`;
 
@@ -368,16 +322,8 @@ function MobileAirdropBoardRow({
         ) : null}
       </div>
 
-      <div className="relative z-10 col-start-2 row-start-2 min-w-0 pr-1 text-[11px] leading-tight">
-        <span className="financial-value block min-w-0 truncate font-semibold tabular-nums text-pump-text">
-          <span className="font-normal text-pump-muted">Reward </span>
-          {poolLabel}
-          {usd != null ? (
-            <span className="ml-1 font-medium text-pump-muted">
-              · {formatUsdReadable(usd, { compact: true })}
-            </span>
-          ) : null}
-        </span>
+      <div className="relative z-10 col-start-2 row-start-2 min-w-0 pr-1">
+        <AirdropRewardPoolMetric {...airdropListRewardProps(item, bnbUsd)} showIcon={false} />
       </div>
     </article>
   );
@@ -667,39 +613,42 @@ export function AirdropsListClient({
 
           <Link
             href={`/airdrops/${featured.id}`}
-            className="koth-banner panel-surface block"
+            className="featured-airdrop-card koth-banner panel-surface block"
           >
-            <div className="koth-banner__inner featured-airdrop-banner__inner">
-              <div className="featured-airdrop-banner__identity min-w-0">
-                <TokenAvatar
-                  address={featured.linkedToken}
-                  symbol={poolSymbol(featured)}
-                  size={48}
-                  className="koth-banner__logo shrink-0 md:hidden"
-                />
-                <TokenAvatar
-                  address={featured.linkedToken}
-                  symbol={poolSymbol(featured)}
-                  size={60}
-                  className="koth-banner__logo hidden shrink-0 md:block"
-                />
+            <div className="featured-airdrop-card__head">
+              <TokenAvatar
+                address={featured.linkedToken}
+                symbol={poolSymbol(featured)}
+                size={44}
+                className="koth-banner__logo shrink-0 md:hidden"
+              />
+              <TokenAvatar
+                address={featured.linkedToken}
+                symbol={poolSymbol(featured)}
+                size={52}
+                className="koth-banner__logo hidden shrink-0 md:block"
+              />
 
-                <div className="featured-airdrop-banner__lead min-w-0 flex-1">
-                  <div className="featured-airdrop-banner__headline-row">
-                    <p className="featured-airdrop-banner__title truncate">
-                      {campaignTitle(featured)}
-                    </p>
-                    <div className="featured-airdrop-banner__badges flex shrink-0 items-center gap-1.5">
-                      <AirdropGuaranteedBadge />
-                      <AirdropStatusMetric status={featured.displayStatus} />
-                    </div>
-                  </div>
+              <div className="featured-airdrop-card__identity min-w-0 flex-1">
+                <p className="featured-airdrop-card__title truncate">
+                  {campaignTitle(featured)}
+                </p>
+                <div className="featured-airdrop-card__badges">
+                  <AirdropTrustBadge />
+                  <AirdropStatusMetric status={featured.displayStatus} />
                 </div>
               </div>
 
+              <ChevronRight
+                className="koth-banner__chevron hidden shrink-0 md:block"
+                strokeWidth={ICON_STROKE}
+                aria-hidden
+              />
+            </div>
+
+            <div className="featured-airdrop-card__stats">
               <AirdropMetricsStrip
-                variant="hero"
-                className="featured-airdrop-banner__metrics min-w-0"
+                layout="featured"
                 reward={
                   <AirdropRewardPoolMetric {...airdropListRewardProps(featured, bnbUsd)} />
                 }
@@ -949,13 +898,7 @@ export function AirdropsListClient({
                             </Link>
                           </td>
                           <td className="px-4 py-3">
-                            <RewardPoolDisplay
-                              item={item}
-                              bnbUsd={bnbUsd}
-                              avatarSize={20}
-                              showUsd
-                              amountClassName="financial-value text-body-sm font-semibold text-pump-text"
-                            />
+                            <RewardPoolDisplay item={item} bnbUsd={bnbUsd} />
                           </td>
                           <td className="px-4 py-3">
                             <span className={airdropStatusBadgeClass(item.displayStatus)}>
