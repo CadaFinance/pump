@@ -1,4 +1,5 @@
 import type { AirdropRules, AirdropSocialTaskInput } from "@/lib/airdrop-rules";
+import { airdropRewardUsd } from "@/lib/airdrop-board-format";
 import { fetchLiveTokenBalance, fetchLiveTokenBalances } from "@/lib/airdrop-onchain";
 import {
   computeParticipantProgress,
@@ -154,6 +155,119 @@ export async function listAirdrops(): Promise<AirdropListItem[]> {
     rewardName: row.reward_name,
     rewardPriceBnb: row.reward_price_bnb,
   }));
+}
+
+export type TokenAirdropPromo = {
+  id: string;
+  title: string | null;
+  totalFunded: string;
+  rewardToken: string | null;
+  rewardSymbol: string | null;
+  rewardPriceBnb: string | null;
+  displayStatus: AirdropDisplayStatus;
+  qualifyStart: string;
+  qualifyEnd: string;
+  claimEnd: string | null;
+};
+
+function pickPrimaryOpenAirdrop(
+  items: Array<TokenAirdropPromo & { rewardUsd: number }>
+): TokenAirdropPromo | null {
+  const open = items.filter((item) => item.displayStatus !== "CLOSED");
+  if (!open.length) return null;
+
+  const byPriority = (list: typeof open) =>
+    [...list].sort((a, b) => b.rewardUsd - a.rewardUsd)[0] ?? null;
+
+  const qualifying = open.filter((i) => i.displayStatus === "QUALIFYING");
+  if (qualifying.length) return byPriority(qualifying);
+
+  const claimable = open.filter((i) => i.displayStatus === "CLAIMABLE");
+  if (claimable.length) return byPriority(claimable);
+
+  const upcoming = open.filter((i) => i.displayStatus === "UPCOMING");
+  if (upcoming.length) return byPriority(upcoming);
+
+  const finalizing = open.filter((i) => i.displayStatus === "FINALIZING");
+  if (finalizing.length) return byPriority(finalizing);
+
+  return null;
+}
+
+/** Active campaigns for a launchpad token (excludes CLOSED / ended). */
+export async function getPrimaryOpenAirdropForToken(
+  linkedToken: string
+): Promise<TokenAirdropPromo | null> {
+  const pool = getLaunchpadPool();
+  const normalized = linkedToken.toLowerCase();
+  const result = await pool.query<{
+    id: string;
+    total_funded: string;
+    reward_token: string | null;
+    rules_json: AirdropRules;
+    status: string;
+    qualify_start: Date;
+    qualify_end: Date;
+    claim_end: Date | null;
+    reward_symbol: string | null;
+    reward_price_bnb: string | null;
+  }>(
+    `
+      SELECT a.id, a.total_funded, a.reward_token, a.rules_json, a.status,
+             a.qualify_start, a.qualify_end, a.claim_end,
+             rt.symbol AS reward_symbol,
+             COALESCE(rb.last_price_zug, 0)::text AS reward_price_bnb
+      FROM airdrops a
+      LEFT JOIN tokens rt ON rt.address = a.reward_token
+      LEFT JOIN bonding_states rb ON rb.token_address = a.reward_token
+      WHERE LOWER(a.linked_token) = $1
+        AND a.status <> 'CLOSED'
+      ORDER BY a.qualify_end DESC
+    `,
+    [normalized]
+  );
+
+  const enriched = result.rows
+    .map((row) => {
+      const qualifyStart = row.qualify_start.toISOString();
+      const qualifyEnd = row.qualify_end.toISOString();
+      const claimEnd = row.claim_end?.toISOString() ?? null;
+      const displayStatus = getAirdropDisplayStatus({
+        status: row.status,
+        qualifyStart,
+        qualifyEnd,
+        claimEnd,
+      });
+      if (displayStatus === "CLOSED") return null;
+
+      const promo: TokenAirdropPromo = {
+        id: row.id,
+        title: row.rules_json?.title ?? null,
+        totalFunded: row.total_funded,
+        rewardToken: row.reward_token,
+        rewardSymbol: row.reward_symbol,
+        rewardPriceBnb: row.reward_price_bnb,
+        displayStatus,
+        qualifyStart,
+        qualifyEnd,
+        claimEnd,
+      };
+      const rewardUsd =
+        airdropRewardUsd(
+          {
+            rewardToken: promo.rewardToken,
+            rewardSymbol: promo.rewardSymbol,
+            rewardPriceBnb: promo.rewardPriceBnb,
+            totalFunded: promo.totalFunded,
+          },
+          null
+        ) ?? (Number(promo.totalFunded) || 0);
+
+      return { ...promo, rewardUsd };
+    })
+    .filter((item): item is TokenAirdropPromo & { rewardUsd: number } => item !== null);
+
+  return pickPrimaryOpenAirdrop(enriched);
 }
 
 export async function getAirdropById(id: string, viewerAddress?: string): Promise<AirdropDetail | null> {
