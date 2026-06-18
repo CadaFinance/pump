@@ -22,6 +22,7 @@ import { tokenDetailPath } from "@/lib/token-routes";
 import { TradeSheet } from "@/components/token/TradeSheet";
 import { ArenaBoardRowQuickActions } from "@/components/arena/ArenaBoardRowQuickActions";
 import { ArenaExploreCoinRow } from "@/components/arena/ArenaExploreCoinRow";
+import { ArenaSymbolWithAirdropGift } from "@/components/arena/ArenaSymbolWithAirdropGift";
 import { ArenaSwipeTradeBar } from "@/components/arena/ArenaSwipeTradeBar";
 import { HoldingSwipeRow } from "@/components/portfolio/HoldingSwipeRow";
 import { buildArenaQuickTradePrefill } from "@/lib/arena-quick-trade";
@@ -61,6 +62,7 @@ import {
 import type { ArenaTradeWsPayload } from "@/lib/arena-live-delta";
 import { patchArenaTokenList } from "@/lib/arena-live-delta";
 import type { AirdropListItem } from "@/lib/db/airdrops";
+import { collectOpenAirdropLinkedTokens } from "@/lib/airdrop-linked-tokens";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   arenaBoardQueryKey,
@@ -489,14 +491,7 @@ export function ArenaListClient({
         const body = (await response.json()) as { data?: AirdropListItem[] };
         if (!response.ok || !body.data) return;
 
-        const addresses = new Set<string>();
-        for (const airdrop of body.data) {
-          if (airdrop.status !== "ACTIVE") continue;
-          addresses.add(airdrop.linkedToken.toLowerCase());
-          if (airdrop.rewardToken) {
-            addresses.add(airdrop.rewardToken.toLowerCase());
-          }
-        }
+        const addresses = collectOpenAirdropLinkedTokens(body.data);
         setAirdropTokenAddresses(addresses);
       } catch {
         // Keep empty set on failure.
@@ -1659,6 +1654,7 @@ export function ArenaListClient({
                   mcapFlash={flashes[`${addressKey}:mcap`]}
                   priceFlash={flashes[`${addressKey}:mcap`]}
                   change24hPct={token.change24hPct ?? null}
+                  openAirdropTokens={airdropTokenAddresses}
                 />
               </HoldingSwipeRow>
             );
@@ -1744,7 +1740,12 @@ export function ArenaListClient({
                       />
                       <div className="flex min-w-0 items-baseline gap-2">
                         <p className="truncate text-body-sm font-medium text-pump-text">{token.name}</p>
-                        <p className="shrink-0 text-caption text-pump-muted">{token.symbol}</p>
+                        <ArenaSymbolWithAirdropGift
+                          symbol={token.symbol}
+                          tokenAddress={token.address}
+                          openAirdropTokens={airdropTokenAddresses}
+                          symbolClassName="text-caption text-pump-muted"
+                        />
                       </div>
                     </div>
                   </td>

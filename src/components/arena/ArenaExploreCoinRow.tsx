@@ -3,6 +3,7 @@
 import type { TokenListItem } from "@/lib/db/launchpad";
 import { TokenAvatar } from "@/components/token/TokenAvatar";
 import { TokenDetailLink } from "@/components/token/TokenDetailLink";
+import { ArenaSymbolWithAirdropGift } from "@/components/arena/ArenaSymbolWithAirdropGift";
 import { PctChange } from "@/components/ui/PctChange";
 import {
   formatExploreMcapLabel,
@@ -11,6 +12,8 @@ import {
 } from "@/lib/arena-board-format";
 
 type FlashTone = "up" | "down";
+
+const EMPTY_AIRDROP_TOKENS = new Set<string>();
 
 function flashText(toneValue: FlashTone | undefined): string {
   if (toneValue === "up") return "live-metric-flash-up";
@@ -26,6 +29,7 @@ type ArenaExploreCoinRowProps = {
   mcapFlash?: FlashTone;
   priceFlash?: FlashTone;
   change24hPct: number | null;
+  openAirdropTokens?: Set<string>;
 };
 
 export function ArenaExploreCoinRow({
@@ -36,6 +40,7 @@ export function ArenaExploreCoinRow({
   mcapFlash,
   priceFlash,
   change24hPct,
+  openAirdropTokens,
 }: ArenaExploreCoinRowProps) {
   const change = change24hPct ?? token.change24hPct ?? null;
   const resolvedPriceUsd =
@@ -55,7 +60,12 @@ export function ArenaExploreCoinRow({
         className="ring-1 ring-pump-border/25"
       />
       <div className="min-w-0">
-        <p className="truncate text-body font-semibold leading-tight text-pump-text">{token.symbol}</p>
+        <ArenaSymbolWithAirdropGift
+          symbol={token.symbol}
+          tokenAddress={token.address}
+          openAirdropTokens={openAirdropTokens ?? EMPTY_AIRDROP_TOKENS}
+          symbolClassName="truncate text-body font-semibold leading-tight text-pump-text"
+        />
         <p
           className={`financial-value mt-0.5 truncate text-caption leading-tight text-pump-muted ${flashText(mcapFlash)}`}
         >
