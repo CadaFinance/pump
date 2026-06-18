@@ -30,6 +30,45 @@ function buildMachine(snapshot: BondingCurveSnapshot, version: number): BondingC
   };
 }
 
+/** DB / WS bonding fields are human decimals; on-chain snapshots are wei strings. */
+function normalizeReserveWei(value: string | undefined, fallback: string): string {
+  if (!value?.trim()) return fallback;
+  const trimmed = value.trim();
+  if (trimmed.includes(".")) {
+    try {
+      return parseEther(trimmed).toString();
+    } catch {
+      return fallback;
+    }
+  }
+  try {
+    const asBig = BigInt(trimmed);
+    if (asBig >= 10n ** 15n) return trimmed;
+    return parseEther(trimmed).toString();
+  } catch {
+    return fallback;
+  }
+}
+
+function normalizeSoldWei(value: string | undefined, fallback: string): string {
+  if (!value?.trim()) return fallback;
+  const trimmed = value.trim();
+  if (trimmed.includes(".")) {
+    try {
+      return parseUnits(trimmed, 18).toString();
+    } catch {
+      return fallback;
+    }
+  }
+  try {
+    const asBig = BigInt(trimmed);
+    if (asBig >= 10n ** 21n) return trimmed;
+    return parseUnits(trimmed, 18).toString();
+  } catch {
+    return fallback;
+  }
+}
+
 export function machineFromSnapshot(
   snapshot: BondingCurveSnapshot,
   version = 0
@@ -48,14 +87,8 @@ export function machineFromTokenReserves(
   paused = false,
   version = 0
 ): BondingCurveMachine {
-  let reserveWei = "0";
-  let soldWei = "0";
-  try {
-    reserveWei = parseEther(reserveBnb || "0").toString();
-    soldWei = parseUnits(tokenSold || "0", 18).toString();
-  } catch {
-    // Keep zero reserves on malformed SSR data.
-  }
+  const reserveWei = normalizeReserveWei(reserveBnb, "0");
+  const soldWei = normalizeSoldWei(tokenSold, "0");
 
   return buildMachine(
     {
@@ -86,8 +119,12 @@ export function applyWsBondingToMachine(
   const prev = machine.snapshot;
   const next: BondingCurveSnapshot = {
     ...prev,
-    reserveZug: bonding.reserveZug ?? prev.reserveZug,
-    soldTokens: bonding.tokenSold ?? prev.soldTokens,
+    reserveZug: bonding.reserveZug
+      ? normalizeReserveWei(bonding.reserveZug, prev.reserveZug)
+      : prev.reserveZug,
+    soldTokens: bonding.tokenSold
+      ? normalizeSoldWei(bonding.tokenSold, prev.soldTokens)
+      : prev.soldTokens,
     paused: prev.paused,
   };
   return buildMachine(next, machine.version + 1);
