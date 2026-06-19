@@ -8,6 +8,9 @@ export function formatTradeError(err: unknown): string {
 
   const lower = raw.toLowerCase();
 
+  if (lower.includes("validateuserop") || lower.includes("aa23") || lower.includes("-32500")) {
+    return "Transaction rejected (AA23) — deposit BNB to your smart wallet address (not login wallet) for trade amount + gas, then retry.";
+  }
   if (lower.includes("user rejected") || lower.includes("user denied")) {
     return "Transaction cancelled in wallet.";
   }

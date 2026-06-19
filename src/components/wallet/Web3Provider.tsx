@@ -2,22 +2,20 @@
 
 import { useState, type ReactNode } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { PrivyProvider } from "@privy-io/react-auth";
-import { WagmiProvider as PrivyWagmiProvider } from "@privy-io/wagmi";
 import { WagmiProvider } from "wagmi";
-import { privyAppId, privyConfig, isPrivyConfigured } from "@/lib/privy-config";
+import { isZeroDevConfigured } from "@/lib/zerodev-config";
 import { wagmiConfig } from "@/lib/wagmi";
 import { PumpWalletProvider, PumpWalletProviderStub } from "@/components/wallet/PumpWalletProvider";
-import { SmartAccountConnectorSetup } from "@/components/wallet/SmartAccountConnectorSetup";
+import { ZeroDevWagmiSetup } from "@/components/wallet/ZeroDevWagmiSetup";
 import { WalletFundingProvider } from "@/components/wallet/WalletFundingProvider";
 
-function MissingPrivyConfig({ children }: { children: ReactNode }) {
+function MissingZeroDevConfig({ children }: { children: ReactNode }) {
   return (
     <>
       {children}
       <div className="pointer-events-none fixed inset-x-0 bottom-0 z-[200] p-2">
         <p className="notice-warning pointer-events-auto text-center text-caption">
-          Set <code className="font-mono">NEXT_PUBLIC_PRIVY_APP_ID</code> in{" "}
+          Set <code className="font-mono">NEXT_PUBLIC_ZERODEV_PROJECT_ID</code> in{" "}
           <code className="font-mono">.env</code> to enable login.
         </p>
       </div>
@@ -38,13 +36,13 @@ export function Web3Provider({ children }: { children: ReactNode }) {
       })
   );
 
-  if (!isPrivyConfigured()) {
+  if (!isZeroDevConfigured()) {
     return (
       <QueryClientProvider client={queryClient}>
         <WagmiProvider config={wagmiConfig}>
           <PumpWalletProviderStub>
             <WalletFundingProvider>
-              <MissingPrivyConfig>{children}</MissingPrivyConfig>
+              <MissingZeroDevConfig>{children}</MissingZeroDevConfig>
             </WalletFundingProvider>
           </PumpWalletProviderStub>
         </WagmiProvider>
@@ -53,15 +51,13 @@ export function Web3Provider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <PrivyProvider appId={privyAppId} config={privyConfig}>
-      <QueryClientProvider client={queryClient}>
-        <PrivyWagmiProvider config={wagmiConfig}>
-          <SmartAccountConnectorSetup />
-          <PumpWalletProvider>
-            <WalletFundingProvider>{children}</WalletFundingProvider>
-          </PumpWalletProvider>
-        </PrivyWagmiProvider>
-      </QueryClientProvider>
-    </PrivyProvider>
+    <QueryClientProvider client={queryClient}>
+      <WagmiProvider config={wagmiConfig}>
+        <PumpWalletProvider>
+          <ZeroDevWagmiSetup />
+          <WalletFundingProvider>{children}</WalletFundingProvider>
+        </PumpWalletProvider>
+      </WagmiProvider>
+    </QueryClientProvider>
   );
 }

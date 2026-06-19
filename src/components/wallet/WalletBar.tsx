@@ -1,7 +1,7 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useRef, useState, type MouseEvent } from "react";
+import Link from "next/link";
 import { formatEther } from "viem";
 import { useAccount, useBalance } from "wagmi";
 import { pumpChain, shortAddress } from "@/config/chain";
@@ -12,7 +12,7 @@ import { bnbToUsd } from "@/lib/format-usd";
 import { copyToClipboard } from "@/lib/copy-to-clipboard";
 import { useWalletFunding } from "@/components/wallet/WalletFundingProvider";
 import { usePumpWallet } from "@/components/wallet/PumpWalletProvider";
-import { isPrivyConfigured } from "@/lib/privy-config";
+import { isZeroDevConfigured } from "@/lib/zerodev-config";
 
 function formatHeaderBalanceUsd(usd: number | null): string {
   if (usd == null || !Number.isFinite(usd)) return "$0.00";
@@ -91,7 +91,7 @@ function WalletMenu({
   onClose,
   onLogout,
 }: WalletMenuProps) {
-  const { openDeposit, openWithdraw, openOnRamp } = useWalletFunding();
+  const { openDeposit, openWithdraw } = useWalletFunding();
   const [copied, setCopied] = useState(false);
 
   async function onCopyAddress(event: MouseEvent<HTMLButtonElement>) {
@@ -158,17 +158,6 @@ function WalletMenu({
           Withdraw
         </button>
       </div>
-
-      <button
-        type="button"
-        onClick={() => {
-          onClose();
-          openOnRamp();
-        }}
-        className="mt-2 w-full secondary-button py-2.5 text-body-sm"
-      >
-        Buy with card
-      </button>
 
       <div className="mt-2 grid grid-cols-2 gap-2">
         <Link
@@ -279,10 +268,8 @@ export function WalletBar() {
   const { ready, authenticated, login } = usePumpWallet();
   const { address, isConnected } = useAccount();
 
-  if (!isPrivyConfigured()) {
-    return (
-      <span className="text-caption text-pump-muted">Configure Privy to sign in</span>
-    );
+  if (!isZeroDevConfigured()) {
+    return <span className="text-caption text-pump-muted">Configure ZeroDev to sign in</span>;
   }
 
   return (
@@ -297,7 +284,7 @@ export function WalletBar() {
       })}
     >
       {!authenticated || !isConnected ? (
-        <button type="button" onClick={login} className="toolbar-btn font-semibold">
+        <button type="button" onClick={login} className="toolbar-btn text-body-sm font-semibold">
           Sign in
         </button>
       ) : address ? (

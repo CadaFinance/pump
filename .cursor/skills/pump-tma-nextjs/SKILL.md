@@ -74,7 +74,7 @@ Do not add providers inside individual pages unless scoped (e.g. admin).
 
 ## Config & security
 
-- CSP in `next.config.ts` — self-hosted scripts only
+- CSP in `next.config.ts` — Privy `frame-src`/`child-src` allowlist + pump CDN (`img-src https:`)
 - Turbopack root pinned to project directory
 - Env vars: `NEXT_PUBLIC_*` for client; secrets server-only
 

@@ -1,81 +1,76 @@
-import { contracts } from "@/config/chain";
+import { maxUint256 } from "viem";
+import { contracts, pumpChain } from "@/config/chain";
 import { bondingCurveManagerAbi } from "@/lib/bonding-curve";
 import { memeFactoryAbi } from "@/lib/abis/meme-factory";
-import {
-  CallPolicyVersion,
-  toCallPolicy,
-  toGasPolicy,
-  toRateLimitPolicy,
-  toTimestampPolicy,
-} from "@zerodev/permissions/policies";
+import { CallPolicyVersion, toCallPolicy, toTimestampPolicy } from "@zerodev/permissions/policies";
 import type { Policy } from "@zerodev/permissions";
-
-/** Max gas per UserOp — POC cap; tune after paymaster cost measurement. */
-const MAX_GAS_PER_USER_OP = 500_000n;
-
-/** Hourly tx cap for session key. */
-const RATE_LIMIT_COUNT = 30;
-const RATE_LIMIT_INTERVAL_SEC = 3600;
 
 const SESSION_DAYS = 7;
 
+function requireContractAddress(label: string, address: string | undefined): `0x${string}` {
+  if (!address || !address.startsWith("0x") || address.length !== 42) {
+    throw new Error(`${label} contract address is not configured for ${pumpChain.name}.`);
+  }
+  return address as `0x${string}`;
+}
+
 export function buildPumpSessionPolicies(): Policy[] {
+  const bondingCurveManager = requireContractAddress(
+    "BondingCurveManager",
+    contracts.bondingCurveManager
+  );
+  const memeFactory = requireContractAddress("MemeFactory", contracts.memeFactory);
+
   const validUntil = Math.floor(Date.now() / 1000) + SESSION_DAYS * 24 * 60 * 60;
 
   const callPolicy = toCallPolicy({
-    policyVersion: CallPolicyVersion.V0_0_4,
+    policyVersion: CallPolicyVersion.V0_0_5,
     permissions: [
       {
-        target: contracts.bondingCurveManager,
+        target: bondingCurveManager,
         abi: bondingCurveManagerAbi,
         functionName: "buy",
+        valueLimit: maxUint256,
       },
       {
-        target: contracts.bondingCurveManager,
+        target: bondingCurveManager,
         abi: bondingCurveManagerAbi,
         functionName: "buyWithReferrer",
+        valueLimit: maxUint256,
       },
       {
-        target: contracts.bondingCurveManager,
+        target: bondingCurveManager,
         abi: bondingCurveManagerAbi,
         functionName: "sell",
       },
       {
-        target: contracts.bondingCurveManager,
+        target: bondingCurveManager,
         abi: bondingCurveManagerAbi,
         functionName: "sellWithReferrer",
       },
       {
-        target: contracts.bondingCurveManager,
+        target: bondingCurveManager,
         abi: bondingCurveManagerAbi,
         functionName: "sellWithPermit",
       },
       {
-        target: contracts.bondingCurveManager,
+        target: bondingCurveManager,
         abi: bondingCurveManagerAbi,
         functionName: "sellWithReferrerAndPermit",
       },
       {
-        target: contracts.memeFactory,
+        target: memeFactory,
         abi: memeFactoryAbi,
         functionName: "createMeme",
       },
     ],
   });
 
-  const gasPolicy = toGasPolicy({
-    allowed: MAX_GAS_PER_USER_OP,
-    enforcePaymaster: true,
-  });
-
-  const rateLimitPolicy = toRateLimitPolicy({
-    count: RATE_LIMIT_COUNT,
-    interval: RATE_LIMIT_INTERVAL_SEC,
-  });
-
   const timestampPolicy = toTimestampPolicy({
     validUntil,
   });
 
-  return [callPolicy, gasPolicy, rateLimitPolicy, timestampPolicy];
+  // Gas + rate-limit policies removed — they caused AA23 when misconfigured (wei budget)
+  // or when stale policy data was embedded in serialized session approvals.
+  return [callPolicy, timestampPolicy];
 }

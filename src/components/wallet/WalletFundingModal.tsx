@@ -1,16 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { ArrowLeft, ArrowUpRight, Wallet } from "lucide-react";
 import QRCode from "qrcode";
-import { ArrowLeft, ArrowUpRight, Check, Copy, CreditCard, QrCode, Wallet } from "lucide-react";
 import { isAddress, parseEther } from "viem";
-import { useAccount } from "wagmi";
-import { explorerAddressUrl, pumpChain, shortAddress } from "@/config/chain";
+import { pumpChain, shortAddress } from "@/config/chain";
+import { FUNDING_CHAIN_LABEL } from "@/lib/wallet-funding";
 import { copyToClipboard } from "@/lib/copy-to-clipboard";
-import { DEPOSIT_WARNINGS, FUNDING_CHAIN_LABEL } from "@/lib/wallet-funding";
 import { ModalPortal } from "@/components/ui/ModalPortal";
 import { usePumpWallet } from "@/components/wallet/PumpWalletProvider";
-import { useSessionTrade } from "@/hooks/useSessionTrade";
 import { formatTradeError } from "@/lib/trade-errors";
 import type { WalletFundingOptions, WalletFundingView } from "@/components/wallet/WalletFundingProvider";
 
@@ -23,50 +21,67 @@ type WalletFundingModalProps = {
   canReturnToChoice: boolean;
   onClose: () => void;
   onViewChange: (view: WalletFundingView) => void;
-  onOpenOnRamp: () => void;
 };
 
-function DepositQrCode({ address }: { address: string }) {
-  const [dataUrl, setDataUrl] = useState<string | null>(null);
+function DepositView({ address, onClose }: { address: string; onClose: () => void }) {
+  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
-
-    void QRCode.toDataURL(address, {
-      margin: 1,
-      width: 220,
-      color: { dark: "#0a0a0a", light: "#ffffff" },
-    })
-      .then((url) => {
-        if (!cancelled) setDataUrl(url);
-      })
-      .catch(() => {
-        if (!cancelled) setDataUrl(null);
-      });
-
+    void QRCode.toDataURL(address, { margin: 1, width: 200 }).then((url) => {
+      if (!cancelled) setQrDataUrl(url);
+    });
     return () => {
       cancelled = true;
     };
   }, [address]);
 
-  if (!dataUrl) {
-    return (
-      <div className="wallet-fund-qr wallet-fund-qr--loading" aria-hidden>
-        <span className="text-caption text-pump-muted">Generating QR…</span>
-      </div>
-    );
+  async function onCopy() {
+    const ok = await copyToClipboard(address);
+    setCopied(ok);
+    if (ok) setTimeout(() => setCopied(false), 2000);
   }
 
   return (
-    <div className="wallet-fund-qr">
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={dataUrl} alt={`QR code for ${shortAddress(address)}`} width={196} height={196} />
+    <div className="mt-4 space-y-4">
+      <p className="text-caption text-pump-muted">
+        Send {pumpChain.nativeCurrency.symbol} on {FUNDING_CHAIN_LABEL} to your smart wallet
+        address below. Funds appear after on-chain confirmation.
+      </p>
+
+      {qrDataUrl ? (
+        <div className="flex justify-center">
+          <img
+            src={qrDataUrl}
+            alt="Deposit address QR code"
+            className="h-48 w-48 border border-pump-border/45 bg-white p-2"
+          />
+        </div>
+      ) : (
+        <div className="flex h-48 items-center justify-center border border-pump-border/45 bg-pump-border/4 text-caption text-pump-muted">
+          Generating QR…
+        </div>
+      )}
+
+      <button
+        type="button"
+        onClick={() => void onCopy()}
+        className="flex w-full items-center justify-between gap-2 border border-pump-border/45 bg-pump-border/4 px-3 py-2.5 text-caption text-pump-text transition hover:bg-pump-border/8"
+      >
+        <span className="financial-value break-all text-left">{address}</span>
+        <span className="shrink-0 text-pump-muted">{copied ? "Copied" : shortAddress(address)}</span>
+      </button>
+
+      <button type="button" onClick={onClose} className="primary-button w-full">
+        Done
+      </button>
     </div>
   );
 }
 
 function WithdrawForm({ onClose }: { onClose: () => void }) {
-  const { withdraw, hasValidSession, requestSessionGrant } = useSessionTrade();
+  const { withdraw } = usePumpWallet();
   const [destination, setDestination] = useState("");
   const [amount, setAmount] = useState("");
   const [pending, setPending] = useState(false);
@@ -77,11 +92,6 @@ function WithdrawForm({ onClose }: { onClose: () => void }) {
     event.preventDefault();
     setError(null);
     setTxHash(null);
-
-    if (!hasValidSession) {
-      requestSessionGrant();
-      return;
-    }
 
     const trimmed = destination.trim();
     if (!isAddress(trimmed)) {
@@ -116,7 +126,7 @@ function WithdrawForm({ onClose }: { onClose: () => void }) {
     <form onSubmit={(e) => void onSubmit(e)} className="mt-4 space-y-4">
       <p className="text-caption text-pump-muted">
         Transfer {pumpChain.nativeCurrency.symbol} from your Pump smart wallet to an external
-        address. No wallet popup when session permission is active.
+        address. Gas is paid from your smart wallet BNB balance.
       </p>
 
       <div>
@@ -182,40 +192,25 @@ export function WalletFundingModal({
   canReturnToChoice,
   onClose,
   onViewChange,
-  onOpenOnRamp,
 }: WalletFundingModalProps) {
-  const { address: wagmiAddress } = useAccount();
-  const { scwAddress, authenticated } = usePumpWallet();
-  const depositAddress = scwAddress ?? wagmiAddress;
-  const [copied, setCopied] = useState(false);
-
-  useEffect(() => {
-    if (!open) setCopied(false);
-  }, [open, view]);
+  const { authenticated, scwAddress } = usePumpWallet();
 
   if (!open) return null;
 
   const title =
-    view === "deposit"
-      ? `Deposit ${pumpChain.nativeCurrency.symbol}`
-      : view === "withdraw"
-        ? `Withdraw ${pumpChain.nativeCurrency.symbol}`
+    view === "withdraw"
+      ? `Withdraw ${pumpChain.nativeCurrency.symbol}`
+      : view === "deposit"
+        ? `Deposit ${pumpChain.nativeCurrency.symbol}`
         : (options.title ?? "Add funds");
 
   const description =
-    view === "deposit"
-      ? `Send native ${pumpChain.nativeCurrency.symbol} to your Pump smart wallet on ${pumpChain.name}. This is your trading balance — not your login wallet.`
-      : view === "withdraw"
-        ? `Move ${pumpChain.nativeCurrency.symbol} from your smart wallet to an external address.`
+    view === "withdraw"
+      ? `Move ${pumpChain.nativeCurrency.symbol} from your smart wallet to an external address.`
+      : view === "deposit"
+        ? `Send ${pumpChain.nativeCurrency.symbol} to your smart wallet on ${FUNDING_CHAIN_LABEL}.`
         : (options.message ??
           `Choose how you want to fund your wallet on ${FUNDING_CHAIN_LABEL}.`);
-
-  async function onCopyAddress() {
-    if (!depositAddress) return;
-    const ok = await copyToClipboard(depositAddress);
-    setCopied(ok);
-    if (ok) setTimeout(() => setCopied(false), 2000);
-  }
 
   return (
     <ModalPortal open={open}>
@@ -235,7 +230,7 @@ export function WalletFundingModal({
           <div className="modal-panel modal-sheet-panel max-w-md rounded-t-2xl border-x-0 border-b-0 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:rounded-xl sm:border-x sm:border-b sm:p-5">
             <div className="flex items-start justify-between gap-3 border-b border-pump-border/45 pb-3">
               <div className="min-w-0">
-                {(view === "deposit" || view === "withdraw") && canReturnToChoice ? (
+                {(view === "withdraw" || view === "deposit") && canReturnToChoice ? (
                   <button
                     type="button"
                     onClick={() => onViewChange("choice")}
@@ -262,22 +257,29 @@ export function WalletFundingModal({
 
             {view === "choice" ? (
               <div className="mt-4 divide-y divide-pump-border/10">
-                <button type="button" onClick={() => onViewChange("deposit")} className="wallet-fund-option">
+                <button
+                  type="button"
+                  onClick={() => onViewChange("deposit")}
+                  className="wallet-fund-option"
+                >
                   <span className="wallet-fund-option-icon">
-                    <QrCode className="h-5 w-5" strokeWidth={ICON_STROKE} aria-hidden />
+                    <Wallet className="h-5 w-5" strokeWidth={ICON_STROKE} aria-hidden />
                   </span>
                   <span className="min-w-0">
                     <span className="block text-body-sm font-semibold text-pump-text">
                       Deposit on-chain
                     </span>
                     <span className="mt-0.5 block text-caption leading-snug text-pump-muted">
-                      Transfer {pumpChain.nativeCurrency.symbol} to your smart wallet address on{" "}
-                      {pumpChain.name}.
+                      Receive {pumpChain.nativeCurrency.symbol} to your smart wallet address.
                     </span>
                   </span>
                 </button>
 
-                <button type="button" onClick={() => onViewChange("withdraw")} className="wallet-fund-option">
+                <button
+                  type="button"
+                  onClick={() => onViewChange("withdraw")}
+                  className="wallet-fund-option"
+                >
                   <span className="wallet-fund-option-icon">
                     <ArrowUpRight className="h-5 w-5" strokeWidth={ICON_STROKE} aria-hidden />
                   </span>
@@ -289,97 +291,18 @@ export function WalletFundingModal({
                     </span>
                   </span>
                 </button>
-
-                <button type="button" onClick={onOpenOnRamp} className="wallet-fund-option">
-                  <span className="wallet-fund-option-icon">
-                    <CreditCard className="h-5 w-5" strokeWidth={ICON_STROKE} aria-hidden />
-                  </span>
-                  <span className="min-w-0">
-                    <span className="block text-body-sm font-semibold text-pump-text">
-                      Buy with card
-                    </span>
-                    <span className="mt-0.5 block text-caption leading-snug text-pump-muted">
-                      Purchase {pumpChain.nativeCurrency.symbol} via card or bank (Privy on-ramp —
-                      configure in dashboard).
-                    </span>
-                  </span>
-                </button>
               </div>
-            ) : view === "withdraw" ? (
-              authenticated ? (
-                <WithdrawForm onClose={onClose} />
+            ) : view === "deposit" ? (
+              authenticated && scwAddress ? (
+                <DepositView address={scwAddress} onClose={onClose} />
               ) : (
-                <p className="notice-warning mt-4">Sign in to withdraw.</p>
+                <p className="notice-warning mt-4">Sign in to view your deposit address.</p>
               )
-            ) : depositAddress ? (
-              <div className="mt-4">
-                <div className="flex flex-col items-center">
-                  <DepositQrCode address={depositAddress} />
-                  <p className="mt-3 text-caption text-pump-muted">Scan to copy smart wallet address</p>
-                </div>
-
-                <div className="mt-4">
-                  <p className="section-label">Your smart wallet address</p>
-                  <div className="share-sheet-copy-row mt-1.5">
-                    <p className="share-sheet-copy-url font-mono text-body-sm" title={depositAddress}>
-                      {depositAddress}
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => void onCopyAddress()}
-                      className="share-sheet-copy-button"
-                    >
-                      {copied ? (
-                        <Check className="h-4 w-4 text-pump-success" strokeWidth={2.25} aria-hidden />
-                      ) : (
-                        <Copy className="h-4 w-4" strokeWidth={ICON_STROKE} aria-hidden />
-                      )}
-                      <span>{copied ? "Copied" : "Copy"}</span>
-                    </button>
-                  </div>
-                </div>
-
-                <div className="mt-4 flex items-center justify-between gap-3 border border-pump-border/45 bg-pump-border/4 px-3 py-2.5">
-                  <span className="flex items-center gap-2 text-caption text-pump-muted">
-                    <Wallet className="h-4 w-4 shrink-0" strokeWidth={ICON_STROKE} aria-hidden />
-                    Network
-                  </span>
-                  <span className="text-body-sm font-semibold text-pump-text">
-                    {FUNDING_CHAIN_LABEL}
-                  </span>
-                </div>
-
-                <ul className="mt-4 space-y-2">
-                  {DEPOSIT_WARNINGS.map((warning) => (
-                    <li key={warning} className="notice-warning leading-snug">
-                      {warning}
-                    </li>
-                  ))}
-                </ul>
-
-                <a
-                  href={explorerAddressUrl(depositAddress)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="mt-4 inline-flex text-caption text-pump-accent transition hover:underline"
-                >
-                  View address on {pumpChain.blockExplorers.default.name}
-                </a>
-              </div>
+            ) : authenticated ? (
+              <WithdrawForm onClose={onClose} />
             ) : (
-              <p className="notice-warning mt-4">Sign in to see your deposit address.</p>
+              <p className="notice-warning mt-4">Sign in to withdraw.</p>
             )}
-
-            {view === "deposit" ? (
-              <div className="mt-5 grid grid-cols-2 gap-2">
-                <button type="button" onClick={onOpenOnRamp} className="secondary-button w-full">
-                  Buy with card
-                </button>
-                <button type="button" onClick={onClose} className="primary-button w-full">
-                  Done
-                </button>
-              </div>
-            ) : null}
           </div>
         </div>
       </>

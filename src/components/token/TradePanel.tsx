@@ -4,8 +4,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { formatEther, formatUnits, parseEther, parseSignature, parseUnits } from "viem";
 import type { TransactionReceipt } from "viem";
 import { useOpenConnectModal } from "@/hooks/useOpenConnectModal";
-import { useSessionTrade } from "@/hooks/useSessionTrade";
+import type { SessionBuyParams, SessionSellParams } from "@/hooks/useSessionTrade";
 import { useWalletFunding } from "@/components/wallet/WalletFundingProvider";
+import { TradeConfirmModal } from "@/components/token/TradeConfirmModal";
+import { assertScwReadyForUserOp } from "@/lib/aa/scw-preflight";
+import { loadTradeAutoConfirm, saveTradeAutoConfirm } from "@/lib/trade-confirm-storage";
 import {
   useAccount,
   useBalance,
@@ -180,10 +183,17 @@ export function TradePanel({
   const { address, isConnected, chain } = useAccount();
   const { data: gasPrice } = useGasPrice({ chainId: pumpChain.id });
   const { openConnectModal } = useOpenConnectModal();
-  const { executeBuy, isPending: isSessionBuyPending, hasValidSession, requestSessionGrant } =
-    useSessionTrade();
   const { openFundChoice } = useWalletFunding();
-  const [sessionBuyTxHash, setSessionBuyTxHash] = useState<`0x${string}` | undefined>();
+  const [tradeConfirmOpen, setTradeConfirmOpen] = useState(false);
+  const [tradeConfirmError, setTradeConfirmError] = useState<string | null>(null);
+  const [pendingTrade, setPendingTrade] = useState<{
+    side: Side;
+    spendLabel: string;
+    receiveLabel: string;
+    buyParams?: SessionBuyParams;
+    sellParams?: Omit<SessionSellParams, "permit">;
+    usePermit?: boolean;
+  } | null>(null);
   const { bnbUsd } = useBnbUsdPrice();
   const [side, setSide] = useState<Side>("buy");
   const [buyInputMode, setBuyInputMode] = useState<TradeInputMode>("usd");
@@ -426,9 +436,7 @@ export function TradePanel({
 
   const { writeContract, data: txHash, isPending, reset, error: writeError } = useWriteContract();
   const { data: receipt, isLoading: isConfirming } = useWaitForTransactionReceipt({ hash: txHash });
-  const { data: sessionBuyReceipt, isLoading: isSessionBuyConfirming } =
-    useWaitForTransactionReceipt({ hash: sessionBuyTxHash });
-  const activeReceipt = receipt ?? sessionBuyReceipt;
+  const activeReceipt = receipt;
 
   useEffect(() => {
     if (!writeError) return;
@@ -806,7 +814,6 @@ export function TradePanel({
       pendingSellRef.current = null;
       pendingTradeReferrerRef.current = null;
       reset();
-      setSessionBuyTxHash(undefined);
       return;
     }
 
@@ -891,7 +898,6 @@ export function TradePanel({
     refetchBalance();
     refetchAllowance();
     reset();
-    setSessionBuyTxHash(undefined);
   }, [
     activeReceipt,
     pendingAction,
@@ -1044,6 +1050,65 @@ export function TradePanel({
     });
   }
 
+  async function submitBuyWriteContract(buyParams: SessionBuyParams) {
+    if (address) {
+      await assertScwReadyForUserOp(address, buyParams.value);
+    }
+    setPendingAction("buy");
+    writeContract({
+      address: contracts.bondingCurveManager,
+      abi: bondingCurveManagerAbi,
+      functionName: buyParams.referrer ? "buyWithReferrer" : "buy",
+      args: buyParams.referrer
+        ? [buyParams.tokenAddress, buyParams.minTokenOut, buyParams.referrer]
+        : [buyParams.tokenAddress, buyParams.minTokenOut],
+      value: buyParams.value,
+      chainId: pumpChain.id,
+    });
+  }
+
+  async function submitSellWriteContract(
+    sellParams: SessionSellParams,
+    usePermit: boolean
+  ) {
+    if (address) {
+      await assertScwReadyForUserOp(address, 0n);
+    }
+    const params = usePermit ? await buildSellParamsWithPermit(sellParams, true) : sellParams;
+    setPendingAction("sell");
+    if (params.permit) {
+      const { deadline, v, r, s } = params.permit;
+      writeContract({
+        address: contracts.bondingCurveManager,
+        abi: bondingCurveManagerAbi,
+        functionName: params.referrer ? "sellWithReferrerAndPermit" : "sellWithPermit",
+        args: params.referrer
+          ? [
+              params.tokenAddress,
+              params.amountWei,
+              params.minBnbOut,
+              deadline,
+              v,
+              r,
+              s,
+              params.referrer,
+            ]
+          : [params.tokenAddress, params.amountWei, params.minBnbOut, deadline, v, r, s],
+        chainId: pumpChain.id,
+      });
+      return;
+    }
+    writeContract({
+      address: contracts.bondingCurveManager,
+      abi: bondingCurveManagerAbi,
+      functionName: params.referrer ? "sellWithReferrer" : "sell",
+      args: params.referrer
+        ? [params.tokenAddress, params.amountWei, params.minBnbOut, params.referrer]
+        : [params.tokenAddress, params.amountWei, params.minBnbOut],
+      chainId: pumpChain.id,
+    });
+  }
+
   function resolvePendingTradeReferrer(): `0x${string}` | null {
     return resolveTradeReferrer({
       storedReferrer: readStoredReferrer(),
@@ -1051,6 +1116,42 @@ export function TradePanel({
       hasTraded,
       traderAddress: address,
     });
+  }
+
+  async function buildSellParamsWithPermit(
+    base: Omit<SessionSellParams, "permit">,
+    usePermit: boolean
+  ): Promise<SessionSellParams> {
+    if (!usePermit) return base;
+    if (!address || !tokenName || permitNonce === undefined) {
+      throw new Error("Could not prepare permit signature. Try again.");
+    }
+
+    const deadline = permitDeadline();
+    const signature = await signTypedDataAsync(
+      buildPermitTypedData({
+        tokenName,
+        tokenAddress,
+        chainId: pumpChain.id,
+        owner: address,
+        spender: contracts.bondingCurveManager,
+        value: PERMIT_ALLOWANCE_MAX,
+        nonce: permitNonce,
+        deadline,
+      })
+    );
+    const parsed = parseSignature(signature);
+    const permitV = parsed.yParity !== undefined ? parsed.yParity + 27 : Number(parsed.v ?? 27);
+
+    return {
+      ...base,
+      permit: {
+        deadline,
+        v: permitV,
+        r: parsed.r,
+        s: parsed.s,
+      },
+    };
   }
 
   async function submitTrade() {
@@ -1112,21 +1213,27 @@ export function TradePanel({
         const tradeReferrer = resolvePendingTradeReferrer();
         pendingTradeReferrerRef.current = tradeReferrer;
         quoteUsdAtSubmitRef.current = estimatedQuotePriceUsd;
-        setPendingAction("buy");
 
-        if (!hasValidSession) {
-          requestSessionGrant();
-          setPendingAction(null);
-          return;
-        }
-
-        const hash = await executeBuy({
+        const buyParams: SessionBuyParams = {
           tokenAddress,
           minTokenOut: minOutWithSlippage(tokenOut),
           value: submitValue,
           referrer: tradeReferrer ?? undefined,
-        });
-        setSessionBuyTxHash(hash);
+        };
+
+        if (!loadTradeAutoConfirm()) {
+          setPendingTrade({
+            side: "buy",
+            spendLabel: `${formatBnbReadable(Number(formatEther(submitValue)))} BNB`,
+            receiveLabel: `${formatReceiveAmount(formatUnits(tokenOut, 18))} ${symbol}`,
+            buyParams,
+          });
+          setTradeConfirmError(null);
+          setTradeConfirmOpen(true);
+          return;
+        }
+
+        await submitBuyWriteContract(buyParams);
         return;
       }
 
@@ -1143,57 +1250,20 @@ export function TradePanel({
         return;
       }
 
-      if (needsApproval && supportsPermit) {
-        if (!address || !tokenName || permitNonce === undefined) {
-          setError("Could not prepare permit signature. Try again.");
-          return;
-        }
-
-        const minBnbOut = minOutWithSlippage(sellQuoteOut);
-        const tradeReferrer = resolvePendingTradeReferrer();
-        pendingTradeReferrerRef.current = tradeReferrer;
-        const deadline = permitDeadline();
-
-        let signature: `0x${string}`;
-        try {
-          signature = await signTypedDataAsync(
-            buildPermitTypedData({
-              tokenName,
-              tokenAddress,
-              chainId: pumpChain.id,
-              owner: address,
-              spender: contracts.bondingCurveManager,
-              value: PERMIT_ALLOWANCE_MAX,
-              nonce: permitNonce,
-              deadline,
-            })
-          );
-        } catch (err) {
-          setError(formatTradeError(err));
-          return;
-        }
-
-        const parsed = parseSignature(signature);
-        const permitV =
-          parsed.yParity !== undefined ? parsed.yParity + 27 : Number(parsed.v ?? 27);
-        quoteUsdAtSubmitRef.current = estimatedQuotePriceUsd;
-        setPendingAction("sell");
-        writeContract({
-          address: contracts.bondingCurveManager,
-          abi: bondingCurveManagerAbi,
-          functionName: tradeReferrer ? "sellWithReferrerAndPermit" : "sellWithPermit",
-          args: tradeReferrer
-            ? [tokenAddress, sellTokenWei, minBnbOut, deadline, permitV, parsed.r, parsed.s, tradeReferrer]
-            : [tokenAddress, sellTokenWei, minBnbOut, deadline, permitV, parsed.r, parsed.s],
-          chainId: pumpChain.id,
-        });
-        return;
-      }
+      const tradeReferrer = resolvePendingTradeReferrer();
+      const minBnbOut = minOutWithSlippage(sellQuoteOut);
+      const baseSellParams: Omit<SessionSellParams, "permit"> = {
+        tokenAddress,
+        amountWei: sellTokenWei,
+        minBnbOut,
+        referrer: tradeReferrer ?? undefined,
+      };
+      const usePermit = needsApproval && supportsPermit;
 
       if (needsLegacyApproval) {
         pendingSellRef.current = {
           amountWei: sellTokenWei,
-          minBnbOut: minOutWithSlippage(sellQuoteOut),
+          minBnbOut,
         };
         setPendingAction("approve");
         writeContract({
@@ -1206,20 +1276,22 @@ export function TradePanel({
         return;
       }
 
-      pendingSellRef.current = null;
-      const tradeReferrer = resolvePendingTradeReferrer();
+      if (!loadTradeAutoConfirm()) {
+        setPendingTrade({
+          side: "sell",
+          spendLabel: `${formatReceiveAmount(formatUnits(sellTokenWei, 18))} ${symbol}`,
+          receiveLabel: `${formatBnbReadable(Number(formatEther(sellQuoteOut)))} BNB`,
+          sellParams: baseSellParams,
+          usePermit,
+        });
+        setTradeConfirmError(null);
+        setTradeConfirmOpen(true);
+        return;
+      }
+
       pendingTradeReferrerRef.current = tradeReferrer;
       quoteUsdAtSubmitRef.current = estimatedQuotePriceUsd;
-      setPendingAction("sell");
-      writeContract({
-        address: contracts.bondingCurveManager,
-        abi: bondingCurveManagerAbi,
-        functionName: tradeReferrer ? "sellWithReferrer" : "sell",
-        args: tradeReferrer
-          ? [tokenAddress, sellTokenWei, minOutWithSlippage(sellQuoteOut), tradeReferrer]
-          : [tokenAddress, sellTokenWei, minOutWithSlippage(sellQuoteOut)],
-        chainId: pumpChain.id,
-      });
+      await submitSellWriteContract(baseSellParams, usePermit);
     } catch (err) {
       setPendingAction(null);
       pendingSellRef.current = null;
@@ -1251,6 +1323,28 @@ export function TradePanel({
     applyBuySliderPercent(100);
   }, [side, maxBuySpendWei, bondingCurve, protocolFeeBps]);
 
+  async function confirmPendingTrade(rememberAutoConfirm: boolean) {
+    if (!pendingTrade) return;
+    setTradeConfirmError(null);
+    saveTradeAutoConfirm(rememberAutoConfirm);
+    try {
+      if (pendingTrade.side === "buy" && pendingTrade.buyParams) {
+        await submitBuyWriteContract(pendingTrade.buyParams);
+      } else if (pendingTrade.side === "sell" && pendingTrade.sellParams) {
+        pendingTradeReferrerRef.current = pendingTrade.sellParams.referrer ?? null;
+        quoteUsdAtSubmitRef.current = estimatedQuotePriceUsd;
+        await submitSellWriteContract(
+          pendingTrade.sellParams,
+          pendingTrade.usePermit ?? false
+        );
+      }
+      setTradeConfirmOpen(false);
+      setPendingTrade(null);
+    } catch (err) {
+      setTradeConfirmError(formatTradeError(err));
+    }
+  }
+
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (needsBnbFunding) {
@@ -1266,7 +1360,7 @@ export function TradePanel({
     await submitTrade();
   }
 
-  const isBusy = isPending || isConfirming || isSessionBuyPending || isSessionBuyConfirming;
+  const isBusy = isPending || isConfirming;
 
   useEffect(() => {
     if (!autoSubmitPendingRef.current || autoSubmitTriggeredRef.current) return;
@@ -1538,6 +1632,22 @@ export function TradePanel({
           </button>
         </div>
       </form>
+
+      <TradeConfirmModal
+        open={tradeConfirmOpen}
+        side={pendingTrade?.side ?? side}
+        symbol={symbol}
+        spendLabel={pendingTrade?.spendLabel ?? ""}
+        receiveLabel={pendingTrade?.receiveLabel ?? ""}
+        loading={isPending}
+        error={tradeConfirmError}
+        onClose={() => {
+          setTradeConfirmOpen(false);
+          setTradeConfirmError(null);
+          setPendingTrade(null);
+        }}
+        onConfirm={(remember) => void confirmPendingTrade(remember)}
+      />
     </section>
   );
 }
