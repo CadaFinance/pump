@@ -1,4 +1,5 @@
 import { createHmac, timingSafeEqual } from "crypto";
+import type { NextRequest } from "next/server";
 
 export const AUTH_COOKIE_NAME = "pump_auth";
 const SESSION_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
@@ -40,10 +41,17 @@ export function verifySessionToken(token: string | undefined | null): string | n
   return telegramId;
 }
 
-export function authCookieOptions() {
+/** Secure cookies on HTTPS tunnels (Cloudflare) even when NODE_ENV=development. */
+export function authCookieOptions(request?: Pick<NextRequest, "headers">) {
+  const forwardedProto = request?.headers.get("x-forwarded-proto")?.split(",")[0]?.trim();
+  const secure =
+    forwardedProto === "https" ||
+    process.env.NODE_ENV === "production" ||
+    process.env.FORCE_SECURE_COOKIES === "true";
+
   return {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure,
     sameSite: "lax" as const,
     path: "/",
     maxAge: SESSION_MAX_AGE_SECONDS,

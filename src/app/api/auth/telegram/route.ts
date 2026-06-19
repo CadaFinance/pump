@@ -5,6 +5,7 @@ import {
   AUTH_COOKIE_NAME,
   createSessionToken,
 } from "@/lib/auth/session-cookie";
+import { isTelegramServerConfigured } from "@/lib/telegram-config";
 import {
   verifyTelegramLogin,
   type TelegramLoginPayload,
@@ -12,7 +13,8 @@ import {
 
 function walletResponse(
   wallet: Awaited<ReturnType<typeof getOrCreateTelegramWallet>>,
-  setCookie: boolean
+  setCookie: boolean,
+  request: NextRequest
 ) {
   const response = NextResponse.json(
     {
@@ -29,7 +31,11 @@ function walletResponse(
   );
 
   if (setCookie) {
-    response.cookies.set(AUTH_COOKIE_NAME, createSessionToken(wallet.telegramId), authCookieOptions());
+    response.cookies.set(
+      AUTH_COOKIE_NAME,
+      createSessionToken(wallet.telegramId),
+      authCookieOptions(request)
+    );
   }
 
   return response;
@@ -37,6 +43,10 @@ function walletResponse(
 
 export async function POST(request: NextRequest) {
   try {
+    if (!isTelegramServerConfigured()) {
+      return NextResponse.json({ error: "Telegram bot is not configured on the server" }, { status: 503 });
+    }
+
     const body = (await request.json()) as TelegramLoginPayload;
     if (!verifyTelegramLogin(body)) {
       return NextResponse.json({ error: "Invalid Telegram login" }, { status: 401 });
@@ -48,7 +58,7 @@ export async function POST(request: NextRequest) {
       firstName: body.first_name ?? null,
     });
 
-    return walletResponse(wallet, true);
+    return walletResponse(wallet, true, request);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
     return NextResponse.json({ error: message }, { status: 500 });

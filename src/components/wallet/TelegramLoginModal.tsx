@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   createTelegramKernelSessionFromWidget,
   type TelegramAccountSession,
@@ -22,24 +22,58 @@ type TelegramLoginModalProps = {
   onSuccess: (session: TelegramAccountSession) => void;
 };
 
+function mountTelegramWidget(container: HTMLDivElement, botUsername: string): void {
+  container.innerHTML = "";
+
+  window.onTelegramAuth = (user) => {
+    container.dispatchEvent(new CustomEvent("pump-telegram-auth", { detail: user }));
+  };
+
+  const script = document.createElement("script");
+  script.src = "https://telegram.org/js/telegram-widget.js?22";
+  script.async = true;
+  script.setAttribute("data-telegram-login", botUsername);
+  script.setAttribute("data-size", "large");
+  script.setAttribute("data-radius", "8");
+  script.setAttribute("data-onauth", "onTelegramAuth(user)");
+  script.setAttribute("data-request-access", "write");
+  script.onerror = () => {
+    container.dispatchEvent(new CustomEvent("pump-telegram-widget-error"));
+  };
+  container.appendChild(script);
+}
+
 export function TelegramLoginModal({ open, onClose, onSuccess }: TelegramLoginModalProps) {
-  const widgetRef = useRef<HTMLDivElement>(null);
   const onSuccessRef = useRef(onSuccess);
+  const [widgetRoot, setWidgetRoot] = useState<HTMLDivElement | null>(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [widgetHost, setWidgetHost] = useState("");
+  const [widgetMissing, setWidgetMissing] = useState(false);
 
   useEffect(() => {
     onSuccessRef.current = onSuccess;
   }, [onSuccess]);
 
   useEffect(() => {
-    if (!open || !widgetRef.current || !telegramBotUsername) return;
-
+    if (!open) {
+      setWidgetRoot(null);
+      return;
+    }
+    setWidgetHost(typeof window !== "undefined" ? window.location.hostname : "");
+    setWidgetMissing(false);
     setError(null);
     setPending(false);
-    widgetRef.current.innerHTML = "";
+  }, [open]);
 
-    window.onTelegramAuth = (user) => {
+  useLayoutEffect(() => {
+    if (!open || !telegramBotUsername || !widgetRoot) return;
+
+    mountTelegramWidget(widgetRoot, telegramBotUsername);
+    setWidgetMissing(false);
+
+    const onAuth = (event: Event) => {
+      const user = (event as CustomEvent<TelegramLoginPayload>).detail;
       void (async () => {
         setPending(true);
         setError(null);
@@ -54,20 +88,32 @@ export function TelegramLoginModal({ open, onClose, onSuccess }: TelegramLoginMo
       })();
     };
 
-    const script = document.createElement("script");
-    script.src = "https://telegram.org/js/telegram-widget.js?22";
-    script.async = true;
-    script.setAttribute("data-telegram-login", telegramBotUsername);
-    script.setAttribute("data-size", "large");
-    script.setAttribute("data-radius", "8");
-    script.setAttribute("data-onauth", "onTelegramAuth(user)");
-    script.setAttribute("data-request-access", "write");
-    widgetRef.current.appendChild(script);
+    const onWidgetError = () => {
+      setWidgetMissing(true);
+      setError("Could not load Telegram login script. Check CSP or ad-blocker.");
+    };
+
+    widgetRoot.addEventListener("pump-telegram-auth", onAuth);
+    widgetRoot.addEventListener("pump-telegram-widget-error", onWidgetError);
+
+    const timer = window.setTimeout(() => {
+      const hasWidget =
+        widgetRoot.querySelector("iframe") ||
+        widgetRoot.querySelector("a") ||
+        widgetRoot.querySelector("script[data-telegram-login]");
+      if (!hasWidget && widgetRoot.childElementCount === 0) {
+        setWidgetMissing(true);
+      }
+    }, 2500);
 
     return () => {
+      window.clearTimeout(timer);
+      widgetRoot.removeEventListener("pump-telegram-auth", onAuth);
+      widgetRoot.removeEventListener("pump-telegram-widget-error", onWidgetError);
       delete window.onTelegramAuth;
+      widgetRoot.innerHTML = "";
     };
-  }, [open]);
+  }, [open, telegramBotUsername, widgetRoot]);
 
   if (!open) return null;
 
@@ -107,21 +153,36 @@ export function TelegramLoginModal({ open, onClose, onSuccess }: TelegramLoginMo
             </div>
 
             <div className="mt-4 space-y-4">
-              <div className="flex min-h-[52px] items-center justify-center rounded-lg border border-pump-border/45 bg-pump-border/4 px-3 py-4">
-                {telegramBotUsername ? (
-                  <div ref={widgetRef} className="flex justify-center" />
-                ) : (
-                  <p className="text-caption text-pump-muted">
-                    Set <code className="font-mono">NEXT_PUBLIC_TELEGRAM_BOT_USERNAME</code> in{" "}
-                    <code className="font-mono">.env</code>.
-                  </p>
-                )}
-              </div>
+              {telegramBotUsername ? (
+                <>
+                  <div className="rounded-lg border border-pump-border/45 bg-pump-border/4 px-3 py-3 text-caption text-pump-muted">
+                    <p>
+                      @BotFather <code className="font-mono">/setdomain</code> →{" "}
+                      <code className="font-mono text-pump-text">{widgetHost || "…"}</code>
+                    </p>
+                  </div>
 
-              <p className="text-caption text-pump-muted">
-                Your smart wallet is tied to your Telegram account and restored via a secure session
-                cookie. Fund the smart wallet with BNB for gas.
-              </p>
+                  <div className="flex min-h-[56px] items-center justify-center rounded-lg border border-pump-border/45 bg-pump-border/4 px-3 py-4">
+                    <div
+                      ref={setWidgetRoot}
+                      className="flex min-h-[44px] w-full justify-center"
+                    />
+                  </div>
+
+                  {widgetMissing ? (
+                    <p className="notice-warning leading-snug">
+                      Telegram button did not load. Check BotFather domain matches the host above. In
+                      Network tab filter by <strong>JS</strong> (not XHR) — you should see{" "}
+                      <code className="font-mono">telegram-widget.js</code>.
+                    </p>
+                  ) : null}
+                </>
+              ) : (
+                <p className="text-caption text-pump-muted">
+                  Set <code className="font-mono">NEXT_PUBLIC_TELEGRAM_BOT_USERNAME</code> in{" "}
+                  <code className="font-mono">.env</code> and restart the dev server.
+                </p>
+              )}
 
               {pending ? (
                 <p className="text-caption text-pump-muted">Opening wallet…</p>

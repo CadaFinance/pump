@@ -15,13 +15,13 @@ const contentSecurityPolicy = [
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https:",
   "font-src 'self'",
-  "connect-src 'self' https: wss: https://rpc.zerodev.app https://*.zerodev.app https://oauth.telegram.org",
+  "connect-src 'self' https: wss: https://oauth.telegram.org",
   "child-src 'self' https://oauth.telegram.org",
   "frame-src 'self' https://oauth.telegram.org",
   "worker-src 'self' blob:",
   "object-src 'none'",
   "base-uri 'self'",
-  "form-action 'self'",
+  "form-action 'self' https://oauth.telegram.org",
   "frame-ancestors 'none'",
 ].join("; ");
 

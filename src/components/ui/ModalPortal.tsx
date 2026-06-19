@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useSyncExternalStore, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 type ModalPortalProps = {
@@ -8,12 +8,20 @@ type ModalPortalProps = {
   children: ReactNode;
 };
 
-export function ModalPortal({ open, children }: ModalPortalProps) {
-  const [mounted, setMounted] = useState(false);
+function subscribe() {
+  return () => {};
+}
 
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+function getClientSnapshot() {
+  return true;
+}
+
+function getServerSnapshot() {
+  return false;
+}
+
+export function ModalPortal({ open, children }: ModalPortalProps) {
+  const isClient = useSyncExternalStore(subscribe, getClientSnapshot, getServerSnapshot);
 
   useEffect(() => {
     if (!open) return;
@@ -24,7 +32,7 @@ export function ModalPortal({ open, children }: ModalPortalProps) {
     };
   }, [open]);
 
-  if (!open || !mounted) return null;
+  if (!open || !isClient) return null;
 
   return createPortal(children, document.body);
 }

@@ -1,0 +1,10 @@
+services:
+  skandha:
+    image: etherspot/skandha:v2-2.0.18
+    container_name: pump-skandha
+    restart: unless-stopped
+    command: standalone --unsafeMode
+    ports:
+      - "127.0.0.1:14337:14337"
+    volumes:
+      - ./skandha.config.json:/usr/app/config.json:ro
