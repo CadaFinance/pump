@@ -48,3 +48,11 @@ export function buildPermitTypedData(params: {
 export function permitDeadline(): bigint {
   return BigInt(Math.floor(Date.now() / 1000) + PERMIT_DEADLINE_SEC);
 }
+
+/** ERC20 permit uses ecrecover(owner); smart contract wallets must approve instead. */
+export function canUseErc20Permit(
+  supportsPermit: boolean,
+  isSmartContractWallet: boolean
+): boolean {
+  return supportsPermit && !isSmartContractWallet;
+}

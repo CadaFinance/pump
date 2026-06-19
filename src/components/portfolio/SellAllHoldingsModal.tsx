@@ -6,13 +6,16 @@ import {
   useAccount,
   useSignTypedData,
   useWaitForTransactionReceipt,
-  useWriteContract,
 } from "wagmi";
 import { useOpenConnectModal } from "@/hooks/useOpenConnectModal";
+import { useKernelWriteContract } from "@/hooks/useKernelWriteContract";
+import { usePumpWallet } from "@/components/wallet/PumpWalletProvider";
+import { assertScwReadyForUserOp } from "@/lib/aa/scw-preflight";
 import { useBnbUsdPrice } from "@/hooks/useBnbUsdPrice";
 import { contracts, pumpChain } from "@/config/chain";
 import { bondingCurveManagerAbi } from "@/lib/bonding-curve";
 import {
+  approveBatchSellAllowances,
   batchItemsForSellBatch,
   batchSellWriteArgs,
   buildSellBatchQueue,
@@ -83,7 +86,10 @@ export function SellAllHoldingsModal({
   const { isConnected, chain } = useAccount();
   const { bnbUsd } = useBnbUsdPrice();
   const { signTypedDataAsync } = useSignTypedData();
-  const { writeContract, data: txHash, isPending, reset, error: writeError } = useWriteContract();
+  const { kernelClient } = usePumpWallet();
+  const isScw = Boolean(kernelClient);
+  const { writeContract, data: txHash, isPending, reset, error: writeError } =
+    useKernelWriteContract();
   const { isLoading: isConfirming, isSuccess: txSuccess } = useWaitForTransactionReceipt({
     hash: txHash,
   });
@@ -221,47 +227,72 @@ export function SellAllHoldingsModal({
         permitNonce: string;
       } => !target.hasAllowance && Boolean(target.tokenName && target.permitNonce != null)
     );
+    const needsAllowanceTargets = targets.filter((target) => !target.hasAllowance);
+    let sellTargets = targets;
 
     try {
-      const { restored, missing } = restorePermitsForTargets(address, pumpChain.id, targets);
-      signedPermitsRef.current = restored;
-
-      if (missing.length > 0) {
-        setSigningPermits(true);
-        setSignProgress(`0 / ${missing.length}`);
-        signedPermitsRef.current = await signAllBatchSellPermits(
-          missing.map((target) => ({
-            tokenAddress: target.tokenAddress,
-            symbol: target.symbol,
-            tokenName: target.tokenName!,
-            tokenIn: target.tokenIn,
-            minZugOut: target.minZugOut,
-            permitNonce: target.permitNonce!,
-          })),
-          {
-            owner: address as Address,
+      if (needsAllowanceTargets.length > 0) {
+        if (isScw && kernelClient) {
+          await assertScwReadyForUserOp(address as Address, 0n);
+          setSigningPermits(true);
+          setSignProgress(`0 / ${needsAllowanceTargets.length}`);
+          await approveBatchSellAllowances({
+            kernelClient,
             spender: contracts.bondingCurveManager,
-            chainId: pumpChain.id,
-            signTypedDataAsync,
-            onProgress: (signed, total) => setSignProgress(`${signed} / ${total}`),
-          },
-          restored
-        );
+            tokenAddresses: needsAllowanceTargets.map(
+              (target) => target.tokenAddress as Address
+            ),
+            onProgress: (done, total) => setSignProgress(`${done} / ${total}`),
+          });
+          sellTargets = sellTargets.map((target) =>
+            target.hasAllowance ? target : { ...target, hasAllowance: true }
+          );
+          setTargets(sellTargets);
+          signedPermitsRef.current = new Map();
+          setSignProgress(null);
+          setSigningPermits(false);
+        } else {
+          const { restored, missing } = restorePermitsForTargets(address, pumpChain.id, targets);
+          signedPermitsRef.current = restored;
 
-        const permitNonces: Record<string, string> = {};
-        for (const target of permitTargets) {
-          if (target.permitNonce) {
-            permitNonces[target.tokenAddress.toLowerCase()] = target.permitNonce;
+          if (missing.length > 0) {
+            setSigningPermits(true);
+            setSignProgress(`0 / ${missing.length}`);
+            signedPermitsRef.current = await signAllBatchSellPermits(
+              missing.map((target) => ({
+                tokenAddress: target.tokenAddress,
+                symbol: target.symbol,
+                tokenName: target.tokenName!,
+                tokenIn: target.tokenIn,
+                minZugOut: target.minZugOut,
+                permitNonce: target.permitNonce!,
+              })),
+              {
+                owner: address as Address,
+                spender: contracts.bondingCurveManager,
+                chainId: pumpChain.id,
+                signTypedDataAsync,
+                onProgress: (signed, total) => setSignProgress(`${signed} / ${total}`),
+              },
+              restored
+            );
+
+            const permitNonces: Record<string, string> = {};
+            for (const target of permitTargets) {
+              if (target.permitNonce) {
+                permitNonces[target.tokenAddress.toLowerCase()] = target.permitNonce;
+              }
+            }
+            persistPermitCache(address, pumpChain.id, signedPermitsRef.current, permitNonces);
+            setSignProgress(null);
+            setSigningPermits(false);
           }
+
+          setCachedPermitCount(signedPermitsRef.current.size);
         }
-        persistPermitCache(address, pumpChain.id, signedPermitsRef.current, permitNonces);
-        setSignProgress(null);
-        setSigningPermits(false);
       }
 
-      setCachedPermitCount(signedPermitsRef.current.size);
-
-      const batches = buildSellBatchQueue(targets, MAX_SELL_BATCH);
+      const batches = buildSellBatchQueue(sellTargets, MAX_SELL_BATCH);
       setBatchQueue(batches);
       setBatchIndex(0);
       submitSellBatch(batches[0]!);
@@ -274,6 +305,8 @@ export function SellAllHoldingsModal({
   }, [
     address,
     isConnected,
+    isScw,
+    kernelClient,
     openConnectModal,
     reset,
     signTypedDataAsync,
@@ -447,8 +480,12 @@ export function SellAllHoldingsModal({
               {isBusy
                 ? signingPermits
                   ? signProgress
-                    ? `Signing permits ${signProgress}…`
-                    : "Signing permits…"
+                    ? isScw
+                      ? `Approving tokens ${signProgress}…`
+                      : `Signing permits ${signProgress}…`
+                    : isScw
+                      ? "Approving tokens…"
+                      : "Signing permits…"
                   : isPending
                     ? "Confirm sell in wallet…"
                     : `Selling batch ${sellProgress}…`

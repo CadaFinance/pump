@@ -33,9 +33,6 @@ export function createKernelClientFromAccount(
     chain: pumpChain,
     bundlerTransport: createZeroDevBundlerTransport(),
     client: publicClient,
-    userOperation: {
-      estimateFeesPerGas: async () => publicClient.estimateFeesPerGas(),
-    },
   });
 }
 

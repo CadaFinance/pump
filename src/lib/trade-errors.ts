@@ -32,6 +32,9 @@ export function formatTradeError(err: unknown): string {
   if (lower.includes("insufficientallowance")) {
     return "Token approval missing — approve again, then sell.";
   }
+  if (lower.includes("insufficientbalance") || lower.includes("0xf4d678b8")) {
+    return "Insufficient token balance — refresh the page or wait for your last sell to confirm.";
+  }
   if (lower.includes("transferfailed")) {
     return "Token transfer failed — check balance and approval.";
   }

@@ -16,12 +16,13 @@ import {
   useReadContract,
   useSignTypedData,
   useWaitForTransactionReceipt,
-  useWriteContract,
 } from "wagmi";
+import { useKernelWriteContract } from "@/hooks/useKernelWriteContract";
+import { usePumpWallet } from "@/components/wallet/PumpWalletProvider";
 import { contracts, pumpChain } from "@/config/chain";
 import { erc20Abi, maxUint256 } from "@/lib/abis/erc20";
 import { memeTokenAbi } from "@/lib/abis/meme-token";
-import { buildPermitTypedData, PERMIT_ALLOWANCE_MAX, permitDeadline } from "@/lib/erc20-permit";
+import { buildPermitTypedData, canUseErc20Permit, PERMIT_ALLOWANCE_MAX, permitDeadline } from "@/lib/erc20-permit";
 import {
   bondingCurveManagerAbi,
   bondingCurveFromSnapshot,
@@ -210,6 +211,7 @@ export function TradePanel({
   const [receiveExpanded, setReceiveExpanded] = useState(false);
   const [pendingAction, setPendingAction] = useState<"buy" | "sell" | "approve" | null>(null);
   const pendingSellRef = useRef<{ amountWei: bigint; minBnbOut: bigint } | null>(null);
+  const handledReceiptHashRef = useRef<`0x${string}` | null>(null);
   const pendingTradeReferrerRef = useRef<`0x${string}` | null>(null);
   const quoteUsdAtSubmitRef = useRef<number | null>(null);
   /** Set when buy amount comes from slider/max — keeps token mode aligned with BNB/USD spend. */
@@ -387,6 +389,8 @@ export function TradePanel({
   });
 
   const { signTypedDataAsync } = useSignTypedData();
+  const { kernelClient } = usePumpWallet();
+  const isScw = Boolean(kernelClient);
 
   const { data: boundReferrer } = useReadContract({
     address: contracts.bondingCurveManager,
@@ -434,7 +438,8 @@ export function TradePanel({
   const buyQuoteOut = localBuyQuoteOut;
   const sellQuoteOut = localSellQuoteOut;
 
-  const { writeContract, data: txHash, isPending, reset, error: writeError } = useWriteContract();
+  const { writeContract, data: txHash, isPending, reset, error: writeError } =
+    useKernelWriteContract();
   const { data: receipt, isLoading: isConfirming } = useWaitForTransactionReceipt({ hash: txHash });
   const activeReceipt = receipt;
 
@@ -442,6 +447,7 @@ export function TradePanel({
     if (!writeError) return;
     setPendingAction(null);
     pendingSellRef.current = null;
+    handledReceiptHashRef.current = null;
     setError(formatTradeError(writeError));
   }, [writeError]);
 
@@ -472,7 +478,8 @@ export function TradePanel({
     allowance !== undefined &&
     allowance < sellTokenWei;
 
-  const needsLegacyApproval = needsApproval && !supportsPermit;
+  const sellSupportsPermit = canUseErc20Permit(supportsPermit, isScw);
+  const needsLegacyApproval = needsApproval && !sellSupportsPermit;
 
   const activeInputMode = side === "buy" ? buyInputMode : sellInputMode;
 
@@ -806,9 +813,12 @@ export function TradePanel({
   }, [side, buyInputMode, linkedBuySpendWei, bondingCurve, protocolFeeBps, amount]);
 
   useEffect(() => {
-    if (!activeReceipt || !pendingAction) return;
+    if (!activeReceipt || !pendingAction || !txHash) return;
+    if (activeReceipt.transactionHash !== txHash) return;
+    if (handledReceiptHashRef.current === txHash) return;
 
     if (activeReceipt.status !== "success") {
+      handledReceiptHashRef.current = txHash;
       setError("Transaction reverted on-chain. Check wallet balance, token status, and amount.");
       setPendingAction(null);
       pendingSellRef.current = null;
@@ -818,13 +828,24 @@ export function TradePanel({
     }
 
     if (pendingAction === "approve") {
+      handledReceiptHashRef.current = txHash;
       const pendingSell = pendingSellRef.current;
-      refetchAllowance();
 
-      if (pendingSell) {
+      void (async () => {
+        await refetchAllowance();
+
+        if (!pendingSell) {
+          setPendingAction(null);
+          pendingSellRef.current = null;
+          reset();
+          return;
+        }
+
         const tradeReferrer = resolvePendingTradeReferrer();
         pendingTradeReferrerRef.current = tradeReferrer;
         quoteUsdAtSubmitRef.current = estimatedQuotePriceUsd;
+        handledReceiptHashRef.current = null;
+        reset();
         setPendingAction("sell");
         writeContract({
           address: contracts.bondingCurveManager,
@@ -835,15 +856,11 @@ export function TradePanel({
             : [tokenAddress, pendingSell.amountWei, pendingSell.minBnbOut],
           chainId: pumpChain.id,
         });
-        return;
-      }
-
-      setPendingAction(null);
-      pendingSellRef.current = null;
-      reset();
+      })();
       return;
     }
 
+    handledReceiptHashRef.current = txHash;
     setAmount("");
     setError(null);
     setLinkedBuySpendWei(null);
@@ -894,13 +911,14 @@ export function TradePanel({
       quoteUsdAtSubmitRef.current = null;
     }
 
-    void refetchBnbBalance();
-    refetchBalance();
-    refetchAllowance();
+    void (async () => {
+      await Promise.all([refetchBnbBalance(), refetchBalance(), refetchAllowance()]);
+    })();
     reset();
   }, [
     activeReceipt,
     pendingAction,
+    txHash,
     refetchAllowance,
     refetchBalance,
     refetchBnbBalance,
@@ -1258,7 +1276,7 @@ export function TradePanel({
         minBnbOut,
         referrer: tradeReferrer ?? undefined,
       };
-      const usePermit = needsApproval && supportsPermit;
+      const usePermit = needsApproval && sellSupportsPermit;
 
       if (needsLegacyApproval) {
         pendingSellRef.current = {
@@ -1323,6 +1341,14 @@ export function TradePanel({
     applyBuySliderPercent(100);
   }, [side, maxBuySpendWei, bondingCurve, protocolFeeBps]);
 
+  useEffect(() => {
+    if (side !== "sell" || tokenBalance === undefined || sellTokenWei <= 0n) return;
+    if (sellTokenWei <= tokenBalance) return;
+    if (pendingAction !== null || isPending || isConfirming) return;
+    applySellTokenWei(tokenBalance);
+    setError("Amount adjusted to your current token balance.");
+  }, [side, tokenBalance, sellTokenWei, pendingAction, isPending, isConfirming]);
+
   async function confirmPendingTrade(rememberAutoConfirm: boolean) {
     if (!pendingTrade) return;
     setTradeConfirmError(null);
@@ -1331,12 +1357,30 @@ export function TradePanel({
       if (pendingTrade.side === "buy" && pendingTrade.buyParams) {
         await submitBuyWriteContract(pendingTrade.buyParams);
       } else if (pendingTrade.side === "sell" && pendingTrade.sellParams) {
-        pendingTradeReferrerRef.current = pendingTrade.sellParams.referrer ?? null;
-        quoteUsdAtSubmitRef.current = estimatedQuotePriceUsd;
-        await submitSellWriteContract(
-          pendingTrade.sellParams,
-          pendingTrade.usePermit ?? false
-        );
+        const sellParams = pendingTrade.sellParams;
+        if (needsLegacyApproval) {
+          pendingSellRef.current = {
+            amountWei: sellParams.amountWei,
+            minBnbOut: sellParams.minBnbOut,
+          };
+          pendingTradeReferrerRef.current = sellParams.referrer ?? null;
+          quoteUsdAtSubmitRef.current = estimatedQuotePriceUsd;
+          setPendingAction("approve");
+          writeContract({
+            address: tokenAddress,
+            abi: erc20Abi,
+            functionName: "approve",
+            args: [contracts.bondingCurveManager, maxUint256],
+            chainId: pumpChain.id,
+          });
+        } else {
+          pendingTradeReferrerRef.current = sellParams.referrer ?? null;
+          quoteUsdAtSubmitRef.current = estimatedQuotePriceUsd;
+          await submitSellWriteContract(
+            sellParams,
+            pendingTrade.usePermit ?? false
+          );
+        }
       }
       setTradeConfirmOpen(false);
       setPendingTrade(null);
@@ -1361,6 +1405,7 @@ export function TradePanel({
   }
 
   const isBusy = isPending || isConfirming;
+  const sellFlowActive = side === "sell" && pendingAction !== null;
 
   useEffect(() => {
     if (!autoSubmitPendingRef.current || autoSubmitTriggeredRef.current) return;
@@ -1393,24 +1438,23 @@ export function TradePanel({
           ? isBusy
             ? "Buying…"
             : "Buy"
-          : needsLegacyApproval || pendingAction === "approve"
+          : pendingAction === "approve"
             ? isBusy
-              ? pendingAction === "sell"
-                ? "Selling…"
-                : "Approving…"
-              : `Approve ${symbol}`
-            : needsApproval && supportsPermit
-              ? isBusy
-                ? "Selling…"
-                : "Sell"
-              : isBusy
-                ? "Selling…"
-                : "Sell";
+              ? "Approving…"
+              : "Approve & sell"
+            : pendingAction === "sell" || (isBusy && sellFlowActive)
+              ? "Selling…"
+              : needsLegacyApproval
+                ? "Approve & sell"
+                : isBusy
+                  ? "Selling…"
+                  : "Sell";
 
   const submitDisabled =
     isConnected &&
     (wrongChain ||
       isBusy ||
+      sellFlowActive ||
       paused ||
       balancePending ||
       (insufficientBalance && !needsBnbFunding));
@@ -1618,7 +1662,13 @@ export function TradePanel({
         {txHash ? (
           <p className="mx-4 mb-3 text-caption text-pump-muted break-all">
             Tx: {txHash}
-            {isConfirming ? " — confirming…" : null}
+            {isConfirming
+              ? pendingAction === "approve"
+                ? " — confirming approval…"
+                : pendingAction === "sell"
+                  ? " — confirming sell…"
+                  : " — confirming…"
+              : null}
           </p>
         ) : null}
 

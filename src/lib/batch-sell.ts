@@ -1,5 +1,8 @@
-import type { Address } from "viem";
-import { parseSignature } from "viem";
+import type { KernelAccountClient } from "@zerodev/sdk";
+import { encodeFunctionData, parseSignature, type Address } from "viem";
+import { erc20Abi, maxUint256 } from "@/lib/abis/erc20";
+import { createPumpPublicClient } from "@/lib/aa/kernel-account";
+import { pumpChain } from "@/config/chain";
 import { buildPermitTypedData, PERMIT_ALLOWANCE_MAX, permitDeadline } from "@/lib/erc20-permit";
 
 export const MAX_SELL_BATCH = 10;
@@ -179,6 +182,37 @@ export function batchItemsForSellBatch(
       permit: cached.permit,
     };
   });
+}
+
+/** One approve UserOp per token — required for Kernel SCW (permit signatures are EOA-only). */
+export async function approveBatchSellAllowances(params: {
+  kernelClient: KernelAccountClient;
+  spender: Address;
+  tokenAddresses: Address[];
+  onProgress?: (done: number, total: number) => void;
+}): Promise<void> {
+  const publicClient = createPumpPublicClient();
+  const { kernelClient, spender, tokenAddresses } = params;
+  if (!kernelClient.account) {
+    throw new Error("Smart account not ready.");
+  }
+
+  let done = 0;
+  for (const tokenAddress of tokenAddresses) {
+    const hash = await kernelClient.sendTransaction({
+      account: kernelClient.account,
+      chain: pumpChain,
+      to: tokenAddress,
+      data: encodeFunctionData({
+        abi: erc20Abi,
+        functionName: "approve",
+        args: [spender, maxUint256],
+      }),
+    } as Parameters<typeof kernelClient.sendTransaction>[0]);
+    await publicClient.waitForTransactionReceipt({ hash });
+    done += 1;
+    params.onProgress?.(done, tokenAddresses.length);
+  }
 }
 
 export function batchSellWriteArgs(items: BatchSellItem[]) {
