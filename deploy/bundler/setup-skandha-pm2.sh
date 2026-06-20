@@ -68,18 +68,18 @@ PY
 
 cd "$SKANDHA_DIR"
 
-if [[ ! -x "./skandha" ]]; then
+SKANDHA_CLI_LIB="$SKANDHA_DIR/packages/cli/lib/index.js"
+if [[ ! -f "$SKANDHA_CLI_LIB" ]]; then
   echo "Building Skandha (one-time, ~3–8 min)…"
   bun install
   if [[ -d node_modules/bcrypto ]]; then
     (cd node_modules/bcrypto && bun install)
   fi
   bun run build
-  chmod +x ./skandha 2>/dev/null || true
 fi
 
-if [[ ! -f "./skandha" ]] && [[ ! -x "./skandha" ]]; then
-  echo "Build finished but ./skandha binary not found. Check $SKANDHA_DIR"
+if [[ ! -f "$SKANDHA_CLI_LIB" ]]; then
+  echo "Build failed — missing $SKANDHA_CLI_LIB"
   exit 1
 fi
 
