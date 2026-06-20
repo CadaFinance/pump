@@ -12,7 +12,7 @@
 
 | Katman | Teknoloji |
 |--------|-----------|
-| Auth | Telegram Login Widget + session cookie |
+| Auth | Telegram **OIDC** (`oauth.telegram.org`) + legacy HMAC fallback + session cookie |
 | Smart account | ZeroDev Kernel **0.3.1**, EntryPoint **0.7** |
 | Bundler | **Alto** self-host (`deploy/bundler/alto/`) |
 | Client SDK | `@zerodev/sdk`, viem 2 account-abstraction |
@@ -37,7 +37,12 @@ NEXT_PUBLIC_CHAIN_ID=97
 
 # Bundler — proxy → Alto on VM
 BUNDLER_RPC_URL=http://127.0.0.1:4337/rpc
-# NEXT_PUBLIC_BUNDLER_RPC_URL=/api/bundler/rpc  # default
+
+# Telegram OIDC — see pump-tma-telegram-auth skill
+NEXT_PUBLIC_TELEGRAM_BOT_USERNAME=your_bot
+NEXT_PUBLIC_TELEGRAM_OIDC_CLIENT_ID=1234567890
+TELEGRAM_BOT_TOKEN=...
+TELEGRAM_OIDC_CLIENT_SECRET=...
 
 # Alto setup only (VM, not Next.js)
 BUNDLER_CHAIN_RPC_URL=https://bnb-testnet.g.alchemy.com/v2/PAYG_KEY

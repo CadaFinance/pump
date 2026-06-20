@@ -15,9 +15,10 @@ function MissingTelegramConfig({ children }: { children: ReactNode }) {
       {children}
       <div className="pointer-events-none fixed inset-x-0 bottom-0 z-[200] p-2">
         <p className="notice-warning pointer-events-auto text-center text-caption">
-          Set <code className="font-mono">NEXT_PUBLIC_TELEGRAM_BOT_USERNAME</code> in{" "}
-          <code className="font-mono">.env</code> to enable login. Server also needs{" "}
-          <code className="font-mono">TELEGRAM_BOT_TOKEN</code>.
+          Set <code className="font-mono">NEXT_PUBLIC_TELEGRAM_BOT_USERNAME</code>,{" "}
+          <code className="font-mono">NEXT_PUBLIC_TELEGRAM_OIDC_CLIENT_ID</code>, and server{" "}
+          <code className="font-mono">TELEGRAM_BOT_TOKEN</code> /{" "}
+          <code className="font-mono">TELEGRAM_OIDC_CLIENT_SECRET</code>.
         </p>
       </div>
     </>

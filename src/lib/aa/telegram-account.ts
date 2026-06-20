@@ -65,10 +65,32 @@ async function fetchWalletSession(path: string, init?: RequestInit): Promise<Tel
 export async function createTelegramKernelSessionFromWidget(
   payload: TelegramLoginPayload
 ): Promise<TelegramAccountSession> {
+  return createTelegramKernelSessionFromLegacy(payload);
+}
+
+export async function createTelegramKernelSessionFromLegacy(
+  payload: TelegramLoginPayload
+): Promise<TelegramAccountSession> {
   const session = await fetchWalletSession("/api/auth/telegram", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
+  });
+  markTelegramSessionHint();
+  return session;
+}
+
+export async function createTelegramKernelSessionFromOidc(input: {
+  idToken: string;
+  nonce?: string;
+}): Promise<TelegramAccountSession> {
+  const session = await fetchWalletSession("/api/auth/telegram/oidc", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id_token: input.idToken,
+      nonce: input.nonce,
+    }),
   });
   markTelegramSessionHint();
   return session;

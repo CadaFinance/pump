@@ -16,6 +16,7 @@ Before implementing or researching in this repo, read and follow the matching sk
 | **Seamless Web3 UX / AA araştırma** | `.cursor/docs/seamless-web3-ux-research-2026.md` |
 | **Self-hosted bundler (Alto, no Pimlico SaaS)** | `.cursor/docs/self-hosted-bundler-2026.md` |
 | **Account Abstraction (Telegram/Kernel/Alto)** | `pump-tma-account-abstraction` |
+| **Telegram OIDC login / auth modal / BotFather** | `pump-tma-telegram-auth` |
 | Design system, tokens, nav, layout specs | `pump-tma-design-system` |
 | Pages, modals, forms, styling, trading UI | `pump-tma-ui-ux` |
 | App Router pages, API routes, PostgreSQL layer | `pump-tma-nextjs` |
