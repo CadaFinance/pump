@@ -12,6 +12,7 @@ export type TelegramOidcCookiePayload = {
   state: string;
   nonce: string;
   codeVerifier: string;
+  redirectUri: string;
 };
 
 export function getTelegramOidcClientId(): string {

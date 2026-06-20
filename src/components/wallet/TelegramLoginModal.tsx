@@ -23,6 +23,7 @@ type TelegramLoginModalProps = {
 
 type TelegramAuthConfig = {
   clientId: string;
+  publicOrigin: string;
   redirectReady: boolean;
 };
 
@@ -92,7 +93,10 @@ export function TelegramLoginModal({ open, onClose, onSuccess }: TelegramLoginMo
     const legacyVisible = showLegacy || (isMobile && !config?.redirectReady);
     if (!open || !legacyVisible || !telegramBotUsername || !legacyRoot) return;
 
-    const authUrl = getTelegramLegacyRedirectUri(window.location.origin);
+    const legacyOrigin =
+      config?.publicOrigin ??
+      (typeof window !== "undefined" ? window.location.origin.replace("0.0.0.0", "localhost") : "");
+    const authUrl = getTelegramLegacyRedirectUri(legacyOrigin);
     mountLegacyRedirectWidget(legacyRoot, telegramBotUsername, authUrl);
     setLegacyWidgetMissing(false);
 
@@ -114,7 +118,7 @@ export function TelegramLoginModal({ open, onClose, onSuccess }: TelegramLoginMo
       legacyRoot.removeEventListener("pump-telegram-widget-error", onWidgetError);
       legacyRoot.innerHTML = "";
     };
-  }, [open, showLegacy, isMobile, config?.redirectReady, legacyRoot]);
+  }, [open, showLegacy, isMobile, config?.redirectReady, config?.publicOrigin, legacyRoot]);
 
   const completeOidcLogin = useCallback(async (idToken: string, nonce: string) => {
     const session = await createTelegramKernelSessionFromOidc({ idToken, nonce });

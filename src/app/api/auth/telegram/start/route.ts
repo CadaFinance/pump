@@ -15,6 +15,7 @@ import {
   createPkceVerifier,
 } from "@/lib/telegram/oidc-pkce";
 import { isTelegramServerConfigured } from "@/lib/telegram-config";
+import { resolvePublicAppOrigin } from "@/lib/telegram/public-app-origin";
 import { authCookieOptions } from "@/lib/auth/session-cookie";
 
 export async function GET(request: NextRequest) {
@@ -30,7 +31,7 @@ export async function GET(request: NextRequest) {
   }
 
   const clientId = getTelegramOidcClientId();
-  const origin = new URL(request.url).origin;
+  const origin = resolvePublicAppOrigin(request);
   const redirectUri = getTelegramOidcRedirectUri(origin);
   const state = createOidcState();
   const nonce = createOidcNonce();
@@ -45,7 +46,7 @@ export async function GET(request: NextRequest) {
     codeChallenge,
   });
 
-  const payload: TelegramOidcCookiePayload = { state, nonce, codeVerifier };
+  const payload: TelegramOidcCookiePayload = { state, nonce, codeVerifier, redirectUri };
   const response = NextResponse.json(
     { data: { authUrl } },
     { headers: { "Cache-Control": "no-store" } }

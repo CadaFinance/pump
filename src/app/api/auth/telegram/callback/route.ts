@@ -2,7 +2,6 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getOrCreateTelegramWallet } from "@/lib/aa/telegram-wallet-server";
 import {
   exchangeTelegramAuthCode,
-  getTelegramOidcRedirectUri,
   TELEGRAM_OIDC_COOKIE,
   type TelegramOidcCookiePayload,
 } from "@/lib/telegram/oidc-config";
@@ -12,6 +11,7 @@ import {
   walletAuthJsonResponse,
 } from "@/lib/telegram/wallet-auth-response";
 import { isTelegramServerConfigured } from "@/lib/telegram-config";
+import { resolvePublicAppOrigin } from "@/lib/telegram/public-app-origin";
 import { authCookieOptions } from "@/lib/auth/session-cookie";
 
 function readOidcCookie(request: NextRequest): TelegramOidcCookiePayload | null {
@@ -20,7 +20,7 @@ function readOidcCookie(request: NextRequest): TelegramOidcCookiePayload | null 
 
   try {
     const parsed = JSON.parse(raw) as TelegramOidcCookiePayload;
-    if (!parsed.state || !parsed.nonce || !parsed.codeVerifier) return null;
+    if (!parsed.state || !parsed.nonce || !parsed.codeVerifier || !parsed.redirectUri) return null;
     return parsed;
   } catch {
     return null;
@@ -58,7 +58,7 @@ export async function GET(request: NextRequest) {
       return redirectAfterTelegramLogin(request, "error", "Telegram login session expired. Try again.");
     }
 
-    const redirectUri = getTelegramOidcRedirectUri(url.origin);
+    const redirectUri = cookiePayload.redirectUri;
     const { idToken } = await exchangeTelegramAuthCode({
       code,
       redirectUri,
@@ -75,7 +75,7 @@ export async function GET(request: NextRequest) {
     const sessionResponse = walletAuthJsonResponse(wallet, true, request);
     clearOidcCookie(sessionResponse, request);
 
-    const completeUrl = new URL("/auth/telegram/complete", url.origin);
+    const completeUrl = new URL("/auth/telegram/complete", resolvePublicAppOrigin(request));
     completeUrl.searchParams.set("status", "ok");
     const redirect = NextResponse.redirect(completeUrl);
     for (const cookie of sessionResponse.cookies.getAll()) {
