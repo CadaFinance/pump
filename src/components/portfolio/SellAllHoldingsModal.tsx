@@ -6,6 +6,7 @@ import {
   useAccount,
   useSignTypedData,
   useWaitForTransactionReceipt,
+  useWriteContract,
 } from "wagmi";
 import { useOpenConnectModal } from "@/hooks/useOpenConnectModal";
 import { useKernelWriteContract } from "@/hooks/useKernelWriteContract";
@@ -48,6 +49,8 @@ type SellAllHoldingsModalProps = {
   holdings: SellAllHoldingInput[];
   address: string;
   onSold: () => void;
+  /** `max` = single-token sell max (admin / quick exit). Default `all`. */
+  variant?: "all" | "max";
 };
 
 async function fetchPreparedTargets(
@@ -81,6 +84,7 @@ export function SellAllHoldingsModal({
   holdings,
   address,
   onSold,
+  variant = "all",
 }: SellAllHoldingsModalProps) {
   const { openConnectModal } = useOpenConnectModal();
   const { isConnected, chain } = useAccount();
@@ -88,11 +92,24 @@ export function SellAllHoldingsModal({
   const { signTypedDataAsync } = useSignTypedData();
   const { kernelClient } = usePumpWallet();
   const isScw = Boolean(kernelClient);
-  const { writeContract, data: txHash, isPending, reset, error: writeError } =
-    useKernelWriteContract();
-  const { isLoading: isConfirming, isSuccess: txSuccess } = useWaitForTransactionReceipt({
-    hash: txHash,
+  const kernelWrite = useKernelWriteContract();
+  const eoaWrite = useWriteContract();
+  const txHash = isScw ? kernelWrite.data : eoaWrite.data;
+  const isPending = isScw ? kernelWrite.isPending : eoaWrite.isPending;
+  const writeError = isScw ? kernelWrite.error : eoaWrite.error;
+  const reset = isScw ? kernelWrite.reset : eoaWrite.reset;
+  const writeContract = isScw ? kernelWrite.writeContract : eoaWrite.writeContract;
+  const { isLoading: isConfirmingScw, isSuccess: txSuccessScw } = useWaitForTransactionReceipt({
+    hash: kernelWrite.data,
+    query: { enabled: isScw && Boolean(kernelWrite.data) },
   });
+  const { isLoading: isConfirmingEoa, isSuccess: txSuccessEoa } = useWaitForTransactionReceipt({
+    hash: eoaWrite.data,
+    query: { enabled: !isScw && Boolean(eoaWrite.data) },
+  });
+  const isConfirming = isScw ? isConfirmingScw : isConfirmingEoa;
+  const txSuccess = isScw ? txSuccessScw : txSuccessEoa;
+  const isSingleSell = variant === "max" || holdings.length === 1;
 
   const [targets, setTargets] = useState<PreparedBatchSellTarget[]>([]);
   const [skipped, setSkipped] = useState(0);
@@ -372,10 +389,12 @@ export function SellAllHoldingsModal({
           <div className="flex items-start justify-between gap-3 border-b border-pump-border/45 pb-3">
             <div className="min-w-0">
               <h2 id="sell-all-holdings-title" className="text-h3 font-semibold text-pump-text">
-                Sell all holdings
+                {isSingleSell ? "Sell max" : "Sell all holdings"}
               </h2>
               <p className="mt-0.5 text-caption text-pump-muted">
-                Exit every bonding-curve position in on-chain batches.
+                {isSingleSell
+                  ? "Exit your full balance on the bonding curve."
+                  : "Exit every bonding-curve position in on-chain batches."}
               </p>
             </div>
             <button
@@ -489,7 +508,9 @@ export function SellAllHoldingsModal({
                   : isPending
                     ? "Confirm sell in wallet…"
                     : `Selling batch ${sellProgress}…`
-                : `Sell all${targets.length > 0 ? ` (${targets.length})` : ""}`}
+                : isSingleSell
+                  ? "Sell max"
+                  : `Sell all${targets.length > 0 ? ` (${targets.length})` : ""}`}
             </button>
             <button type="button" onClick={onClose} className="secondary-button flex-1 py-2.5 text-body-sm">
               Cancel

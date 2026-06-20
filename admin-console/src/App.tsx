@@ -1,10 +1,13 @@
 import { AdminPanel } from "@/components/admin/AdminPanel";
+import { PumpWalletProviderStub } from "@/components/wallet/PumpWalletProvider";
 import { MetaMaskGate } from "./MetaMaskGate";
 
 export function App() {
   return (
-    <MetaMaskGate>
-      <AdminPanel />
-    </MetaMaskGate>
+    <PumpWalletProviderStub>
+      <MetaMaskGate>
+        <AdminPanel />
+      </MetaMaskGate>
+    </PumpWalletProviderStub>
   );
 }

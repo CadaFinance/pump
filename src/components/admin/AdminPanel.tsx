@@ -31,6 +31,7 @@ import { AdminMinInitialBuyModal } from "@/components/admin/AdminMinInitialBuyMo
 import { AdminFeeExemptModal } from "@/components/admin/AdminFeeExemptModal";
 import { AdminProtocolFeeModal } from "@/components/admin/AdminProtocolFeeModal";
 import { AdminSystemHealth } from "@/components/admin/AdminSystemHealth";
+import { AdminPortfolioTab } from "@/components/admin/AdminPortfolioTab";
 import {
   AdminAlert,
   AdminBlock,
@@ -887,6 +888,14 @@ export function AdminPanel() {
             </AdminDataRow>
           </AdminDataTable>
         </AdminBlock>
+      </AdminTabPanel>
+
+      <AdminTabPanel id="portfolio" active={activeTab}>
+        {address ? (
+          <AdminPortfolioTab address={address} />
+        ) : (
+          <AdminEmptyState title="Connect MetaMask to view portfolio holdings." />
+        )}
       </AdminTabPanel>
 
       <AdminTabPanel id="treasury" active={activeTab}>

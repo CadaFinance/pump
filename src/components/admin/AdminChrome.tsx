@@ -3,10 +3,17 @@
 import { type ReactNode } from "react";
 import { explorerAddressUrl, shortAddress } from "@/config/chain";
 
-export type AdminTabId = "dashboard" | "treasury" | "airdrops" | "promo" | "contracts";
+export type AdminTabId =
+  | "dashboard"
+  | "portfolio"
+  | "treasury"
+  | "airdrops"
+  | "promo"
+  | "contracts";
 
 const TAB_ITEMS: { id: AdminTabId; label: string }[] = [
   { id: "dashboard", label: "Dashboard" },
+  { id: "portfolio", label: "Portfolio" },
   { id: "treasury", label: "Treasury & fees" },
   { id: "airdrops", label: "Airdrop sweeps" },
   { id: "promo", label: "Promo tasks" },
