@@ -3,12 +3,12 @@ module.exports = {
     {
       name: "pump-skandha",
       cwd: "/opt/skandha",
-      script: "./skandha",
-      args: "standalone --unsafeMode",
-      interpreter: "/bin/bash",
+      script: "/root/.bun/bin/bun",
+      args: "--bun ./packages/cli/bin/skandha.js standalone --unsafeMode",
+      interpreter: "none",
       env: {
         NODE_ENV: "production",
-        PATH: `${process.env.HOME}/.bun/bin:/usr/local/bin:/usr/bin:/bin`,
+        PATH: "/root/.bun/bin:/usr/local/bin:/usr/bin:/bin",
       },
       max_restarts: 10,
       restart_delay: 5000,

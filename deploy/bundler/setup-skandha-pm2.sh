@@ -26,7 +26,7 @@ ensure_build_deps() {
   if command -v apt-get >/dev/null 2>&1; then
     echo "Installing build deps: ${missing[*]}…"
     apt-get update -qq
-    DEBIAN_FRONTEND=noninteractive apt-get install -y -qq git curl python3 unzip ca-certificates
+    DEBIAN_FRONTEND=noninteractive apt-get install -y -qq git curl python3 unzip ca-certificates build-essential
   else
     echo "Missing: ${missing[*]}. Install manually (e.g. apt install unzip git curl python3)."
     exit 1
