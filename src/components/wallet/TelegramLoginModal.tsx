@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
-  createTelegramKernelSessionFromLegacy,
   createTelegramKernelSessionFromOidc,
   type TelegramAccountSession,
 } from "@/lib/aa/telegram-account";
@@ -70,6 +69,7 @@ export function TelegramLoginModal({ open, onClose, onSuccess }: TelegramLoginMo
     setWidgetHost(typeof window !== "undefined" ? window.location.hostname : "");
     setError(null);
     setPending(false);
+    setShowLegacy(isMobile);
 
     void fetch("/api/auth/telegram/config", { cache: "no-store" })
       .then(async (response) => {
@@ -86,10 +86,11 @@ export function TelegramLoginModal({ open, onClose, onSuccess }: TelegramLoginMo
         setConfig(null);
         setError(formatTradeError(err));
       });
-  }, [open]);
+  }, [open, isMobile]);
 
   useLayoutEffect(() => {
-    if (!open || !showLegacy || !telegramBotUsername || !legacyRoot) return;
+    const legacyVisible = showLegacy || (isMobile && !config?.redirectReady);
+    if (!open || !legacyVisible || !telegramBotUsername || !legacyRoot) return;
 
     const authUrl = getTelegramLegacyRedirectUri(window.location.origin);
     mountLegacyRedirectWidget(legacyRoot, telegramBotUsername, authUrl);
@@ -113,7 +114,7 @@ export function TelegramLoginModal({ open, onClose, onSuccess }: TelegramLoginMo
       legacyRoot.removeEventListener("pump-telegram-widget-error", onWidgetError);
       legacyRoot.innerHTML = "";
     };
-  }, [open, showLegacy, legacyRoot]);
+  }, [open, showLegacy, isMobile, config?.redirectReady, legacyRoot]);
 
   const completeOidcLogin = useCallback(async (idToken: string, nonce: string) => {
     const session = await createTelegramKernelSessionFromOidc({ idToken, nonce });
@@ -144,7 +145,10 @@ export function TelegramLoginModal({ open, onClose, onSuccess }: TelegramLoginMo
 
   const handleOidcRedirect = useCallback(async () => {
     if (!config?.redirectReady) {
-      setError("Telegram app login requires TELEGRAM_OIDC_CLIENT_SECRET on the server.");
+      setError(
+        "Mobile redirect needs TELEGRAM_OIDC_CLIENT_SECRET on the server. Use the Telegram button below meanwhile."
+      );
+      setShowLegacy(true);
       return;
     }
 
@@ -163,10 +167,15 @@ export function TelegramLoginModal({ open, onClose, onSuccess }: TelegramLoginMo
     }
   }, [config?.redirectReady]);
 
-  const telegramAppUrl =
-    telegramBotUsername && typeof window !== "undefined"
-      ? `https://t.me/${telegramBotUsername}`
-      : null;
+  const handlePrimaryLogin = useCallback(() => {
+    if (isMobile) {
+      void handleOidcRedirect();
+      return;
+    }
+    void handleOidcPopup();
+  }, [handleOidcPopup, handleOidcRedirect, isMobile]);
+
+  const legacyVisible = showLegacy || (isMobile && !config?.redirectReady);
 
   if (!open) return null;
 
@@ -192,7 +201,9 @@ export function TelegramLoginModal({ open, onClose, onSuccess }: TelegramLoginMo
                   Sign in with Telegram
                 </h2>
                 <p className="mt-0.5 text-caption text-pump-muted">
-                  Opens Telegram for approval, then restores your Pump smart wallet on this device.
+                  {isMobile
+                    ? "Approve in the Telegram app — Safari will return here automatically."
+                    : "Opens Telegram for approval, then restores your Pump smart wallet on this device."}
                 </p>
               </div>
               <button
@@ -206,12 +217,11 @@ export function TelegramLoginModal({ open, onClose, onSuccess }: TelegramLoginMo
             </div>
 
             <div className="mt-4 space-y-4">
-              {telegramBotUsername ? (
-                <div className="rounded-lg border border-pump-border/45 bg-pump-border/4 px-3 py-3 text-caption text-pump-muted">
+              {isMobile ? (
+                <div className="rounded-lg border border-pump-accent/25 bg-pump-accent/8 px-3 py-3 text-caption text-pump-muted">
                   <p>
-                    @BotFather → <code className="font-mono">/setdomain</code> and Web Login Allowed URLs
-                    must include{" "}
-                    <code className="font-mono text-pump-text">{widgetHost || "…"}</code>
+                    On iPhone/Android, do <strong>not</strong> switch apps manually after approving.
+                    Tap the button below — Telegram opens, you approve, then Safari reloads signed in.
                   </p>
                 </div>
               ) : null}
@@ -219,63 +229,65 @@ export function TelegramLoginModal({ open, onClose, onSuccess }: TelegramLoginMo
               <div className="space-y-2">
                 <button
                   type="button"
-                  onClick={() => void handleOidcPopup()}
+                  onClick={handlePrimaryLogin}
                   disabled={pending || !config?.clientId}
                   className="primary-button w-full py-2.5 text-body-sm disabled:opacity-50"
                 >
-                  {pending ? "Waiting for Telegram…" : "Continue with Telegram"}
+                  {pending
+                    ? "Opening Telegram…"
+                    : isMobile
+                      ? "Continue in Telegram app"
+                      : "Continue with Telegram"}
                 </button>
 
-                {isMobile ? (
+                {!isMobile ? (
                   <button
                     type="button"
                     onClick={() => void handleOidcRedirect()}
                     disabled={pending || !config?.redirectReady}
                     className="secondary-button w-full py-2.5 text-body-sm disabled:opacity-50"
                   >
-                    Open in Telegram app
+                    Use redirect login
                   </button>
                 ) : null}
-
-                {telegramAppUrl ? (
-                  <a
-                    href={telegramAppUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="secondary-button block w-full py-2.5 text-center text-body-sm"
-                  >
-                    Open @{telegramBotUsername} in Telegram
-                  </a>
-                ) : null}
               </div>
 
-              <div className="rounded-lg border border-pump-border/30 bg-pump-border/4 px-3 py-3 text-caption text-pump-muted">
-                <p>
-                  Mobile tip: use <strong>Open in Telegram app</strong> if the popup asks for a phone
-                  number. We do not request your phone scope — only Telegram profile + bot messages.
-                </p>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setShowLegacy((current) => !current)}
-                className="text-caption text-pump-muted underline-offset-2 hover:text-pump-text hover:underline"
-              >
-                {showLegacy ? "Hide legacy login" : "Having trouble? Try legacy redirect login"}
-              </button>
-
-              {showLegacy && telegramBotUsername ? (
+              {isMobile && legacyVisible && telegramBotUsername ? (
                 <div className="space-y-3 rounded-lg border border-pump-border/45 bg-pump-border/4 p-3">
                   <p className="text-caption text-pump-muted">
-                    Legacy redirect widget — useful when OIDC popup is blocked on mobile browsers.
+                    Fallback: tap Telegram&apos;s button below. After Log in, Safari should open
+                    automatically — wait a few seconds.
                   </p>
                   <div className="flex min-h-[56px] items-center justify-center">
                     <div ref={setLegacyRoot} className="flex min-h-[44px] w-full justify-center" />
                   </div>
                   {legacyWidgetMissing ? (
                     <p className="notice-warning leading-snug">
-                      Legacy widget did not load. Confirm BotFather domain and Allowed URLs include this
-                      host.
+                      Widget did not load. Confirm @BotFather <code className="font-mono">/setdomain</code>{" "}
+                      includes <code className="font-mono">{widgetHost || "this host"}</code>.
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {!isMobile ? (
+                <button
+                  type="button"
+                  onClick={() => setShowLegacy((current) => !current)}
+                  className="text-caption text-pump-muted underline-offset-2 hover:text-pump-text hover:underline"
+                >
+                  {showLegacy ? "Hide legacy login" : "Having trouble? Try legacy redirect login"}
+                </button>
+              ) : null}
+
+              {!isMobile && showLegacy && telegramBotUsername ? (
+                <div className="space-y-3 rounded-lg border border-pump-border/45 bg-pump-border/4 p-3">
+                  <div className="flex min-h-[56px] items-center justify-center">
+                    <div ref={setLegacyRoot} className="flex min-h-[44px] w-full justify-center" />
+                  </div>
+                  {legacyWidgetMissing ? (
+                    <p className="notice-warning leading-snug">
+                      Legacy widget did not load. Confirm BotFather domain includes this host.
                     </p>
                   ) : null}
                 </div>
@@ -283,12 +295,12 @@ export function TelegramLoginModal({ open, onClose, onSuccess }: TelegramLoginMo
 
               {!telegramBotUsername ? (
                 <p className="text-caption text-pump-muted">
-                  Set <code className="font-mono">NEXT_PUBLIC_TELEGRAM_BOT_USERNAME</code> and OIDC client
-                  id in <code className="font-mono">.env</code>, then restart the dev server.
+                  Set <code className="font-mono">NEXT_PUBLIC_TELEGRAM_BOT_USERNAME</code> in{" "}
+                  <code className="font-mono">.env</code>.
                 </p>
               ) : null}
 
-              {pending ? <p className="text-caption text-pump-muted">Waiting for Telegram approval…</p> : null}
+              {pending ? <p className="text-caption text-pump-muted">Waiting for Telegram…</p> : null}
               {error ? <p className="notice-warning leading-snug">{error}</p> : null}
             </div>
           </div>
