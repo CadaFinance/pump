@@ -1,24 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import {
-  createTelegramKernelSessionFromOidc,
-  type TelegramAccountSession,
-} from "@/lib/aa/telegram-account";
-import { getTelegramLegacyRedirectUri } from "@/lib/telegram/oidc-constants";
-import { telegramBotUsername } from "@/lib/telegram-config";
-import {
-  createTelegramLoginNonce,
-  isLikelyMobileBrowser,
-  openTelegramOidcPopup,
-} from "@/lib/telegram/telegram-login-sdk";
-import { formatTradeError } from "@/lib/trade-errors";
+import { ShieldCheck } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ModalPortal } from "@/components/ui/ModalPortal";
+import { ICON_STROKE } from "@/lib/icons";
+import { formatTradeError } from "@/lib/trade-errors";
 
 type TelegramLoginModalProps = {
   open: boolean;
   onClose: () => void;
-  onSuccess: (session: TelegramAccountSession) => void;
+  onSuccess: () => void;
 };
 
 type TelegramAuthConfig = {
@@ -27,50 +18,29 @@ type TelegramAuthConfig = {
   redirectReady: boolean;
 };
 
-function mountLegacyRedirectWidget(container: HTMLDivElement, botUsername: string, authUrl: string): void {
-  container.innerHTML = "";
-
-  const script = document.createElement("script");
-  script.src = "https://telegram.org/js/telegram-widget.js?22";
-  script.async = true;
-  script.setAttribute("data-telegram-login", botUsername);
-  script.setAttribute("data-size", "large");
-  script.setAttribute("data-radius", "8");
-  script.setAttribute("data-auth-url", authUrl);
-  script.setAttribute("data-request-access", "write");
-  script.onerror = () => {
-    container.dispatchEvent(new CustomEvent("pump-telegram-widget-error"));
-  };
-  container.appendChild(script);
+function TelegramBrandIcon() {
+  return (
+    <svg className="h-5 w-5 shrink-0" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      <path d="M9.417 15.181l-.397 5.584c.568 0 .814-.244 1.109-.537l2.663-2.545 5.518 4.041c1.012.558 1.725.264 1.998-.929L23.93 3.821c.321-1.496-.541-2.081-1.527-1.732L1.293 9.738c-1.453.558-1.435 1.357-.248 1.715l5.918 1.846L18.916 5.87c.684-.451 1.307-.201.794.315" />
+    </svg>
+  );
 }
 
 export function TelegramLoginModal({ open, onClose, onSuccess }: TelegramLoginModalProps) {
   const onSuccessRef = useRef(onSuccess);
   const [config, setConfig] = useState<TelegramAuthConfig | null>(null);
-  const [legacyRoot, setLegacyRoot] = useState<HTMLDivElement | null>(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [widgetHost, setWidgetHost] = useState("");
-  const [showLegacy, setShowLegacy] = useState(false);
-  const [legacyWidgetMissing, setLegacyWidgetMissing] = useState(false);
-  const isMobile = isLikelyMobileBrowser();
 
   useEffect(() => {
     onSuccessRef.current = onSuccess;
   }, [onSuccess]);
 
   useEffect(() => {
-    if (!open) {
-      setLegacyRoot(null);
-      setShowLegacy(false);
-      setLegacyWidgetMissing(false);
-      return;
-    }
+    if (!open) return;
 
-    setWidgetHost(typeof window !== "undefined" ? window.location.hostname : "");
     setError(null);
     setPending(false);
-    setShowLegacy(isMobile);
 
     void fetch("/api/auth/telegram/config", { cache: "no-store" })
       .then(async (response) => {
@@ -79,7 +49,7 @@ export function TelegramLoginModal({ open, onClose, onSuccess }: TelegramLoginMo
           error?: string;
         };
         if (!response.ok || !body.data?.clientId) {
-          throw new Error(body.error ?? "Telegram OIDC is not configured.");
+          throw new Error(body.error ?? "Telegram sign-in is not configured.");
         }
         setConfig(body.data);
       })
@@ -87,95 +57,35 @@ export function TelegramLoginModal({ open, onClose, onSuccess }: TelegramLoginMo
         setConfig(null);
         setError(formatTradeError(err));
       });
-  }, [open, isMobile]);
+  }, [open]);
 
-  useLayoutEffect(() => {
-    const legacyVisible = showLegacy || (isMobile && !config?.redirectReady);
-    if (!open || !legacyVisible || !telegramBotUsername || !legacyRoot) return;
-
-    const legacyOrigin =
-      config?.publicOrigin ??
-      (typeof window !== "undefined" ? window.location.origin.replace("0.0.0.0", "localhost") : "");
-    const authUrl = getTelegramLegacyRedirectUri(legacyOrigin);
-    mountLegacyRedirectWidget(legacyRoot, telegramBotUsername, authUrl);
-    setLegacyWidgetMissing(false);
-
-    const onWidgetError = () => setLegacyWidgetMissing(true);
-    legacyRoot.addEventListener("pump-telegram-widget-error", onWidgetError);
-
-    const timer = window.setTimeout(() => {
-      const hasWidget =
-        legacyRoot.querySelector("iframe") ||
-        legacyRoot.querySelector("a") ||
-        legacyRoot.querySelector("script[data-telegram-login]");
-      if (!hasWidget && legacyRoot.childElementCount === 0) {
-        setLegacyWidgetMissing(true);
-      }
-    }, 2500);
-
-    return () => {
-      window.clearTimeout(timer);
-      legacyRoot.removeEventListener("pump-telegram-widget-error", onWidgetError);
-      legacyRoot.innerHTML = "";
-    };
-  }, [open, showLegacy, isMobile, config?.redirectReady, config?.publicOrigin, legacyRoot]);
-
-  const completeOidcLogin = useCallback(async (idToken: string, nonce: string) => {
-    const session = await createTelegramKernelSessionFromOidc({ idToken, nonce });
-    onSuccessRef.current(session);
-  }, []);
-
-  const handleOidcPopup = useCallback(async () => {
+  const handleContinue = useCallback(async () => {
     if (!config?.clientId) {
-      setError("Telegram login is not configured yet.");
+      setError("Telegram sign-in is not configured yet.");
+      return;
+    }
+
+    if (!config.redirectReady) {
+      setError("Telegram sign-in is temporarily unavailable. Contact support.");
       return;
     }
 
     setPending(true);
     setError(null);
-    try {
-      const nonce = createTelegramLoginNonce();
-      const { idToken } = await openTelegramOidcPopup({
-        clientId: config.clientId,
-        nonce,
-      });
-      await completeOidcLogin(idToken, nonce);
-    } catch (err) {
-      setError(formatTradeError(err));
-    } finally {
-      setPending(false);
-    }
-  }, [completeOidcLogin, config?.clientId]);
 
-  const handleOidcRedirect = useCallback(async () => {
-    if (!config?.redirectReady) {
-      setError(
-        "Mobile redirect needs TELEGRAM_OIDC_CLIENT_SECRET on the server. Use the Telegram button below meanwhile."
-      );
-      setShowLegacy(true);
-      return;
-    }
-
-    setPending(true);
-    setError(null);
     try {
       const response = await fetch("/api/auth/telegram/start", { cache: "no-store" });
       const body = (await response.json()) as { data?: { authUrl?: string }; error?: string };
       if (!response.ok || !body.data?.authUrl) {
-        throw new Error(body.error ?? "Could not start Telegram login.");
+        throw new Error(body.error ?? "Could not start sign-in.");
       }
+      onSuccessRef.current();
       window.location.assign(body.data.authUrl);
     } catch (err) {
       setError(formatTradeError(err));
       setPending(false);
     }
-  }, [config?.redirectReady]);
-
-  const handlePrimaryLogin = useCallback(() => {
-    void handleOidcRedirect();
-  }, [handleOidcRedirect]);
-
-  const legacyVisible = showLegacy || (isMobile && !config?.redirectReady);
+  }, [config?.clientId, config?.redirectReady]);
 
   if (!open) return null;
 
@@ -189,115 +99,71 @@ export function TelegramLoginModal({ open, onClose, onSuccess }: TelegramLoginMo
           onClick={onClose}
         />
         <div
-          className="modal-sheet-host z-[111]"
+          className="modal-backdrop-shell fixed inset-0 z-[111] flex items-center justify-center p-4"
           role="dialog"
           aria-modal="true"
           aria-labelledby="telegram-login-title"
+          aria-describedby="telegram-login-description"
         >
-          <div className="modal-panel modal-sheet-panel max-w-md rounded-t-2xl border-x-0 border-b-0 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:rounded-xl sm:border-x sm:border-b sm:p-5">
-            <div className="flex items-start justify-between gap-3 border-b border-pump-border/45 pb-3">
-              <div className="min-w-0">
-                <h2 id="telegram-login-title" className="text-h3 font-semibold text-pump-text">
-                  Sign in with Telegram
-                </h2>
-                <p className="mt-0.5 text-caption text-pump-muted">
-                  {isMobile
-                    ? "Approve in the Telegram app — Safari will return here automatically."
-                    : "Opens Telegram for approval, then restores your Pump smart wallet on this device."}
-                </p>
-              </div>
+          <div className="modal-panel pointer-events-auto w-full max-w-[420px] overflow-hidden shadow-xl shadow-black/20">
+            <div className="relative px-6 pt-8 pb-2 sm:px-8">
               <button
                 type="button"
                 onClick={onClose}
-                className="inline-flex h-8 w-8 shrink-0 items-center justify-center text-pump-muted transition hover:bg-pump-border/10 hover:text-pump-text"
+                disabled={pending}
+                className="absolute right-4 top-4 inline-flex h-9 w-9 items-center justify-center rounded-md text-pump-muted transition hover:bg-pump-border/10 hover:text-pump-text disabled:opacity-40"
                 aria-label="Close"
               >
-                ×
+                <span className="text-xl leading-none" aria-hidden>
+                  ×
+                </span>
               </button>
-            </div>
 
-            <div className="mt-4 space-y-4">
-              {isMobile ? (
-                <div className="rounded-lg border border-pump-accent/25 bg-pump-accent/8 px-3 py-3 text-caption text-pump-muted">
-                  <p>
-                    On iPhone/Android, do <strong>not</strong> switch apps manually after approving.
-                    Tap the button below — Telegram opens, you approve, then Safari reloads signed in.
-                  </p>
-                </div>
-              ) : null}
-
-              <div className="space-y-2">
-                <button
-                  type="button"
-                  onClick={handlePrimaryLogin}
-                  disabled={pending || !config?.clientId}
-                  className="primary-button w-full py-2.5 text-body-sm disabled:opacity-50"
-                >
-                  {pending ? "Opening Telegram…" : "Continue in Telegram app"}
-                </button>
-
-                {!isMobile ? (
-                  <button
-                    type="button"
-                    onClick={() => void handleOidcPopup()}
-                    disabled={pending || !config?.clientId}
-                    className="secondary-button w-full py-2.5 text-body-sm disabled:opacity-50"
-                  >
-                    Use popup login (desktop fallback)
-                  </button>
-                ) : null}
+              <div className="mx-auto mb-5 flex h-12 w-12 items-center justify-center rounded-full border border-pump-border/35 bg-pump-border/6">
+                <ShieldCheck className="h-6 w-6 text-pump-accent" strokeWidth={ICON_STROKE} aria-hidden />
               </div>
 
-              {isMobile && legacyVisible && telegramBotUsername ? (
-                <div className="space-y-3 rounded-lg border border-pump-border/45 bg-pump-border/4 p-3">
-                  <p className="text-caption text-pump-muted">
-                    Fallback: tap Telegram&apos;s button below. After Log in, Safari should open
-                    automatically — wait a few seconds.
-                  </p>
-                  <div className="flex min-h-[56px] items-center justify-center">
-                    <div ref={setLegacyRoot} className="flex min-h-[44px] w-full justify-center" />
-                  </div>
-                  {legacyWidgetMissing ? (
-                    <p className="notice-warning leading-snug">
-                      Widget did not load. Confirm @BotFather <code className="font-mono">/setdomain</code>{" "}
-                      includes <code className="font-mono">{widgetHost || "this host"}</code>.
-                    </p>
-                  ) : null}
-                </div>
-              ) : null}
-
-              {!isMobile ? (
-                <button
-                  type="button"
-                  onClick={() => setShowLegacy((current) => !current)}
-                  className="text-caption text-pump-muted underline-offset-2 hover:text-pump-text hover:underline"
+              <div className="text-center">
+                <h2
+                  id="telegram-login-title"
+                  className="text-h2 font-semibold tracking-tight text-pump-text"
                 >
-                  {showLegacy ? "Hide legacy login" : "Having trouble? Try legacy redirect login"}
-                </button>
-              ) : null}
+                  Sign in
+                </h2>
+                <p
+                  id="telegram-login-description"
+                  className="mx-auto mt-2 max-w-[18rem] text-body-sm leading-relaxed text-pump-muted sm:max-w-none"
+                >
+                  Authorize with Telegram to access your smart wallet, portfolio, and trading on BSC
+                  Testnet.
+                </p>
+              </div>
+            </div>
 
-              {!isMobile && showLegacy && telegramBotUsername ? (
-                <div className="space-y-3 rounded-lg border border-pump-border/45 bg-pump-border/4 p-3">
-                  <div className="flex min-h-[56px] items-center justify-center">
-                    <div ref={setLegacyRoot} className="flex min-h-[44px] w-full justify-center" />
-                  </div>
-                  {legacyWidgetMissing ? (
-                    <p className="notice-warning leading-snug">
-                      Legacy widget did not load. Confirm BotFather domain includes this host.
-                    </p>
-                  ) : null}
-                </div>
-              ) : null}
+            <div className="border-t border-pump-border/30 px-6 py-6 sm:px-8">
+              <button
+                type="button"
+                onClick={() => void handleContinue()}
+                disabled={pending || !config?.clientId || !config?.redirectReady}
+                className="flex w-full min-h-[3rem] items-center justify-center gap-3 rounded-lg border border-pump-border/55 bg-pump-card-soft px-4 text-body-sm font-semibold text-pump-text transition hover:border-pump-border hover:bg-pump-border/8 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pump-accent disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <TelegramBrandIcon />
+                {pending ? "Redirecting to Telegram…" : "Continue with Telegram"}
+              </button>
 
-              {!telegramBotUsername ? (
-                <p className="text-caption text-pump-muted">
-                  Set <code className="font-mono">NEXT_PUBLIC_TELEGRAM_BOT_USERNAME</code> in{" "}
-                  <code className="font-mono">.env</code>.
+              {error ? (
+                <p
+                  role="alert"
+                  aria-live="polite"
+                  className="notice-warning mt-4 text-left leading-snug"
+                >
+                  {error}
                 </p>
               ) : null}
 
-              {pending ? <p className="text-caption text-pump-muted">Waiting for Telegram…</p> : null}
-              {error ? <p className="notice-warning leading-snug">{error}</p> : null}
+              <p className="mt-6 text-center text-caption leading-relaxed text-pump-muted">
+                Secured connection · OIDC · No password required
+              </p>
             </div>
           </div>
         </div>

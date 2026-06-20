@@ -113,14 +113,6 @@ export function PumpWalletProvider({ children }: { children: ReactNode }) {
     setLoginModalOpen(true);
   }, []);
 
-  const onTelegramSuccess = useCallback(
-    (session: TelegramAccountSession) => {
-      applySession(session);
-      setLoginModalOpen(false);
-    },
-    [applySession]
-  );
-
   const logout = useCallback(async () => {
     clearPumpConnectorSession();
     setTelegramId(undefined);
@@ -176,7 +168,7 @@ export function PumpWalletProvider({ children }: { children: ReactNode }) {
       <TelegramLoginModal
         open={loginModalOpen}
         onClose={() => setLoginModalOpen(false)}
-        onSuccess={onTelegramSuccess}
+        onSuccess={() => setLoginModalOpen(false)}
       />
     </PumpWalletContext.Provider>
   );

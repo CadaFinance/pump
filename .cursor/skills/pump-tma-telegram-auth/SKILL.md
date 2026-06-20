@@ -10,16 +10,17 @@ description: >-
 
 **Official docs:** [Log In With Telegram](https://core.telegram.org/bots/telegram-login) · legacy widget archived at [widgets/login-legacy](https://core.telegram.org/widgets/login-legacy)
 
-Pump uses **OIDC primary**, **legacy HMAC redirect fallback**.
+Pump uses **OIDC redirect only** (Auth0-style Universal Login). Legacy HMAC routes remain for compatibility but are not exposed in UI.
 
 ## Stack
 
 | Layer | Implementation |
 |-------|----------------|
-| Primary UI | `TelegramLoginModal` → `telegram-login.js` popup (`Telegram.Login.auth`) |
-| Mobile handoff | `GET /api/auth/telegram/start` → `oauth.telegram.org/auth` redirect + PKCE |
-| Popup API | `POST /api/auth/telegram/oidc` — verify `id_token` via JWKS |
-| Legacy fallback | iframe widget `data-auth-url` → `GET /api/auth/telegram/legacy-callback` (HMAC) |
+| UI | `TelegramLoginModal` → single **Continue with Telegram** → PKCE redirect |
+| Redirect | `GET /api/auth/telegram/start` → `oauth.telegram.org/auth` |
+| Callback | `GET /api/auth/telegram/callback` → `/auth/telegram/complete` |
+| Popup API | `POST /api/auth/telegram/oidc` — verify `id_token` via JWKS (server only; not used in modal) |
+| Legacy fallback | `GET /api/auth/telegram/legacy-callback` (HMAC; not in UI) |
 | Session | `AUTH_COOKIE_NAME` + `restoreTelegramKernelSession()` |
 
 ## Env
@@ -54,46 +55,38 @@ Do **not** request `phone` unless product needs verified phone — avoids extra 
 src/components/wallet/TelegramLoginModal.tsx
 src/lib/telegram/verify-oidc-token.ts      # jose + JWKS
 src/lib/telegram/oidc-config.ts            # server: PKCE cookie, token exchange
-src/lib/telegram/telegram-login-sdk.ts     # client: load script, popup
-src/app/api/auth/telegram/oidc/route.ts
 src/app/api/auth/telegram/start/route.ts
 src/app/api/auth/telegram/callback/route.ts
-src/app/api/auth/telegram/legacy-callback/route.ts
 src/app/auth/telegram/complete/page.tsx
-next.config.ts                             # COOP: same-origin-allow-popups
+next.config.ts                             # CSP for oauth.telegram.org
 ```
 
-## Headers (required)
+## UX flow
 
-```txt
-Cross-Origin-Opener-Policy: same-origin-allow-popups
-```
+| Step | Action |
+|------|--------|
+| 1 | User taps **Sign in** → centered enterprise modal |
+| 2 | **Continue with Telegram** → PKCE redirect to `oauth.telegram.org` |
+| 3 | User approves in Telegram app / browser |
+| 4 | Callback → `/auth/telegram/complete` → session restored → home |
 
-Without COOP, `telegram-login.js` popup `postMessage` fails.
-
-CSP must allow `https://oauth.telegram.org` and `https://telegram.org` for scripts/frames.
-
-## UX flows
-
-| Context | Button | Flow |
-|---------|--------|------|
-| Desktop | Continue with Telegram | OIDC popup → `id_token` → POST `/oidc` |
-| Mobile | Open in Telegram app | PKCE redirect → `/callback` → `/auth/telegram/complete` |
-| Blocked popup | Legacy redirect widget | HMAC GET `/legacy-callback` |
+Design follows B2B identifier-first patterns: single column, one primary OAuth CTA, trust footer, no NASCAR of alternate methods.
 
 ## Do NOT
 
 - Put `TELEGRAM_BOT_TOKEN` or client secret in client bundle
 - Use full bot token as `client_id` in browser (numeric id only)
+- Re-enable popup login or legacy widget in the modal UI
 - Re-enable Telegram Mini App auth paths for new work
-- Remove legacy verify until OIDC is verified in prod
+
+CSP must allow `https://oauth.telegram.org` for redirect flow.
 
 ## Verify locally
 
 1. `npm run dev` on `:3012`
 2. BotFather URLs include `http://localhost:3012/api/auth/telegram/callback`
-3. Sign in → check Network: `POST /api/auth/telegram/oidc` or redirect callback
-4. Mobile UA: test **Open in Telegram app**
+3. Sign in → redirect to Telegram → return to `/auth/telegram/complete`
+4. Mobile: same flow via in-app browser handoff
 
 ## Related
 

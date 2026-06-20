@@ -39,7 +39,7 @@ export function formatTradeError(err: unknown): string {
     return "Token transfer failed — check balance and approval.";
   }
   if (lower.includes("popup_closed") || lower.includes("popup closed")) {
-    return "Login popup closed — on mobile use the main Telegram button (redirect), not a browser popup.";
+    return "Sign-in was cancelled. Try again.";
   }
 
   return raw.length > 180 ? `${raw.slice(0, 180)}…` : raw;
