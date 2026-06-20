@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
-import { requireAdminSession } from "@/lib/auth/admin-access";
+import { requireAdminWallet } from "@/lib/auth/admin-access";
 import { getAdminProtocolSnapshot } from "@/lib/admin-onchain";
 import { getAdminDbStats } from "@/lib/db/admin-stats";
 
@@ -14,7 +14,7 @@ function sumBnbStrings(...values: string[]): string {
 }
 
 export async function GET(request: NextRequest) {
-  if (!requireAdminSession(request)) {
+  if (!requireAdminWallet(request)) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 

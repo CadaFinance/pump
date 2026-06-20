@@ -1,6 +1,8 @@
 # Dependencies
 node_modules/
 indexer/node_modules/
+admin-console/node_modules/
+admin-console/dist/
 
 # Next.js
 .next/

@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
-import { requireAdminSession } from "@/lib/auth/admin-access";
+import { requireAdminWallet } from "@/lib/auth/admin-access";
 import {
   createAdminLinkTask,
   deleteAdminLinkTask,
@@ -9,7 +9,7 @@ import {
 } from "@/lib/db/incentive";
 
 function requireAdmin(request: NextRequest): boolean {
-  return requireAdminSession(request) != null;
+  return requireAdminWallet(request) != null;
 }
 
 export async function GET(request: NextRequest) {

@@ -5,10 +5,8 @@ import { usePathname } from "next/navigation";
 import { Plus } from "lucide-react";
 import { WalletBar } from "@/components/wallet/WalletBar";
 import { ThemePicker } from "@/components/theme/ThemePicker";
-import { ADMIN_NAV_ITEM, APP_NAV_ITEMS } from "@/lib/nav-config";
+import { APP_NAV_ITEMS } from "@/lib/nav-config";
 import { ICON_STROKE } from "@/lib/icons";
-import { isAdminTelegramUser } from "@/config/admin";
-import { usePumpWallet } from "@/components/wallet/PumpWalletProvider";
 import { shellInnerClassForPath } from "@/components/layout/layout-shell";
 
 function navLinkClass(active: boolean): string {
@@ -16,11 +14,6 @@ function navLinkClass(active: boolean): string {
 }
 
 export function AppHeaderView({ pathname }: { pathname: string }) {
-  const { authenticated, telegramId } = usePumpWallet();
-  const showAdminLink = authenticated && isAdminTelegramUser(telegramId);
-
-  const navItems = showAdminLink ? [...APP_NAV_ITEMS, ADMIN_NAV_ITEM] : APP_NAV_ITEMS;
-
   return (
     <header className="app-header">
       <div className={`app-header-inner ${shellInnerClassForPath(pathname)}`}>
@@ -33,7 +26,7 @@ export function AppHeaderView({ pathname }: { pathname: string }) {
           </Link>
 
           <nav className="app-header-nav hidden md:flex" aria-label="Primary">
-            {navItems.map((item) => {
+            {APP_NAV_ITEMS.map((item) => {
               const active =
                 item.href === "/"
                   ? pathname === "/"

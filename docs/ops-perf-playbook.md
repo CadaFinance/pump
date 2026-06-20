@@ -66,6 +66,11 @@
 - Health: `bash deploy/bundler/alto/health.sh`
 - Docs: `.cursor/docs/self-hosted-bundler-2026.md`
 
+**Admin console (MetaMask, ayrı app):**
+
+- `cd admin-console && npm run dev` → http://localhost:5174 (proxy `/api` → TMA)
+- Ana TMA’da `/admin` yok; ops wallet = `NEXT_PUBLIC_ADMIN_ADDRESS`
+
 ---
 
 ## Haftalık ritüel (senin checklist)

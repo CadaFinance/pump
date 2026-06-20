@@ -1,6 +1,6 @@
-"use client";
-
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { useAccount } from "wagmi";
+import { adminApiUrl } from "@/lib/admin-api-client";
 import {
   AdminBlock,
   AdminBtn,
@@ -273,17 +273,18 @@ function SystemHealthDetailModal({
 }
 
 export function AdminSystemHealth() {
+  const { address } = useAccount();
   const [report, setReport] = useState<SystemHealthReport | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
-  const initialLoad = useRef(false);
 
   const load = useCallback(async () => {
+    if (!address) return;
     setError(null);
     setLoading(true);
     try {
-      const res = await fetch("/api/admin/system-health", { cache: "no-store" });
+      const res = await fetch(adminApiUrl("/api/admin/system-health", address), { cache: "no-store" });
       const json = await parseJsonResponse<{ data?: SystemHealthReport; error?: string }>(res);
       if (!res.ok) throw new Error(json.error ?? "Failed to load system health");
       setReport(json.data ?? null);
@@ -292,13 +293,12 @@ export function AdminSystemHealth() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [address]);
 
   useEffect(() => {
-    if (initialLoad.current) return;
-    initialLoad.current = true;
+    if (!address) return;
     void load();
-  }, [load]);
+  }, [address, load]);
 
   const overall = report?.overall ?? "down";
   const passing = report?.checks.filter((c) => c.status === "healthy").length ?? 0;

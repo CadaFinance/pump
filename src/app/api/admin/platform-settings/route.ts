@@ -1,10 +1,10 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
-import { requireAdminSession } from "@/lib/auth/admin-access";
+import { requireAdminWallet } from "@/lib/auth/admin-access";
 import { readMinInitialBuyBnb } from "@/lib/meme-factory-onchain";
 
 function requireAdmin(request: NextRequest): boolean {
-  return requireAdminSession(request) != null;
+  return requireAdminWallet(request) != null;
 }
 
 /** Read-only: min initial buy is enforced on MemeFactory (on-chain). */

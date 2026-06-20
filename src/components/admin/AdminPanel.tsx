@@ -11,6 +11,7 @@ import {
   useWriteContract,
 } from "wagmi";
 import { ADMIN_ADDRESS } from "@/config/admin";
+import { adminApiUrl } from "@/lib/admin-api-client";
 import { contracts, explorerAddressUrl, explorerTxUrl, pumpChain, shortAddress } from "@/config/chain";
 import { erc20Abi } from "@/lib/abis/erc20";
 import { launchpadTreasuryAbi } from "@/lib/abis/launchpad-treasury";
@@ -386,7 +387,7 @@ export function AdminPanel() {
     if (!address) return;
     setPromoLoading(true);
     try {
-      const res = await fetch("/api/admin/tasks", { cache: "no-store" });
+      const res = await fetch(adminApiUrl("/api/admin/tasks", address), { cache: "no-store" });
       const json = (await res.json()) as { data?: { tasks: AdminLinkTask[] }; error?: string };
       if (!res.ok) throw new Error(json.error ?? "Failed to load promo tasks");
       setPromoTasks(json.data?.tasks ?? []);
@@ -401,7 +402,7 @@ export function AdminPanel() {
     if (!address) return;
     setStatsLoading(true);
     try {
-      const res = await fetch("/api/admin/stats", { cache: "no-store" });
+      const res = await fetch(adminApiUrl("/api/admin/stats", address), { cache: "no-store" });
       const json = (await res.json()) as { data?: AdminPlatformStats; error?: string };
       if (!res.ok) throw new Error(json.error ?? "Failed to load platform stats");
       setStats(json.data ?? null);
@@ -418,7 +419,7 @@ export function AdminPanel() {
     setPlatformSettingsLoading(true);
     try {
       if (!address) return;
-      const res = await fetch("/api/admin/overview", { cache: "no-store" });
+      const res = await fetch(adminApiUrl("/api/admin/overview", address), { cache: "no-store" });
       const json = (await res.json()) as {
         data?: { protocol: ProtocolSnapshot; airdrops: SweepRow[] };
         error?: string;
@@ -607,7 +608,7 @@ export function AdminPanel() {
     setError(null);
     try {
       const rewardPoints = Number.parseInt(promoPoints.trim(), 10);
-      const res = await fetch("/api/admin/tasks", {
+      const res = await fetch(adminApiUrl("/api/admin/tasks", address), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -639,7 +640,7 @@ export function AdminPanel() {
     setDeletingKey(taskKey);
     setError(null);
     try {
-      const res = await fetch("/api/admin/tasks", {
+      const res = await fetch(adminApiUrl("/api/admin/tasks", address), {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ taskKey }),

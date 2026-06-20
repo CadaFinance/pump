@@ -1,10 +1,11 @@
 import type { NextRequest } from "next/server";
-import { isAdminTelegramUser } from "@/config/admin";
-import { AUTH_COOKIE_NAME, verifySessionToken } from "@/lib/auth/session-cookie";
+import { isAdminWallet } from "@/config/admin";
 
-/** Server: admin Telegram session from pump_auth cookie. */
-export function requireAdminSession(request: NextRequest): string | null {
-  const telegramId = verifySessionToken(request.cookies.get(AUTH_COOKIE_NAME)?.value);
-  if (!telegramId || !isAdminTelegramUser(telegramId)) return null;
-  return telegramId;
+/** Server: admin wallet must match NEXT_PUBLIC_ADMIN_ADDRESS. */
+export function requireAdminWallet(request: NextRequest): string | null {
+  const wallet =
+    request.nextUrl.searchParams.get("address")?.trim() ??
+    request.headers.get("x-admin-address")?.trim();
+  if (!isAdminWallet(wallet ?? undefined)) return null;
+  return wallet!.toLowerCase();
 }
