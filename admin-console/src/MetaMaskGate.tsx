@@ -3,7 +3,7 @@ import { isAdminWallet } from "@/config/admin";
 import { shortAddress } from "@/config/chain";
 
 function hasBrowserProvider(): boolean {
-  return typeof window !== "undefined" && Boolean(window.ethereum);
+  return typeof window !== "undefined" && "ethereum" in window && Boolean(window.ethereum);
 }
 
 export function MetaMaskGate({ children }: { children: React.ReactNode }) {
@@ -82,10 +82,4 @@ export function MetaMaskGate({ children }: { children: React.ReactNode }) {
       {children}
     </>
   );
-}
-
-declare global {
-  interface Window {
-    ethereum?: unknown;
-  }
 }
