@@ -2,12 +2,15 @@
   "entryPoints": ["0x0000000071727De22E5E9d8BAf0edAc6f37da032"],
   "relayers": ["REPLACE_WITH_BUNDLER_RELAYER_PRIVATE_KEY"],
   "rpcEndpoint": "https://bsc-testnet-rpc.publicnode.com",
+  "rpcEndpointSubmit": "https://bsc-testnet-rpc.publicnode.com",
   "minSignerBalance": 0.01,
   "enforceGasPrice": false,
   "gasPriceMarkup": 10,
   "vglMarkup": 100000,
   "vglMarkupPercent": 5000,
   "pvgMarkup": 10000,
-  "bundleInterval": 3,
+  "bundleInterval": 10000,
+  "receiptLookupRange": 2048,
+  "waitForConfirmationInterval": 5000,
   "useropsTTL": 300
 }

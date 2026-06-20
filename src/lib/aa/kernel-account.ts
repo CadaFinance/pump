@@ -14,6 +14,7 @@ import {
 } from "viem";
 import { pumpChain, rpcUrl } from "@/config/chain";
 import { createBundlerTransport } from "@/lib/aa/bundler-transport";
+import { sendKernelTransaction } from "@/lib/aa/send-kernel-transaction";
 import { assertScwReadyForUserOp } from "@/lib/aa/scw-preflight";
 
 export const entryPoint = getEntryPoint("0.7");
@@ -50,7 +51,29 @@ function userOpNeedsAccountDeploy(userOp: {
   return Boolean(factoryData && factoryData !== "0x");
 }
 
+type PreparedUserOpGas = {
+  factory?: Address | null;
+  factoryData?: Hex | null;
+  verificationGasLimit: bigint;
+  callGasLimit: bigint;
+  preVerificationGas: bigint;
+};
+
 function createKernelUserOperationConfig(publicClient: PublicClient) {
+  const prepareUserOperation = (async (client, args) => {
+    const userOp = await viemPrepareUserOperation(client, args);
+    const gas = userOp as typeof userOp & PreparedUserOpGas;
+    const deploy = userOpNeedsAccountDeploy(gas);
+    const vglFloor = deploy ? MIN_VERIFICATION_GAS_DEPLOY : MIN_VERIFICATION_GAS;
+
+    return {
+      ...userOp,
+      verificationGasLimit: bumpGasLimit(gas.verificationGasLimit, vglFloor),
+      callGasLimit: bumpGasLimit(gas.callGasLimit, 80_000n),
+      preVerificationGas: bumpGasLimit(gas.preVerificationGas, 40_000n),
+    };
+  }) as typeof viemPrepareUserOperation;
+
   return {
     estimateFeesPerGas: async () => {
       const gasPrice = await publicClient.getGasPrice();
@@ -59,21 +82,7 @@ function createKernelUserOperationConfig(publicClient: PublicClient) {
         maxPriorityFeePerGas: maxBigInt(gasPrice / 10n, MIN_PRIORITY_FEE_PER_GAS),
       };
     },
-    prepareUserOperation: async (
-      client: Parameters<typeof viemPrepareUserOperation>[0],
-      args: Parameters<typeof viemPrepareUserOperation>[1]
-    ) => {
-      const userOp = await viemPrepareUserOperation(client, args);
-      const deploy = userOpNeedsAccountDeploy(userOp);
-      const vglFloor = deploy ? MIN_VERIFICATION_GAS_DEPLOY : MIN_VERIFICATION_GAS;
-
-      return {
-        ...userOp,
-        verificationGasLimit: bumpGasLimit(userOp.verificationGasLimit, vglFloor),
-        callGasLimit: bumpGasLimit(userOp.callGasLimit, 80_000n),
-        preVerificationGas: bumpGasLimit(userOp.preVerificationGas, 40_000n),
-      };
-    },
+    prepareUserOperation,
   };
 }
 
@@ -109,11 +118,9 @@ export async function withdrawFromKernelClient(
 
   await assertScwReadyForUserOp(client.account.address, value);
 
-  return client.sendTransaction({
-    account: client.account,
+  return sendKernelTransaction(client, createPumpPublicClient(), {
     to,
     value,
     data: "0x",
-    chain: pumpChain,
-  } as Parameters<typeof client.sendTransaction>[0]);
+  });
 }

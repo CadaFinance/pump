@@ -2,7 +2,7 @@ import type { KernelAccountClient } from "@zerodev/sdk";
 import { encodeFunctionData, parseSignature, type Address } from "viem";
 import { erc20Abi, maxUint256 } from "@/lib/abis/erc20";
 import { createPumpPublicClient } from "@/lib/aa/kernel-account";
-import { pumpChain } from "@/config/chain";
+import { sendKernelTransaction } from "@/lib/aa/send-kernel-transaction";
 import { buildPermitTypedData, PERMIT_ALLOWANCE_MAX, permitDeadline } from "@/lib/erc20-permit";
 
 export const MAX_SELL_BATCH = 10;
@@ -199,17 +199,14 @@ export async function approveBatchSellAllowances(params: {
 
   let done = 0;
   for (const tokenAddress of tokenAddresses) {
-    const hash = await kernelClient.sendTransaction({
-      account: kernelClient.account,
-      chain: pumpChain,
+    await sendKernelTransaction(kernelClient, publicClient, {
       to: tokenAddress,
       data: encodeFunctionData({
         abi: erc20Abi,
         functionName: "approve",
         args: [spender, maxUint256],
       }),
-    } as Parameters<typeof kernelClient.sendTransaction>[0]);
-    await publicClient.waitForTransactionReceipt({ hash });
+    });
     done += 1;
     params.onProgress?.(done, tokenAddresses.length);
   }

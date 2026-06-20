@@ -4,8 +4,9 @@ import { useCallback, useState } from "react";
 import type { Abi, Address, Hash } from "viem";
 import { encodeFunctionData } from "viem";
 import { usePumpWallet } from "@/components/wallet/PumpWalletProvider";
-import { pumpChain } from "@/config/chain";
 import { tradeBundlerLog } from "@/lib/aa/bundler-debug";
+import { createPumpPublicClient } from "@/lib/aa/kernel-account";
+import { sendKernelTransaction } from "@/lib/aa/send-kernel-transaction";
 
 export type KernelWriteContractParams = {
   address: Address;
@@ -50,17 +51,19 @@ export function useKernelWriteContract() {
             fn: params.functionName,
             value: params.value?.toString() ?? "0",
           });
-          const hash = await kernelClient.sendTransaction({
-            account: kernelClient.account,
-            chain: pumpChain,
-            to: params.address,
-            data: encodeFunctionData({
-              abi: params.abi,
-              functionName: params.functionName,
-              args: params.args,
-            }),
-            value: params.value ?? 0n,
-          });
+          const hash = await sendKernelTransaction(
+            kernelClient,
+            createPumpPublicClient(),
+            {
+              to: params.address,
+              data: encodeFunctionData({
+                abi: params.abi,
+                functionName: params.functionName,
+                args: params.args,
+              }),
+              value: params.value ?? 0n,
+            }
+          );
           tradeBundlerLog("sendTransaction done", { txHash: hash });
           setData(hash);
         } catch (err) {
