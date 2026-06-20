@@ -22,26 +22,35 @@ async function waitViaEntryPointLogs(
   deadline: number
 ): Promise<Hash> {
   while (Date.now() < deadline) {
-    const logs = await publicClient.getContractEvents({
-      address: entryPoint.address,
-      abi: entryPoint07Abi,
-      eventName: "UserOperationEvent",
-      args: { userOpHash },
-      fromBlock,
-      toBlock: "latest",
-    });
-
-    if (logs.length > 0) {
-      const log = logs[0];
-      const txHash = log.transactionHash;
-      bundlerDebug("info", "entryPoint", userOpHash, {
-        txHash,
-        success: log.args.success,
+    try {
+      const logs = await publicClient.getContractEvents({
+        address: entryPoint.address,
+        abi: entryPoint07Abi,
+        eventName: "UserOperationEvent",
+        args: { userOpHash },
+        fromBlock: fromBlock > 5n ? fromBlock - 5n : fromBlock,
+        toBlock: "latest",
       });
-      if (!log.args.success) {
-        throw new Error(`UserOperation reverted on-chain (${userOpHash})`);
+
+      if (logs.length > 0) {
+        const log = logs[0];
+        const txHash = log.transactionHash;
+        tradeBundlerLog("confirmed via EntryPoint logs", {
+          userOpHash,
+          txHash,
+          success: log.args.success,
+        });
+        if (!log.args.success) {
+          throw new Error(`UserOperation reverted on-chain (${userOpHash})`);
+        }
+        return txHash;
       }
-      return txHash;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      tradeBundlerLog("EntryPoint poll error", { userOpHash, message });
+      if (message.includes("reverted on-chain")) {
+        throw error;
+      }
     }
 
     await sleep(POLL_MS);
