@@ -11,8 +11,10 @@ export default defineConfig(({ mode }) => {
     env.NEXT_PUBLIC_RPC_URL ?? "https://data-seed-prebsc-1-s1.binance.org:8545";
   const tmaPort = env.VITE_PUMP_API_PORT ?? env.PORT ?? "3012";
   const apiTarget = env.VITE_PUMP_API_URL ?? `http://127.0.0.1:${tmaPort}`;
+  const adminBase = env.VITE_ADMIN_BASE ?? (mode === "production" ? "/admin/" : "/");
 
   return {
+    base: adminBase,
     plugins: [react()],
     resolve: {
       dedupe: ["viem", "wagmi", "@tanstack/react-query", "react", "react-dom"],

@@ -6,6 +6,7 @@ on:
     paths:
       - "src/**"
       - "public/**"
+      - "admin-console/**"
       - "package.json"
       - "package-lock.json"
       - "next.config.ts"
@@ -14,6 +15,8 @@ on:
       - "postcss.config.mjs"
       - "ecosystem.config.cjs"
       - "deploy/tma-deploy.sh"
+      - "deploy/admin-console-build.sh"
+      - "deploy/nginx-pump.conf"
       - ".github/workflows/deploy-tma.yml"
 
 concurrency:

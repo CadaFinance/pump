@@ -26,6 +26,14 @@ npm ci
 log "Building Next.js"
 npm run build
 
+if [[ -f "$APP_DIR/deploy/admin-console-build.sh" ]]; then
+  log "Building admin console"
+  chmod +x "$APP_DIR/deploy/admin-console-build.sh"
+  bash "$APP_DIR/deploy/admin-console-build.sh"
+else
+  log "WARN: deploy/admin-console-build.sh missing — skip admin build"
+fi
+
 log "Copying static assets into standalone output"
 mkdir -p .next/standalone/.next
 cp -r .next/static .next/standalone/.next/static
@@ -97,6 +105,7 @@ else
 fi
 
 log "Deploy finished successfully"
+log "Admin UI: http://<host>/admin/  (nginx location /admin/ — run nginx -t && reload if config changed)"
 
 # Referral system (BondingCurveManager redeploy) — run separately BEFORE app deploy:
 # See deploy/REFERRAL_SYSTEM_DEPLOY.md

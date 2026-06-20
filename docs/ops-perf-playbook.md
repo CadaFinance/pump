@@ -66,10 +66,12 @@
 - Health: `bash deploy/bundler/alto/health.sh`
 - Docs: `.cursor/docs/self-hosted-bundler-2026.md`
 
-**Admin console (MetaMask, ayrı app):**
+**Admin console (MetaMask, `/admin/`):**
 
-- `cd admin-console && npm run dev` → http://localhost:5174 (proxy `/api` → TMA)
-- Ana TMA’da `/admin` yok; ops wallet = `NEXT_PUBLIC_ADMIN_ADDRESS`
+- Prod: **http://104.207.64.115/admin/** (nginx + CI build)
+- Local dev: `npm run dev:admin` → :5174
+- Nginx one-time: `deploy/nginx-pump.conf` içindeki `/admin/` bloğu
+- Ana TMA’da `/admin` route yok; ops wallet = `NEXT_PUBLIC_ADMIN_ADDRESS`
 
 ---
 

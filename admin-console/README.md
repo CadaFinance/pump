@@ -1,47 +1,58 @@
 # Pump Admin Console — standalone MetaMask ops UI
 
-Runs separately from the main TMA (no Connect Wallet in trader app).
+Published at **`/admin/`** on the same host as TMA (nginx static). API calls go to same-origin `/api/*`.
 
-## Dev
+## Local dev
 
-Terminal 1 — main API (`npm run dev` → :3012, or `npm run dev:local` → :80):
-
-```bash
-npm run dev
-# veya port 80: npm run dev:local  → .env'e VITE_PUMP_API_URL=http://127.0.0.1:80 ekle
-```
-
-Terminal 2 — admin console (port 5174, proxies `/api` → TMA):
+Terminal 1 — TMA:
 
 ```bash
-cd admin-console
-npm install
-npm run dev
+npm run dev          # :3012
+# or dev:local :80 → set VITE_PUMP_API_URL=http://127.0.0.1:80 in .env
 ```
 
-Open http://localhost:5174 · Connect MetaMask with `NEXT_PUBLIC_ADMIN_ADDRESS`.
-
-**Proxy error `ECONNREFUSED 127.0.0.1:3012`:** TMA çalışmıyor veya yanlış portta. `dev:local` (:80) kullanıyorsan repo `.env`:
+Terminal 2:
 
 ```bash
-VITE_PUMP_API_URL=http://127.0.0.1:80
+npm run dev:admin    # http://localhost:5174  (base /, proxies /api → TMA)
 ```
 
-(admin-console'u yeniden başlat)
+## Production (VM)
 
-Reads chain + contract env from repo root `.env` via Vite `loadEnv`.
+CI `tma-deploy.sh` runs `deploy/admin-console-build.sh` automatically.
 
-## Production
+URL: **http://104.207.64.115/admin/**
+
+### One-time nginx (if `/admin/` 404 after deploy)
 
 ```bash
-cd admin-console && npm run build
+ssh -p 22022 root@104.207.64.115
+cp /var/www/pump/tma/deploy/nginx-pump.conf /etc/nginx/sites-available/pump
+# or merge the /admin/ location block into your active site file
+nginx -t && systemctl reload nginx
+curl -sI http://127.0.0.1/admin/ | head -5
 ```
 
-Serve `admin-console/dist` (nginx). Proxy `/api` to pump-tma or set `VITE_PUMP_API_URL` at build time and enable CORS on admin API routes if cross-origin.
+### Manual rebuild on VM
+
+```bash
+cd /var/www/pump/tma
+bash deploy/admin-console-build.sh
+```
+
+No PM2 — nginx serves `admin-console/dist/`.
 
 ## Auth
 
-- UI: MetaMask connected + wallet === `NEXT_PUBLIC_ADMIN_ADDRESS`
-- API: `?address=` query must match same (same as before)
+- UI: MetaMask + `NEXT_PUBLIC_ADMIN_ADDRESS`
+- API: `/api/admin/*?address=0x...`
 
-Main app: `/admin` route and navbar link removed.
+## Ports (do not mix)
+
+| Service | Port |
+|---------|------|
+| nginx (public) | 80 |
+| TMA | 3012 |
+| realtime WS | 3013 |
+| Alto bundler | 4337 |
+| admin dev only | 5174 |
