@@ -14,14 +14,26 @@ if [[ -z "${BUNDLER_RELAYER_PRIVATE_KEY:-}" ]]; then
 fi
 
 if [[ -n "${BSC_RPC_URL:-}" ]]; then
-  RPC="$BSC_RPC_URL"
+  RPC_READ="$BSC_RPC_URL"
 elif [[ -n "${ALCHEMY_API_KEY:-}" ]]; then
-  RPC="https://bnb-testnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}"
+  RPC_READ="https://bnb-testnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}"
 else
-  RPC="https://bsc-testnet-dataseed.bnbchain.org"
+  RPC_READ="https://bsc-testnet-dataseed.bnbchain.org"
 fi
 
-RECEIPT_LOOKUP_RANGE="${SKANDHA_RECEIPT_LOOKUP_RANGE:-10}"
+# Alchemy free tier: eth_getLogs max 10 blocks. Skandha polls fromBlock→latest without
+# toBlock (EventsService) and uses head-range→latest for receipts (off-by-one: range 10 = 11 blocks).
+# Use dataseed for reads/polling; Alchemy only for bundle submit when available.
+RPC_SUBMIT="${BSC_RPC_SUBMIT_URL:-$RPC_READ}"
+if [[ -n "${ALCHEMY_API_KEY:-}" ]]; then
+  RPC_SUBMIT="https://bnb-testnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}"
+fi
+if [[ "$RPC_READ" == *alchemy.com* ]]; then
+  RPC_READ="https://bsc-testnet-dataseed.bnbchain.org"
+  echo "Using BSC dataseed for read/poll (Alchemy free tier getLogs ≤10 blocks)."
+fi
+
+RECEIPT_LOOKUP_RANGE="${SKANDHA_RECEIPT_LOOKUP_RANGE:-9}"
 
 ensure_build_deps() {
   local missing=()
@@ -90,12 +102,12 @@ src = Path("$CONFIG_SRC")
 dst = Path("$SKANDHA_DIR/config.json")
 data = json.loads(src.read_text())
 data["relayers"] = ["${BUNDLER_RELAYER_PRIVATE_KEY}"]
-data["rpcEndpoint"] = "${RPC}"
-data["rpcEndpointSubmit"] = "${RPC}"
+data["rpcEndpoint"] = "${RPC_READ}"
+data["rpcEndpointSubmit"] = "${RPC_SUBMIT}"
 data["receiptLookupRange"] = int("${RECEIPT_LOOKUP_RANGE}")
 data["bundleInterval"] = 10
 dst.write_text(json.dumps(data, indent=2) + "\n")
-print("Wrote", dst, "rpc=", "${RPC}", "receiptLookupRange=", data["receiptLookupRange"])
+print("Wrote", dst, "rpcRead=", "${RPC_READ}", "rpcSubmit=", "${RPC_SUBMIT}", "receiptLookupRange=", data["receiptLookupRange"])
 PY
 
 cd "$SKANDHA_DIR"
