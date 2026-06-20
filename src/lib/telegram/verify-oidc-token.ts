@@ -13,21 +13,30 @@ export type TelegramOidcProfile = {
   firstName: string | null;
 };
 
-export function telegramProfileFromClaims(payload: JWTPayload): TelegramOidcProfile | null {
-  const rawId =
-    typeof payload.id === "number"
-      ? payload.id
-      : typeof payload.sub === "string" && /^\d+$/.test(payload.sub)
-        ? Number(payload.sub)
-        : null;
+const MAX_PG_BIGINT = 9_223_372_036_854_775_807n;
 
-  if (rawId == null || !Number.isFinite(rawId) || rawId <= 0) return null;
+export function telegramProfileFromClaims(payload: JWTPayload): TelegramOidcProfile | null {
+  let telegramId: string | null = null;
+  if (typeof payload.id === "number") {
+    if (!Number.isFinite(payload.id) || payload.id <= 0) return null;
+    telegramId = String(Math.trunc(payload.id));
+  } else if (typeof payload.id === "string" && /^\d+$/.test(payload.id)) {
+    telegramId = payload.id;
+  }
+
+  if (!telegramId) return null;
+  try {
+    const asBigInt = BigInt(telegramId);
+    if (asBigInt <= 0n || asBigInt > MAX_PG_BIGINT) return null;
+  } catch {
+    return null;
+  }
 
   const name = typeof payload.name === "string" ? payload.name.trim() : "";
   const firstName = name ? name.split(/\s+/)[0] ?? name : null;
 
   return {
-    telegramId: String(rawId),
+    telegramId,
     telegramUsername:
       typeof payload.preferred_username === "string" ? payload.preferred_username : null,
     firstName,

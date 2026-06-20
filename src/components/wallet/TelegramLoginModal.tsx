@@ -172,12 +172,8 @@ export function TelegramLoginModal({ open, onClose, onSuccess }: TelegramLoginMo
   }, [config?.redirectReady]);
 
   const handlePrimaryLogin = useCallback(() => {
-    if (isMobile) {
-      void handleOidcRedirect();
-      return;
-    }
-    void handleOidcPopup();
-  }, [handleOidcPopup, handleOidcRedirect, isMobile]);
+    void handleOidcRedirect();
+  }, [handleOidcRedirect]);
 
   const legacyVisible = showLegacy || (isMobile && !config?.redirectReady);
 
@@ -237,21 +233,17 @@ export function TelegramLoginModal({ open, onClose, onSuccess }: TelegramLoginMo
                   disabled={pending || !config?.clientId}
                   className="primary-button w-full py-2.5 text-body-sm disabled:opacity-50"
                 >
-                  {pending
-                    ? "Opening Telegram…"
-                    : isMobile
-                      ? "Continue in Telegram app"
-                      : "Continue with Telegram"}
+                  {pending ? "Opening Telegram…" : "Continue in Telegram app"}
                 </button>
 
                 {!isMobile ? (
                   <button
                     type="button"
-                    onClick={() => void handleOidcRedirect()}
-                    disabled={pending || !config?.redirectReady}
+                    onClick={() => void handleOidcPopup()}
+                    disabled={pending || !config?.clientId}
                     className="secondary-button w-full py-2.5 text-body-sm disabled:opacity-50"
                   >
-                    Use redirect login
+                    Use popup login (desktop fallback)
                   </button>
                 ) : null}
               </div>
