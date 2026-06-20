@@ -1,10 +1,20 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getBundlerUpstreamUrl } from "@/lib/aa/bundler-config";
+import { bundlerDebug } from "@/lib/aa/bundler-debug";
+import {
+  normalizeBundlerRpcPayload,
+  parseJsonRpcRequestBody,
+  type JsonRpcPayload,
+} from "@/lib/aa/bundler-rpc-compat";
 
 export async function POST(request: NextRequest) {
   try {
     const upstream = getBundlerUpstreamUrl();
     const body = await request.text();
+    const rpcRequest = parseJsonRpcRequestBody(body);
+    const method = rpcRequest?.method ?? "?";
+
+    bundlerDebug("info", "proxy →", method, body);
 
     const response = await fetch(upstream, {
       method: "POST",
@@ -14,15 +24,40 @@ export async function POST(request: NextRequest) {
     });
 
     const text = await response.text();
-    return new NextResponse(text, {
+    let payload: JsonRpcPayload;
+    try {
+      payload = JSON.parse(text) as JsonRpcPayload;
+    } catch {
+      bundlerDebug("error", "proxy parse", method, text.slice(0, 200));
+      return new NextResponse(text, {
+        status: response.status,
+        headers: {
+          "Content-Type": response.headers.get("Content-Type") ?? "application/json",
+          "Cache-Control": "no-store",
+        },
+      });
+    }
+
+    const normalized = normalizeBundlerRpcPayload(method, payload);
+    if (payload.error && !normalized.error && normalized.result === null) {
+      bundlerDebug("warn", "proxy pending", method, {
+        note: "normalized Skandha pending receipt to null",
+        skandhaError: payload.error,
+      });
+    } else {
+      bundlerDebug("info", "proxy ←", method, normalized);
+    }
+
+    return new NextResponse(JSON.stringify(normalized), {
       status: response.status,
       headers: {
-        "Content-Type": response.headers.get("Content-Type") ?? "application/json",
+        "Content-Type": "application/json",
         "Cache-Control": "no-store",
       },
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Bundler proxy failed";
+    bundlerDebug("error", "proxy", "?", { message });
     return NextResponse.json({ error: message }, { status: 502 });
   }
 }

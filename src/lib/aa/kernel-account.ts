@@ -93,6 +93,7 @@ export function createKernelClientFromAccount(
     chain: pumpChain,
     bundlerTransport: createBundlerTransport(),
     client: publicClient,
+    pollingInterval: 2_000,
     userOperation: createKernelUserOperationConfig(publicClient),
   });
 }

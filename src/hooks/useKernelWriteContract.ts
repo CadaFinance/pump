@@ -5,6 +5,7 @@ import type { Abi, Address, Hash } from "viem";
 import { encodeFunctionData } from "viem";
 import { usePumpWallet } from "@/components/wallet/PumpWalletProvider";
 import { pumpChain } from "@/config/chain";
+import { tradeBundlerLog } from "@/lib/aa/bundler-debug";
 
 export type KernelWriteContractParams = {
   address: Address;
@@ -43,6 +44,12 @@ export function useKernelWriteContract() {
           if (!kernelClient.account) {
             throw new Error("Smart account not ready.");
           }
+          tradeBundlerLog("sendTransaction start", {
+            scw: kernelClient.account.address,
+            to: params.address,
+            fn: params.functionName,
+            value: params.value?.toString() ?? "0",
+          });
           const hash = await kernelClient.sendTransaction({
             account: kernelClient.account,
             chain: pumpChain,
@@ -54,9 +61,12 @@ export function useKernelWriteContract() {
             }),
             value: params.value ?? 0n,
           });
+          tradeBundlerLog("sendTransaction done", { txHash: hash });
           setData(hash);
         } catch (err) {
-          setError(err instanceof Error ? err : new Error(String(err)));
+          const error = err instanceof Error ? err : new Error(String(err));
+          tradeBundlerLog("sendTransaction failed", { message: error.message });
+          setError(error);
         } finally {
           setIsPending(false);
         }
