@@ -7,6 +7,7 @@ import {
   CreditCard,
   FileCode2,
   Gift,
+  KeyRound,
   Landmark,
   LayoutDashboard,
   Menu,
@@ -23,7 +24,8 @@ export type AdminTabId =
   | "treasury"
   | "airdrops"
   | "promo"
-  | "contracts";
+  | "contracts"
+  | "environment";
 
 type NavItem = {
   id: AdminTabId;
@@ -94,6 +96,12 @@ const NAV_GROUPS: NavGroup[] = [
         label: ADMIN_COPY.nav.items.contracts.label,
         description: ADMIN_COPY.nav.items.contracts.desc,
         icon: FileCode2,
+      },
+      {
+        id: "environment",
+        label: ADMIN_COPY.nav.items.environment.label,
+        description: ADMIN_COPY.nav.items.environment.desc,
+        icon: KeyRound,
       },
     ],
   },

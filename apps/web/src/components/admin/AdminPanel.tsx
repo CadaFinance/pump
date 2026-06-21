@@ -39,6 +39,7 @@ import { AdminMemeCreateFeeModal } from "@/components/admin/AdminMemeCreateFeeMo
 import { AdminMinInitialBuyModal } from "@/components/admin/AdminMinInitialBuyModal";
 import { AdminFeeExemptModal } from "@/components/admin/AdminFeeExemptModal";
 import { AdminProtocolFeeModal } from "@/components/admin/AdminProtocolFeeModal";
+import { AdminEnvTab } from "@/components/admin/AdminEnvTab";
 import { AdminSystemHealth } from "@/components/admin/AdminSystemHealth";
 import { AdminPortfolioTab } from "@/components/admin/AdminPortfolioTab";
 import {
@@ -1598,6 +1599,14 @@ export function AdminPanel() {
             ))}
           </AdminDataTable>
         </AdminBlock>
+      </AdminTabPanel>
+
+      <AdminTabPanel id="environment" active={activeTab}>
+        {address ? (
+          <AdminEnvTab address={address} />
+        ) : (
+          <AdminEmptyState title={ADMIN_COPY.portfolio.empty} />
+        )}
       </AdminTabPanel>
       </AdminLayout>
     </AdminShell>

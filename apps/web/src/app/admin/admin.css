@@ -726,6 +726,94 @@
   gap: 16px;
 }
 
+/* ── Environment editor ────────────────────────────────────── */
+
+.admin-env-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.admin-env-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 18px;
+  align-items: start;
+}
+
+@media (min-width: 1024px) {
+  .admin-env-grid {
+    grid-template-columns: minmax(16rem, 22rem) minmax(0, 1fr);
+  }
+}
+
+.admin-env-file-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.admin-env-file-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  text-align: left;
+  border: 1px solid rgb(var(--pump-border) / 0.3);
+  border-radius: var(--radius-md);
+  background: rgb(var(--pump-surface) / 0.35);
+  padding: 12px 14px;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease;
+}
+
+.admin-env-file-card:hover {
+  border-color: rgb(var(--pump-border) / 0.55);
+  background: rgb(var(--pump-surface) / 0.55);
+}
+
+.admin-env-file-card--active {
+  border-color: rgb(var(--pump-accent) / 0.55);
+  background: rgb(var(--pump-accent) / 0.08);
+}
+
+.admin-env-file-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.admin-env-file-card-title {
+  font-size: var(--text-body);
+  font-weight: 600;
+  color: rgb(var(--pump-text));
+}
+
+.admin-env-editor {
+  display: block;
+  width: 100%;
+  min-height: 28rem;
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: 1px solid rgb(var(--pump-border) / 0.35);
+  border-radius: var(--radius-md);
+  background: rgb(var(--pump-bg));
+  color: rgb(var(--pump-text));
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  line-height: 1.55;
+  resize: vertical;
+}
+
+.admin-env-editor:focus {
+  outline: none;
+  border-color: rgb(var(--pump-accent) / 0.6);
+  box-shadow: 0 0 0 2px rgb(var(--pump-accent) / 0.15);
+}
+
 @media (min-width: 640px) {
   .admin-form-row-2 {
     grid-template-columns: 1fr 1fr;

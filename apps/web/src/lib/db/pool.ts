@@ -20,7 +20,7 @@ function poolConfig(connectionString: string): PoolConfig {
 
 /** Primary — writes and transactional reads. */
 export function getLaunchpadWritePool(): Pool {
-  const url = process.env.LAUNCHPAD_DATABASE_URL;
+  const url = process.env.LAUNCHPAD_DATABASE_URL?.trim();
   if (!url) {
     throw new Error("LAUNCHPAD_DATABASE_URL is required");
   }
@@ -39,7 +39,7 @@ export function getLaunchpadWritePool(): Pool {
 export function getLaunchpadReadPool(): Pool {
   const url =
     process.env.LAUNCHPAD_DATABASE_READ_URL?.trim() ||
-    process.env.LAUNCHPAD_DATABASE_URL;
+    process.env.LAUNCHPAD_DATABASE_URL?.trim();
   if (!url) {
     throw new Error("LAUNCHPAD_DATABASE_URL is required");
   }

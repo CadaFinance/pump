@@ -70,6 +70,11 @@ export const ADMIN_COPY = {
       description:
         "Canonical UUPS proxy addresses used by the app, indexer, and deployment scripts.",
     },
+    environment: {
+      title: "Environment files",
+      description:
+        "View and edit VM .env files for TMA, realtime, and indexer. Changes require a service reload.",
+    },
   } satisfies Record<AdminTabId, { title: string; description: string }>,
 
   nav: {
@@ -84,6 +89,7 @@ export const ADMIN_COPY = {
       promo: { label: "Promo campaigns", desc: "Points tasks" },
       treasury: { label: "Treasury & fees", desc: "Fees & treasury" },
       contracts: { label: "Contract registry", desc: "Proxy addresses" },
+      environment: { label: "Environment", desc: "VM .env files" },
     },
   },
 
@@ -206,6 +212,20 @@ export const ADMIN_COPY = {
       airdrop: "PumpAirdropManager",
       treasury: "LaunchpadTreasury",
     },
+  },
+
+  environment: {
+    callout:
+      "Secrets are stored on disk. Saving creates a timestamped .env.bak backup. Restart the listed service for changes to take effect. Alto bundler keys live in the TMA .env file.",
+    listTitle: "VM environment files",
+    listDescription: "All .env files used by Pump services on this host.",
+    editorTitle: "Editor",
+    editorEmpty: "Select a file from the list to view or edit.",
+    selectFile: "Select an environment file.",
+    empty: "No registered env files found.",
+    save: "Save file",
+    saving: "Saving…",
+    unsaved: "Unsaved changes — save before switching files.",
   },
 
   portfolio: {
