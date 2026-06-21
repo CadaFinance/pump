@@ -19,7 +19,8 @@ import {
   useWriteContract,
 } from "wagmi";
 import { ADMIN_ADDRESS } from "@/config/admin";
-import { adminApiUrl } from "@/lib/admin-api-client";
+import { adminFetch } from "@/lib/admin-api-client";
+import { adminSignOut } from "@/lib/admin/auth-client";
 import { ADMIN_COPY } from "@/lib/admin/copy";
 import { contracts, explorerAddressUrl, explorerTxUrl, pumpChain, shortAddress } from "@/config/chain";
 import { erc20Abi } from "@/lib/abis/erc20";
@@ -393,7 +394,7 @@ export function AdminPanel() {
     if (!address) return;
     setPromoLoading(true);
     try {
-      const res = await fetch(adminApiUrl("/api/admin/tasks", address), { cache: "no-store" });
+      const res = await adminFetch("/api/admin/tasks", { cache: "no-store" });
       const json = (await res.json()) as { data?: { tasks: AdminLinkTask[] }; error?: string };
       if (!res.ok) throw new Error(json.error ?? "Failed to load promo tasks");
       setPromoTasks(json.data?.tasks ?? []);
@@ -408,7 +409,7 @@ export function AdminPanel() {
     if (!address) return;
     setStatsLoading(true);
     try {
-      const res = await fetch(adminApiUrl("/api/admin/stats", address), { cache: "no-store" });
+      const res = await adminFetch("/api/admin/stats", { cache: "no-store" });
       const json = (await res.json()) as { data?: AdminPlatformStats; error?: string };
       if (!res.ok) throw new Error(json.error ?? "Failed to load platform stats");
       setStats(json.data ?? null);
@@ -425,7 +426,7 @@ export function AdminPanel() {
     setPlatformSettingsLoading(true);
     try {
       if (!address) return;
-      const res = await fetch(adminApiUrl("/api/admin/overview", address), { cache: "no-store" });
+      const res = await adminFetch("/api/admin/overview", { cache: "no-store" });
       const json = (await res.json()) as {
         data?: { protocol: ProtocolSnapshot; airdrops: SweepRow[] };
         error?: string;
@@ -623,7 +624,7 @@ export function AdminPanel() {
     setError(null);
     try {
       const rewardPoints = Number.parseInt(promoPoints.trim(), 10);
-      const res = await fetch(adminApiUrl("/api/admin/tasks", address), {
+      const res = await adminFetch("/api/admin/tasks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -655,7 +656,7 @@ export function AdminPanel() {
     setDeletingKey(taskKey);
     setError(null);
     try {
-      const res = await fetch(adminApiUrl("/api/admin/tasks", address), {
+      const res = await adminFetch("/api/admin/tasks", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ taskKey }),
@@ -780,7 +781,14 @@ export function AdminPanel() {
         onRefreshAll={() => void refreshAll()}
         refreshing={loading || statsLoading || promoLoading}
         headerActions={
-          <button type="button" className="admin-btn" onClick={() => disconnect()}>
+          <button
+            type="button"
+            className="admin-btn"
+            onClick={() => {
+              void adminSignOut();
+              disconnect();
+            }}
+          >
             {ADMIN_COPY.auth.disconnect}
           </button>
         }
@@ -1603,7 +1611,7 @@ export function AdminPanel() {
 
       <AdminTabPanel id="environment" active={activeTab}>
         {address ? (
-          <AdminEnvTab address={address} />
+          <AdminEnvTab />
         ) : (
           <AdminEmptyState title={ADMIN_COPY.portfolio.empty} />
         )}

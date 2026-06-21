@@ -11,9 +11,15 @@ export const ADMIN_COPY = {
   auth: {
     gateTitle: "Pump Console",
     gateBody:
-      "Sign in with the operations wallet configured in NEXT_PUBLIC_ADMIN_ADDRESS. This console controls protocol fees, treasury, and recovery tools.",
+      "Connect the operations wallet configured in NEXT_PUBLIC_ADMIN_ADDRESS. This console controls protocol fees, treasury, and recovery tools.",
     connect: "Connect operations wallet",
     connecting: "Connecting wallet…",
+    sessionChecking: "Checking sign-in session…",
+    signInTitle: "Verify wallet ownership",
+    signInBody:
+      "Sign a one-time message (SIWE) to prove you control the operations wallet. Admin API requests require this session — connecting MetaMask alone is not enough.",
+    signIn: "Sign in with wallet",
+    signingIn: "Waiting for signature…",
     unauthorizedTitle: "Access denied",
     unauthorizedBody:
       "The connected wallet is not authorized for this console. Switch to the configured admin address or update your environment.",

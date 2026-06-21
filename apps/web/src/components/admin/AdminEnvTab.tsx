@@ -11,7 +11,7 @@ import {
   Zap,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { adminApiUrl } from "@/lib/admin-api-client";
+import { adminFetch } from "@/lib/admin-api-client";
 import { isSensitiveEnvKey } from "@/lib/admin/env-parse";
 import { ADMIN_COPY } from "@/lib/admin/copy";
 import {
@@ -59,7 +59,7 @@ function maskValue(value: string): string {
   return ADMIN_COPY.environment.masked;
 }
 
-export function AdminEnvTab({ address }: { address: string }) {
+export function AdminEnvTab() {
   const [files, setFiles] = useState<EnvFileMeta[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [meta, setMeta] = useState<EnvFileMeta | null>(null);
@@ -85,7 +85,7 @@ export function AdminEnvTab({ address }: { address: string }) {
   const loadList = useCallback(async () => {
     setError(null);
     try {
-      const res = await fetch(adminApiUrl("/api/admin/env-files", address), { cache: "no-store" });
+      const res = await adminFetch("/api/admin/env-files", { cache: "no-store" });
       const json = (await res.json()) as { data?: EnvFileMeta[]; error?: string };
       if (!res.ok) throw new Error(json.error ?? "Failed to load services");
       const list = json.data ?? [];
@@ -94,7 +94,7 @@ export function AdminEnvTab({ address }: { address: string }) {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load services");
     }
-  }, [address]);
+  }, []);
 
   const loadVariables = useCallback(
     async (id: string) => {
@@ -104,7 +104,7 @@ export function AdminEnvTab({ address }: { address: string }) {
       setEditingKey(null);
       setRevealed(new Set());
       try {
-        const res = await fetch(adminApiUrl(`/api/admin/env-files/${id}`, address), {
+        const res = await adminFetch(`/api/admin/env-files/${id}`, {
           cache: "no-store",
         });
         const json = (await res.json()) as {
@@ -128,7 +128,7 @@ export function AdminEnvTab({ address }: { address: string }) {
         setLoading(false);
       }
     },
-    [address]
+    [selectedId]
   );
 
   useEffect(() => {
@@ -228,7 +228,7 @@ export function AdminEnvTab({ address }: { address: string }) {
     setError(null);
     setNotice(null);
     try {
-      const res = await fetch(adminApiUrl(`/api/admin/env-files/${selectedId}`, address), {
+      const res = await adminFetch(`/api/admin/env-files/${selectedId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ variables }),
@@ -256,7 +256,7 @@ export function AdminEnvTab({ address }: { address: string }) {
     setApplying(true);
     setError(null);
     try {
-      const res = await fetch(adminApiUrl(`/api/admin/env-files/${selectedId}/reload`, address), {
+      const res = await adminFetch(`/api/admin/env-files/${selectedId}/reload`, {
         method: "POST",
       });
       const json = (await res.json()) as { data?: { message: string }; error?: string };

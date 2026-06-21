@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useAccount } from "wagmi";
-import { adminApiUrl } from "@/lib/admin-api-client";
+import { adminFetch } from "@/lib/admin-api-client";
 import { ADMIN_COPY } from "@/lib/admin/copy";
 import {
   AdminBlock,
@@ -294,7 +294,7 @@ export function AdminSystemHealth() {
     setError(null);
     setLoading(true);
     try {
-      const res = await fetch(adminApiUrl("/api/admin/system-health", address), { cache: "no-store" });
+      const res = await adminFetch("/api/admin/system-health", { cache: "no-store" });
       const json = await parseJsonResponse<{ data?: SystemHealthReport; error?: string }>(res);
       if (!res.ok) throw new Error(json.error ?? "Failed to load system health");
       setReport(json.data ?? null);
