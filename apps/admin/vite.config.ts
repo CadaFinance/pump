@@ -22,8 +22,6 @@ export default defineConfig(({ mode }) => {
       alias: {
         "@": webSrc,
         "next/link": path.resolve(__dirname, "src/shims/next-link.tsx"),
-        viem: path.resolve(__dirname, "node_modules/viem"),
-        wagmi: path.resolve(__dirname, "node_modules/wagmi"),
       },
     },
     define: {
