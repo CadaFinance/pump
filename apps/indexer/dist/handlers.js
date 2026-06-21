@@ -1,0 +1,737 @@
+import { withTransaction } from "./db.js";
+import { dbAddress, eventId, ratioWeiToDecimal, weiToDecimal } from "./utils.js";
+import { applyTradeToPositionCost } from "./position-cost.js";
+import { TASK_KEYS } from "./points.js";
+import { recomputeKingAfterTrade } from "./king.js";
+import { markParticipantClaimedIndexer, refreshParticipantSnapshotIndexer, } from "./airdrop-participant-snapshot.js";
+import { publishTrade, publishWalletTrade } from "./redis-publish.js";
+import { incrementalBoardStatsEnabled, marketCapZugFromSpot, readBoardStatsForPublish, seedBoardStatsOnTokenCreated, upsertBoardStatsAfterTrade, } from "./board-stats.js";
+import { invalidateArenaCaches } from "./redis-cache.js";
+import { FIRST_SMART_BUY_MIN_WEI, VOLUME_MONSTER_MIN_BNB } from "./mission-thresholds.js";
+export class LaunchpadEventHandlers {
+    context;
+    blockTimeCache = new Map();
+    pendingFeeSplits = new Map();
+    constructor(context) {
+        this.context = context;
+    }
+    async handle(log) {
+        switch (log.eventName) {
+            case "TokenCreated":
+                await this.handleTokenCreated(log);
+                return;
+            case "Trade":
+                await this.handleTrade(log);
+                return;
+            case "FeeSplit":
+                this.handleFeeSplit(log);
+                return;
+            case "CreatorFeeClaimed":
+                await this.handleCreatorFeeClaimed(log);
+                return;
+            case "ReferrerSet":
+                await this.handleReferrerSet(log);
+                return;
+            case "ReferrerFeeClaimed":
+                await this.handleReferrerFeeClaimed(log);
+                return;
+            case "AirdropCreated":
+                await this.handleAirdropCreated(log);
+                return;
+            case "AirdropFinalized":
+                await this.handleAirdropFinalized(log);
+                return;
+            case "AirdropClaimed":
+                await this.handleAirdropClaimed(log);
+                return;
+            case "AirdropRemainderSwept":
+                await this.handleAirdropRemainderSwept(log);
+                return;
+            default:
+                return;
+        }
+    }
+    async handleTokenCreated(log) {
+        const txHash = requiredTxHash(log);
+        const blockTime = await this.getBlockTime(log.blockNumber);
+        const token = dbAddress(asString(log.args.token));
+        const creator = dbAddress(asString(log.args.creator));
+        const targetZug = asBigInt(log.args.targetZug);
+        await this.context.launchpadPool.query(`
+        INSERT INTO tokens (
+          address,
+          chain_id,
+          creator_address,
+          name,
+          symbol,
+          metadata_uri,
+          launch_tx_hash,
+          launch_block_number,
+          status,
+          created_at,
+          updated_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'BONDING', $9, now())
+        ON CONFLICT (address) DO UPDATE
+        SET creator_address = EXCLUDED.creator_address,
+            name = EXCLUDED.name,
+            symbol = EXCLUDED.symbol,
+            metadata_uri = EXCLUDED.metadata_uri,
+            updated_at = now()
+      `, [
+            token,
+            Number(process.env.ZUGCHAIN_CHAIN_ID ?? 824642),
+            creator,
+            asString(log.args.name),
+            asString(log.args.symbol),
+            asString(log.args.metadataURI),
+            txHash.toLowerCase(),
+            log.blockNumber.toString(),
+            blockTime
+        ]);
+        await this.context.launchpadPool.query(`
+        INSERT INTO bonding_states (
+          token_address,
+          target_zug,
+          market_cap_zug,
+          last_price_zug,
+          updated_at
+        ) VALUES ($1, $2, $3, $4, now())
+        ON CONFLICT (token_address) DO UPDATE
+        SET target_zug = EXCLUDED.target_zug,
+            last_price_zug = COALESCE(NULLIF(bonding_states.last_price_zug, 0), EXCLUDED.last_price_zug),
+            updated_at = now()
+      `, [
+            token,
+            weiToDecimal(targetZug),
+            startingMarketCapZug(),
+            startingSpotPriceZug(),
+        ]);
+        await this.context.pointsBridge.award({
+            address: creator,
+            taskKey: TASK_KEYS.deployMeme,
+            eventId: eventId(txHash, requiredLogIndex(log)),
+            txHash,
+            blockTime,
+            metadata: { token, source: "TokenCreated" }
+        });
+        if (incrementalBoardStatsEnabled()) {
+            await seedBoardStatsOnTokenCreated(this.context.launchpadPool, {
+                tokenAddress: token,
+                marketCapZug: startingMarketCapZug(),
+                spotPriceZug: startingSpotPriceZug(),
+            });
+        }
+        // KOTH only after trades — create has no real price discovery yet.
+    }
+    async handleTrade(log) {
+        const txHash = requiredTxHash(log);
+        const logIndex = requiredLogIndex(log);
+        const blockTime = await this.getBlockTime(log.blockNumber);
+        const token = dbAddress(asString(log.args.token));
+        const trader = dbAddress(asString(log.args.trader));
+        const isBuy = Boolean(log.args.isBuy);
+        const zugAmount = asBigInt(log.args.zugAmount);
+        const tokenAmount = asBigInt(log.args.tokenAmount);
+        const reserveZug = asBigInt(log.args.reserveZug);
+        const soldTokens = asBigInt(log.args.soldTokens);
+        const feeZug = asBigInt(log.args.feeZug);
+        const feeSplit = this.pendingFeeSplits.get(feeSplitKey(txHash, token)) ?? {
+            creatorFee: 0n,
+            referrerFee: 0n,
+            treasuryFee: 0n
+        };
+        this.pendingFeeSplits.delete(feeSplitKey(txHash, token));
+        const tradeEventId = eventId(txHash, logIndex);
+        const side = isBuy ? "BUY" : "SELL";
+        const executionPrice = ratioWeiToDecimal(zugAmount, tokenAmount);
+        const spotPriceStr = spotPriceBnbFromReserves(reserveZug, soldTokens);
+        const markPrice = Number(spotPriceStr) > 0 ? spotPriceStr : executionPrice;
+        const tradeResult = await withTransaction(this.context.launchpadPool, async (client) => {
+            const inserted = await client.query(`
+          WITH inserted_trade AS (
+            INSERT INTO trades (
+              event_id,
+              token_address,
+              trader_address,
+              side,
+              zug_amount,
+              token_amount,
+              price_zug,
+              fee_zug,
+              creator_fee_zug,
+              treasury_fee_zug,
+              referrer_fee_zug,
+              tx_hash,
+              log_index,
+              block_number,
+              block_time
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+            ON CONFLICT (tx_hash, log_index) DO NOTHING
+            RETURNING id
+          )
+          SELECT id FROM inserted_trade
+        `, [
+                tradeEventId,
+                token,
+                trader,
+                side,
+                weiToDecimal(zugAmount),
+                weiToDecimal(tokenAmount),
+                executionPrice,
+                weiToDecimal(feeZug),
+                weiToDecimal(feeSplit.creatorFee),
+                weiToDecimal(feeSplit.treasuryFee),
+                weiToDecimal(feeSplit.referrerFee),
+                txHash.toLowerCase(),
+                logIndex,
+                log.blockNumber.toString(),
+                blockTime
+            ]);
+            if (!inserted.rowCount || !inserted.rows[0])
+                return null;
+            const prevBalance = await client.query(`
+          SELECT token_balance::text
+          FROM user_positions
+          WHERE token_address = $1 AND address = $2
+        `, [token, trader]);
+            const oldBalance = Number(prevBalance.rows[0]?.token_balance ?? 0);
+            await client.query(`
+          UPDATE bonding_states
+          SET reserve_zug = $2,
+              token_sold = $3,
+              progress_bps = LEAST(
+                10000,
+                floor(($2::numeric / NULLIF(target_zug, 0)) * 10000)::integer
+              ),
+              last_price_zug = $4,
+              market_cap_zug = $4::numeric * 1000000000,
+              trade_count = trade_count + 1,
+              updated_at = now()
+          WHERE token_address = $1
+        `, [token, weiToDecimal(reserveZug), weiToDecimal(soldTokens), markPrice]);
+            await this.updateUserAggregates(client, token, trader, isBuy, zugAmount, feeZug, tokenAmount);
+            await this.updateHolderCountIncremental(client, token, trader, oldBalance);
+            if (isBuy) {
+                await client.query(`
+            INSERT INTO airdrop_participants (airdrop_id, address, first_onchain_at, updated_at)
+            SELECT a.id, $2, $3, now()
+            FROM airdrops a
+            WHERE a.linked_token = $1
+              AND a.qualify_start <= $3::timestamptz
+              AND a.qualify_end >= $3::timestamptz
+            ON CONFLICT (airdrop_id, address) DO UPDATE
+            SET first_onchain_at = COALESCE(airdrop_participants.first_onchain_at, EXCLUDED.first_onchain_at),
+                updated_at = now()
+          `, [token, trader, blockTime]);
+            }
+            const bonding = await client.query(`
+          SELECT reserve_zug::text, token_sold::text, market_cap_zug::text, last_price_zug::text,
+                 progress_bps, trade_count, holder_count
+          FROM bonding_states
+          WHERE token_address = $1
+        `, [token]);
+            const b = bonding.rows[0];
+            if (!b)
+                return null;
+            const tradeNetZug = weiToDecimal(zugAmount - feeZug);
+            await upsertBoardStatsAfterTrade(client, {
+                tokenAddress: token,
+                reserveZug: b.reserve_zug,
+                tokenSold: b.token_sold,
+                spotPriceZug: markPrice,
+                marketCapZug: marketCapZugFromSpot(markPrice),
+                progressBps: b.progress_bps,
+                tradeCount: b.trade_count,
+                holderCount: b.holder_count,
+                tradeNetZug,
+                blockTime,
+                traderAddress: trader,
+            });
+            return {
+                tradeId: inserted.rows[0].id,
+                bonding: b,
+            };
+        });
+        if (!tradeResult)
+            return;
+        if (isBuy) {
+            const activeAirdrops = await this.context.launchpadPool.query(`
+          SELECT id::text
+          FROM airdrops
+          WHERE linked_token = $1
+            AND qualify_start <= $2::timestamptz
+            AND qualify_end >= $2::timestamptz
+        `, [token, blockTime]);
+            for (const row of activeAirdrops.rows) {
+                await refreshParticipantSnapshotIndexer(this.context.launchpadPool, row.id, trader).catch(() => undefined);
+            }
+        }
+        await this.awardTradeMissions(token, trader, isBuy, zugAmount, tradeEventId, txHash, blockTime);
+        await recomputeKingAfterTrade(this.context, blockTime, txHash, token);
+        const boardStats = await readBoardStatsForPublish(this.context.launchpadPool, token);
+        await publishTrade({
+            type: "trade",
+            tokenAddress: token,
+            trade: {
+                id: tradeResult.tradeId,
+                side,
+                traderAddress: trader,
+                zugAmount: weiToDecimal(zugAmount),
+                tokenAmount: weiToDecimal(tokenAmount),
+                priceZug: markPrice,
+                txHash: txHash.toLowerCase(),
+                logIndex,
+                blockTime: blockTime.toISOString(),
+            },
+            bonding: {
+                reserveZug: tradeResult.bonding.reserve_zug,
+                tokenSold: tradeResult.bonding.token_sold,
+                marketCapZug: tradeResult.bonding.market_cap_zug,
+                lastPriceZug: tradeResult.bonding.last_price_zug,
+                progressBps: tradeResult.bonding.progress_bps,
+                tradeCount: tradeResult.bonding.trade_count,
+                holderCount: tradeResult.bonding.holder_count,
+                volume24hZug: boardStats?.volume24hZug,
+                traders24h: boardStats?.traders24h,
+            },
+        });
+        await invalidateArenaCaches(token);
+        const positionRow = await this.context.launchpadPool.query(`
+        SELECT
+          token_balance::text,
+          COALESCE(remaining_cost_basis_zug, 0)::text AS remaining_cost_basis_zug,
+          realized_pnl_zug::text
+        FROM user_positions
+        WHERE token_address = $1 AND address = $2
+      `, [token, trader]);
+        const position = positionRow.rows[0];
+        if (position) {
+            await publishWalletTrade({
+                type: "wallet_trade",
+                walletAddress: trader,
+                tokenAddress: token,
+                trade: {
+                    id: tradeResult.tradeId,
+                    side,
+                    traderAddress: trader,
+                    zugAmount: weiToDecimal(zugAmount),
+                    tokenAmount: weiToDecimal(tokenAmount),
+                    priceZug: markPrice,
+                    txHash: txHash.toLowerCase(),
+                    logIndex,
+                    blockTime: blockTime.toISOString(),
+                },
+                position: {
+                    tokenBalance: position.token_balance,
+                    remainingCostBasisZug: position.remaining_cost_basis_zug,
+                    realizedPnlZug: position.realized_pnl_zug,
+                },
+                bonding: {
+                    reserveZug: tradeResult.bonding.reserve_zug,
+                    tokenSold: tradeResult.bonding.token_sold,
+                    lastPriceZug: tradeResult.bonding.last_price_zug,
+                    marketCapZug: tradeResult.bonding.market_cap_zug,
+                },
+            });
+        }
+    }
+    handleFeeSplit(log) {
+        const txHash = requiredTxHash(log);
+        const token = dbAddress(asString(log.args.token));
+        this.pendingFeeSplits.set(feeSplitKey(txHash, token), {
+            creatorFee: asBigInt(log.args.creatorFee),
+            referrerFee: log.args.referrerFee != null ? asBigInt(log.args.referrerFee) : 0n,
+            treasuryFee: asBigInt(log.args.treasuryFee)
+        });
+    }
+    async handleAirdropCreated(log) {
+        const txHash = requiredTxHash(log);
+        const blockTime = await this.getBlockTime(log.blockNumber);
+        const onChainId = asBigInt(log.args.airdropId).toString();
+        const creator = dbAddress(asString(log.args.creator));
+        const linkedToken = dbAddress(asString(log.args.linkedToken));
+        const rewardTokenRaw = asString(log.args.rewardToken);
+        const rewardToken = rewardTokenRaw === "0x0000000000000000000000000000000000000000" ? null : dbAddress(rewardTokenRaw);
+        const totalFunded = weiToDecimal(asBigInt(log.args.totalFunded));
+        const rulesHash = bytes32ToHex(log.args.rulesHash);
+        const qualifyStart = unixToDate(asBigInt(log.args.qualifyStart));
+        const qualifyEnd = unixToDate(asBigInt(log.args.qualifyEnd));
+        const claimStart = unixToDate(asBigInt(log.args.claimStart));
+        const claimEnd = unixToDate(asBigInt(log.args.claimEnd));
+        await this.context.launchpadPool.query(`
+        INSERT INTO airdrops (
+          on_chain_id,
+          creator_address,
+          linked_token,
+          reward_token,
+          total_funded,
+          rules_json,
+          rules_hash,
+          qualify_start,
+          qualify_end,
+          claim_start,
+          claim_end,
+          status,
+          create_tx_hash,
+          created_at,
+          updated_at
+        ) VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9, $10, $11, 'ACTIVE', $12, $13, now())
+        ON CONFLICT (on_chain_id) DO UPDATE
+        SET creator_address = EXCLUDED.creator_address,
+            linked_token = EXCLUDED.linked_token,
+            reward_token = EXCLUDED.reward_token,
+            total_funded = EXCLUDED.total_funded,
+            qualify_start = EXCLUDED.qualify_start,
+            qualify_end = EXCLUDED.qualify_end,
+            claim_start = EXCLUDED.claim_start,
+            claim_end = EXCLUDED.claim_end,
+            create_tx_hash = EXCLUDED.create_tx_hash,
+            rules_json = CASE
+              WHEN airdrops.rules_json = '{}'::jsonb THEN EXCLUDED.rules_json
+              ELSE airdrops.rules_json
+            END,
+            updated_at = now()
+      `, [
+            onChainId,
+            creator,
+            linkedToken,
+            rewardToken,
+            totalFunded,
+            JSON.stringify({}),
+            rulesHash,
+            qualifyStart,
+            qualifyEnd,
+            claimStart,
+            claimEnd,
+            txHash.toLowerCase(),
+            blockTime
+        ]);
+    }
+    async handleAirdropFinalized(log) {
+        const onChainId = asBigInt(log.args.airdropId).toString();
+        const merkleRoot = bytes32ToHex(log.args.merkleRoot);
+        const totalAllocated = weiToDecimal(asBigInt(log.args.totalAllocated));
+        await this.context.launchpadPool.query(`
+        UPDATE airdrops
+        SET merkle_root = $2,
+            total_allocated = $3,
+            status = 'FINALIZED',
+            updated_at = now()
+        WHERE on_chain_id = $1::bigint
+      `, [onChainId, merkleRoot, totalAllocated]);
+    }
+    async handleAirdropClaimed(log) {
+        const txHash = requiredTxHash(log);
+        const blockTime = await this.getBlockTime(log.blockNumber);
+        const onChainId = asBigInt(log.args.airdropId).toString();
+        const claimant = dbAddress(asString(log.args.claimant));
+        const amount = weiToDecimal(asBigInt(log.args.amount));
+        const airdrop = await this.context.launchpadPool.query("SELECT id FROM airdrops WHERE on_chain_id = $1::bigint", [onChainId]);
+        const airdropId = airdrop.rows[0]?.id;
+        if (!airdropId)
+            return;
+        await this.context.launchpadPool.query(`
+        INSERT INTO airdrop_claims (airdrop_id, claimant, amount, tx_hash, block_time)
+        VALUES ($1, $2, $3, $4, $5)
+        ON CONFLICT (airdrop_id, claimant) DO NOTHING
+      `, [airdropId, claimant, amount, txHash.toLowerCase(), blockTime]);
+        await markParticipantClaimedIndexer(this.context.launchpadPool, airdropId, claimant, blockTime).catch(() => undefined);
+    }
+    async handleAirdropRemainderSwept(log) {
+        const onChainId = asBigInt(log.args.airdropId).toString();
+        await this.context.launchpadPool.query(`
+        UPDATE airdrops
+        SET status = 'CLOSED',
+            updated_at = now()
+        WHERE on_chain_id = $1::bigint
+      `, [onChainId]);
+    }
+    async handleCreatorFeeClaimed(log) {
+        const amountWei = asBigInt(log.args.amount);
+        if (amountWei <= 0n) {
+            // Contract emits CreatorFeeClaimed even when pending balance was 0.
+            return;
+        }
+        const txHash = requiredTxHash(log);
+        const logIndex = requiredLogIndex(log);
+        const blockTime = await this.getBlockTime(log.blockNumber);
+        const creator = dbAddress(asString(log.args.creator));
+        const amount = weiToDecimal(amountWei);
+        await this.context.launchpadPool.query(`
+        INSERT INTO creator_fee_claims (
+          creator_address,
+          amount_bnb,
+          tx_hash,
+          log_index,
+          block_number,
+          block_time
+        ) VALUES ($1, $2, $3, $4, $5, $6)
+        ON CONFLICT (tx_hash, log_index) DO NOTHING
+      `, [
+            creator,
+            amount,
+            txHash.toLowerCase(),
+            logIndex,
+            log.blockNumber.toString(),
+            blockTime
+        ]);
+    }
+    async handleReferrerSet(log) {
+        const txHash = requiredTxHash(log);
+        const invitee = dbAddress(asString(log.args.trader));
+        const referrer = dbAddress(asString(log.args.referrer));
+        await this.context.launchpadPool.query(`
+        INSERT INTO referral_bindings (
+          invitee_address,
+          referrer_address,
+          bound_tx_hash,
+          bound_at
+        ) VALUES ($1, $2, $3, now())
+        ON CONFLICT (invitee_address) DO NOTHING
+      `, [invitee, referrer, txHash.toLowerCase()]);
+    }
+    async handleReferrerFeeClaimed(log) {
+        const amountWei = asBigInt(log.args.amount);
+        if (amountWei <= 0n)
+            return;
+        const txHash = requiredTxHash(log);
+        const logIndex = requiredLogIndex(log);
+        const blockTime = await this.getBlockTime(log.blockNumber);
+        const referrer = dbAddress(asString(log.args.referrer));
+        const amount = weiToDecimal(amountWei);
+        await this.context.launchpadPool.query(`
+        INSERT INTO referrer_fee_claims (
+          referrer_address,
+          amount_bnb,
+          tx_hash,
+          log_index,
+          block_number,
+          block_time
+        ) VALUES ($1, $2, $3, $4, $5, $6)
+        ON CONFLICT (tx_hash, log_index) DO NOTHING
+      `, [
+            referrer,
+            amount,
+            txHash.toLowerCase(),
+            logIndex,
+            log.blockNumber.toString(),
+            blockTime
+        ]);
+    }
+    async updateUserAggregates(client, token, trader, isBuy, zugAmount, feeZug, tokenAmount) {
+        const grossZug = Number(weiToDecimal(zugAmount));
+        const fee = Number(weiToDecimal(feeZug));
+        const tokens = Number(weiToDecimal(tokenAmount));
+        const existing = await client.query(`
+        SELECT
+          token_balance::text,
+          total_bought_zug::text,
+          total_sold_zug::text,
+          COALESCE(remaining_cost_basis_zug, 0)::text AS remaining_cost_basis_zug,
+          realized_pnl_zug::text
+        FROM user_positions
+        WHERE token_address = $1 AND address = $2
+      `, [token, trader]);
+        const row = existing.rows[0];
+        const prior = {
+            tokenBalance: Number(row?.token_balance ?? 0),
+            totalBought: Number(row?.total_bought_zug ?? 0),
+            totalSold: Number(row?.total_sold_zug ?? 0),
+            remainingCostBasis: Number(row?.remaining_cost_basis_zug ?? 0),
+            realizedPnl: Number(row?.realized_pnl_zug ?? 0),
+        };
+        const next = applyTradeToPositionCost(prior, isBuy, grossZug, fee, tokens);
+        await client.query(`
+        INSERT INTO user_positions (
+          token_address,
+          address,
+          token_balance,
+          total_bought_zug,
+          total_sold_zug,
+          remaining_cost_basis_zug,
+          realized_pnl_zug,
+          updated_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, now())
+        ON CONFLICT (token_address, address) DO UPDATE
+        SET token_balance = EXCLUDED.token_balance,
+            total_bought_zug = EXCLUDED.total_bought_zug,
+            total_sold_zug = EXCLUDED.total_sold_zug,
+            remaining_cost_basis_zug = EXCLUDED.remaining_cost_basis_zug,
+            realized_pnl_zug = EXCLUDED.realized_pnl_zug,
+            updated_at = now()
+      `, [
+            token,
+            trader,
+            String(next.tokenBalance),
+            String(next.totalBought),
+            String(next.totalSold),
+            String(next.remainingCostBasis),
+            String(next.realizedPnl),
+        ]);
+        await client.query(`
+        INSERT INTO user_volumes (
+          address,
+          total_volume_zug,
+          buy_volume_zug,
+          sell_volume_zug,
+          last_trade_at,
+          updated_at
+        ) VALUES (
+          $1,
+          $2,
+          CASE WHEN $3 THEN $2::numeric ELSE 0 END,
+          CASE WHEN $3 THEN 0 ELSE $2::numeric END,
+          now(),
+          now()
+        )
+        ON CONFLICT (address) DO UPDATE
+        SET total_volume_zug = user_volumes.total_volume_zug + EXCLUDED.total_volume_zug,
+            buy_volume_zug = user_volumes.buy_volume_zug + EXCLUDED.buy_volume_zug,
+            sell_volume_zug = user_volumes.sell_volume_zug + EXCLUDED.sell_volume_zug,
+            last_trade_at = now(),
+            updated_at = now()
+      `, [trader, weiToDecimal(zugAmount), isBuy]);
+    }
+    async updateHolderCountIncremental(client, token, trader, oldBalance) {
+        const nextBalance = await client.query(`
+        SELECT token_balance::text
+        FROM user_positions
+        WHERE token_address = $1 AND address = $2
+      `, [token, trader]);
+        const newBalance = Number(nextBalance.rows[0]?.token_balance ?? 0);
+        if (oldBalance <= 0 && newBalance > 0) {
+            await client.query(`
+          UPDATE bonding_states
+          SET holder_count = holder_count + 1,
+              updated_at = now()
+          WHERE token_address = $1
+        `, [token]);
+            return;
+        }
+        if (oldBalance > 0 && newBalance <= 0) {
+            await client.query(`
+          UPDATE bonding_states
+          SET holder_count = GREATEST(holder_count - 1, 0),
+              updated_at = now()
+          WHERE token_address = $1
+        `, [token]);
+        }
+    }
+    /** @deprecated full scan — use updateHolderCountIncremental in trade path */
+    async updateHolderCount(token) {
+        await this.context.launchpadPool.query(`
+        UPDATE bonding_states
+        SET holder_count = (
+              SELECT count(*)::integer
+              FROM user_positions
+              WHERE token_address = $1
+                AND token_balance > 0
+            ),
+            updated_at = now()
+        WHERE token_address = $1
+      `, [token]);
+    }
+    async awardTradeMissions(token, trader, isBuy, zugAmount, tradeEventId, txHash, blockTime) {
+        await this.context.pointsBridge.award({
+            address: trader,
+            taskKey: TASK_KEYS.dailySwap,
+            eventId: tradeEventId,
+            txHash,
+            blockTime,
+            daily: true,
+            metadata: { token, side: isBuy ? "BUY" : "SELL" }
+        });
+        if (isBuy && zugAmount >= FIRST_SMART_BUY_MIN_WEI) {
+            const tokenResult = await this.context.launchpadPool.query("SELECT creator_address FROM tokens WHERE address = $1", [token]);
+            const creator = tokenResult.rows[0]?.creator_address;
+            if (creator && creator !== trader) {
+                await this.context.pointsBridge.award({
+                    address: trader,
+                    taskKey: TASK_KEYS.firstSmartBuy,
+                    eventId: tradeEventId,
+                    txHash,
+                    blockTime,
+                    metadata: { token, side: "BUY", threshold_bnb: "0.01" }
+                });
+            }
+        }
+        const volumeResult = await this.context.launchpadPool.query("SELECT total_volume_zug FROM user_volumes WHERE address = $1", [trader]);
+        if (Number(volumeResult.rows[0]?.total_volume_zug ?? 0) >= VOLUME_MONSTER_MIN_BNB) {
+            await this.context.pointsBridge.award({
+                address: trader,
+                taskKey: TASK_KEYS.volumeMonster,
+                eventId: `${trader}:volume-monster`,
+                txHash,
+                blockTime,
+                metadata: { threshold_bnb: String(VOLUME_MONSTER_MIN_BNB) }
+            });
+        }
+    }
+    async getBlockTime(blockNumber) {
+        const key = blockNumber.toString();
+        const cached = this.blockTimeCache.get(key);
+        if (cached)
+            return cached;
+        const block = await this.context.publicClient.getBlock({ blockNumber });
+        const date = new Date(Number(block.timestamp) * 1000);
+        this.blockTimeCache.set(key, date);
+        return date;
+    }
+}
+function feeSplitKey(txHash, token) {
+    return `${txHash.toLowerCase()}:${token}`;
+}
+function requiredTxHash(log) {
+    if (!log.transactionHash) {
+        throw new Error(`Missing transaction hash for ${log.eventName}`);
+    }
+    return log.transactionHash;
+}
+function requiredLogIndex(log) {
+    if (log.logIndex === undefined) {
+        throw new Error(`Missing log index for ${log.eventName}`);
+    }
+    return log.logIndex;
+}
+function asString(value) {
+    if (typeof value !== "string") {
+        throw new Error("Expected string event argument");
+    }
+    return value;
+}
+function asBigInt(value) {
+    if (typeof value !== "bigint") {
+        throw new Error("Expected bigint event argument");
+    }
+    return value;
+}
+function bytes32ToHex(value) {
+    if (typeof value !== "string" && typeof value !== "bigint") {
+        throw new Error("Expected bytes32 event argument");
+    }
+    const hex = typeof value === "bigint" ? `0x${value.toString(16).padStart(64, "0")}` : value;
+    return hex.toLowerCase();
+}
+function unixToDate(seconds) {
+    return new Date(Number(seconds) * 1000);
+}
+/** Marginal spot BNB/token after trade (matches chart + holders P/L). */
+function spotPriceBnbFromReserves(reserveZug, soldTokens) {
+    const virtualZug = BigInt(process.env.BONDING_VIRTUAL_ZUG_RESERVE_WEI ?? `${5000n * 10n ** 18n}`);
+    const virtualToken = 1000000000n * 10n ** 18n;
+    const poolZug = virtualZug + reserveZug;
+    const poolTokens = virtualToken - soldTokens;
+    if (poolTokens <= 0n || poolZug <= 0n)
+        return "0";
+    return ratioWeiToDecimal(poolZug, poolTokens);
+}
+/** Factory defaults: virtualZug / 1B token virtual → spot price per token. */
+function startingSpotPriceZug() {
+    const virtualZug = BigInt(process.env.BONDING_VIRTUAL_ZUG_RESERVE_WEI ?? `${5000n * 10n ** 18n}`);
+    const virtualToken = 1000000000n * 10n ** 18n;
+    return ratioWeiToDecimal(virtualZug, virtualToken);
+}
+function startingMarketCapZug() {
+    const price = Number(startingSpotPriceZug());
+    return (price * 1_000_000_000).toString();
+}

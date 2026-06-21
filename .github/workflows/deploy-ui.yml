@@ -1,26 +1,28 @@
-name: Deploy TMA to VM
+# UI-only auto deploy on push; full stack: deploy-tma.yml
+#
+# Manual:
+#   gh workflow run deploy-ui.yml
+#   gh workflow run deploy-ui.yml -f ref=main
+name: Deploy UI + Admin Console
 
 on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Branch to deploy (VM checks out origin/<ref>)
+        required: false
+        default: main
+        type: string
   push:
     branches: [main]
     paths:
       - "admin-console/**"
       - "public/**"
       - "src/**"
-      - "indexer/**"
-      - "realtime/**"
-      - "db/**"
-      - "contracts/**"
-      - "deploy/**"
-      - "scripts/**"
-      - "package.json"
-      - "package-lock.json"
-      - "next.config.ts"
-      - "tsconfig.json"
       - "tailwind.config.ts"
       - "postcss.config.mjs"
-      - "ecosystem.config.cjs"
-      - ".github/workflows/deploy-tma.yml"
+      - "deploy/ui-deploy.sh"
+      - "deploy/admin-console-build.sh"
       - ".github/workflows/deploy-ui.yml"
 
 concurrency:
@@ -32,6 +34,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       full_stack: ${{ steps.classify.outputs.full_stack }}
+      ui_only: ${{ steps.classify.outputs.ui_only }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -70,16 +73,40 @@ jobs:
               - '!src/app/**/error.tsx'
               - '!src/app/**/opengraph-image.tsx'
               - '!src/app/**/*Client.tsx'
+            ui_only:
+              - 'admin-console/**'
+              - 'public/**'
+              - 'src/components/**'
+              - 'src/app/globals.css'
+              - 'src/app/admin/**'
+              - 'src/app/**/page.tsx'
+              - 'src/app/**/loading.tsx'
+              - 'src/app/**/error.tsx'
+              - 'src/app/**/opengraph-image.tsx'
+              - 'src/app/**/*Client.tsx'
+              - 'tailwind.config.ts'
+              - 'postcss.config.mjs'
+              - 'deploy/ui-deploy.sh'
+              - 'deploy/admin-console-build.sh'
+              - '.github/workflows/deploy-ui.yml'
       - id: classify
         run: |
-          echo "full_stack=${{ steps.filter.outputs.full_stack }}" >> "$GITHUB_OUTPUT"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "full_stack=false" >> "$GITHUB_OUTPUT"
+            echo "ui_only=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "full_stack=${{ steps.filter.outputs.full_stack }}" >> "$GITHUB_OUTPUT"
+            echo "ui_only=${{ steps.filter.outputs.ui_only }}" >> "$GITHUB_OUTPUT"
+          fi
 
-  deploy:
+  deploy-ui:
     needs: changes
-    if: needs.changes.outputs.full_stack == 'true'
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (needs.changes.outputs.full_stack != 'true' && needs.changes.outputs.ui_only == 'true')
     runs-on: ubuntu-latest
     steps:
-      - name: Deploy over SSH
+      - name: Deploy UI over SSH
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.VM_HOST }}
@@ -87,10 +114,9 @@ jobs:
           key: ${{ secrets.VM_SSH_KEY }}
           port: ${{ secrets.VM_SSH_PORT }}
           script_stop: true
-          command_timeout: 20m
+          command_timeout: 15m
           script: |
+            export GIT_REF="${{ github.event.inputs.ref || 'main' }}"
             cd /var/www/pump/tma
-            git fetch origin main
-            git reset --hard origin/main
-            chmod +x deploy/tma-deploy.sh
-            ./deploy/tma-deploy.sh
+            chmod +x deploy/ui-deploy.sh
+            ./deploy/ui-deploy.sh
