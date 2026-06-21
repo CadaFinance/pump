@@ -1,6 +1,13 @@
 "use client";
 
 import Link from "next/link";
+import {
+  ArrowRightLeft,
+  Clock,
+  Gift,
+  Landmark,
+  Users,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { formatEther, isAddress, parseEther } from "viem";
 import {
@@ -45,9 +52,11 @@ import {
   AdminGridTable,
   AdminKpiCard,
   AdminKpiGrid,
+  AdminKpiSkeleton,
   AdminLayout,
   AdminNum,
   AdminShell,
+  AdminStatusBadge,
   AdminTabPanel,
   AdminTextButton,
   type AdminTabId,
@@ -246,20 +255,6 @@ function AdminRewardText({
   );
 }
 
-function sweepStatusClass(status: string): string {
-  switch (status) {
-    case "ready":
-      return "admin-status-ok";
-    case "claim_window_open":
-    case "claim_window_open_no_winners":
-      return "admin-status-warn";
-    case "down":
-      return "admin-status-bad";
-    default:
-      return "";
-  }
-}
-
 function AdminSweepCountdown({
   claimEndUnix,
   canSweep,
@@ -343,6 +338,7 @@ export function AdminPanel() {
   const [activeTab, setActiveTab] = useState<AdminTabId>("dashboard");
   const [stats, setStats] = useState<AdminPlatformStats | null>(null);
   const [statsLoading, setStatsLoading] = useState(true);
+  const [lastRefreshedAt, setLastRefreshedAt] = useState<Date | null>(null);
 
   const treasuryContract = protocol?.treasury.address as `0x${string}` | undefined;
   const treasuryOwner = protocol?.treasury.owner;
@@ -442,15 +438,24 @@ export function AdminPanel() {
     }
   }, [address]);
 
+  const refreshAll = useCallback(async () => {
+    await Promise.all([load(), loadStats(), loadPromoTasks()]);
+    setLastRefreshedAt(new Date());
+  }, [load, loadStats, loadPromoTasks]);
+
   useEffect(() => {
     void load();
     void loadStats();
     void loadPromoTasks();
+    setLastRefreshedAt(new Date());
   }, [load, loadStats, loadPromoTasks]);
 
-  const refreshAll = useCallback(async () => {
-    await Promise.all([load(), loadStats(), loadPromoTasks()]);
-  }, [load, loadStats, loadPromoTasks]);
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      void refreshAll();
+    }, 60_000);
+    return () => window.clearInterval(id);
+  }, [refreshAll]);
 
   useEffect(() => {
     if (!adminTxDone) return;
@@ -779,49 +784,64 @@ export function AdminPanel() {
         {error ? <AdminAlert>{error}</AdminAlert> : null}
 
         <AdminTabPanel id="dashboard" active={activeTab}>
-          <AdminKpiGrid>
-            <AdminKpiCard
-              label="Users registered"
-              value={statsLoading && !stats ? "…" : (stats?.usersRegistered ?? "—")}
-              hint={
-                stats
-                  ? `+${stats.usersRegistered24h} last 24h · ${stats.usersTraded} traded`
-                  : "All app profiles"
-              }
-            />
-            <AdminKpiCard
-              label="Trades (24h)"
-              value={statsLoading && !stats ? "…" : (stats?.trades24h ?? "—")}
-              hint={stats ? `${stats.totalTrades} total indexed` : undefined}
-            />
-            <AdminKpiCard
-              label="Treasury balance"
-              value={
-                statsLoading && !stats ? (
-                  "…"
-                ) : stats ? (
-                  <BnbAmountWithUsd bnb={stats.treasuryBalanceBnb} bnbUsd={bnbUsd} inline />
-                ) : (
-                  "—"
-                )
-              }
-              hint={
-                stats
-                  ? `${formatUsdReadable(bnbToUsd(Number(stats.availableTotalBnb), bnbUsd) ?? 0, { compact: true })} available est.`
-                  : undefined
-              }
-            />
-            <AdminKpiCard
-              label="Ready to sweep"
-              value={sweepStats.readyCount}
-              hint={
-                sweepStats.remainingUsd != null
-                  ? `${formatUsdReadable(sweepStats.remainingUsd, { compact: true })} recoverable`
-                  : `${airdrops.length} campaigns tracked`
-              }
-              tone={sweepStats.readyCount > 0 ? "warn" : undefined}
-            />
-          </AdminKpiGrid>
+          {statsLoading && !stats ? (
+            <AdminKpiSkeleton count={4} />
+          ) : (
+            <AdminKpiGrid>
+              <AdminKpiCard
+                label="Users registered"
+                icon={Users}
+                value={stats?.usersRegistered ?? "—"}
+                hint={
+                  stats
+                    ? `+${stats.usersRegistered24h} last 24h · ${stats.usersTraded} traded`
+                    : "All app profiles"
+                }
+              />
+              <AdminKpiCard
+                label="Trades (24h)"
+                icon={ArrowRightLeft}
+                value={stats?.trades24h ?? "—"}
+                hint={stats ? `${stats.totalTrades} total indexed` : undefined}
+              />
+              <AdminKpiCard
+                label="Treasury balance"
+                icon={Landmark}
+                value={
+                  stats ? (
+                    <BnbAmountWithUsd bnb={stats.treasuryBalanceBnb} bnbUsd={bnbUsd} inline />
+                  ) : (
+                    "—"
+                  )
+                }
+                hint={
+                  stats
+                    ? `${formatUsdReadable(bnbToUsd(Number(stats.availableTotalBnb), bnbUsd) ?? 0, { compact: true })} available est.`
+                    : undefined
+                }
+              />
+              <AdminKpiCard
+                label="Ready to sweep"
+                icon={Gift}
+                value={sweepStats.readyCount}
+                hint={
+                  sweepStats.remainingUsd != null
+                    ? `${formatUsdReadable(sweepStats.remainingUsd, { compact: true })} recoverable`
+                    : `${airdrops.length} campaigns tracked`
+                }
+                tone={sweepStats.readyCount > 0 ? "warn" : undefined}
+              />
+            </AdminKpiGrid>
+          )}
+
+          <div className="flex items-center gap-2 admin-meta" style={{ marginBottom: "16px" }}>
+            <Clock size={12} aria-hidden="true" />
+            <span>
+              Last refreshed: {lastRefreshedAt ? lastRefreshedAt.toLocaleTimeString() : "—"}
+            </span>
+            <span aria-hidden="true">·</span>
+            <span>Auto-refresh every 60s</span>
+          </div>
 
           <AdminSystemHealth />
 
@@ -1101,20 +1121,30 @@ export function AdminPanel() {
                 <tr>
                   <th scope="row">Type</th>
                   <td colSpan={2}>
-                    <button
-                      type="button"
-                      className="admin-btn mr-2"
-                      onClick={() => setWithdrawMode("bnb")}
-                    >
-                      BNB {withdrawMode === "bnb" ? "●" : ""}
-                    </button>
-                    <button
-                      type="button"
-                      className="admin-btn"
-                      onClick={() => setWithdrawMode("token")}
-                    >
-                      Token {withdrawMode === "token" ? "●" : ""}
-                    </button>
+                    <div className="segment-control">
+                      <button
+                        type="button"
+                        className={
+                          withdrawMode === "bnb"
+                            ? "chip-button chip-button-active"
+                            : "chip-button"
+                        }
+                        onClick={() => setWithdrawMode("bnb")}
+                      >
+                        BNB
+                      </button>
+                      <button
+                        type="button"
+                        className={
+                          withdrawMode === "token"
+                            ? "chip-button chip-button-active"
+                            : "chip-button"
+                        }
+                        onClick={() => setWithdrawMode("token")}
+                      >
+                        Token
+                      </button>
+                    </div>
                   </td>
                 </tr>
                 <tr>
@@ -1328,8 +1358,19 @@ export function AdminPanel() {
                           sweepStatus={row.sweepStatus}
                         />
                       </td>
-                      <td className={sweepStatusClass(row.sweepStatus)}>
-                        {sweepStatusLabel(row.sweepStatus)}
+                      <td>
+                        <AdminStatusBadge
+                          tone={
+                            row.sweepStatus === "ready"
+                              ? "warn"
+                              : row.sweepStatus === "swept" ||
+                                  row.sweepStatus === "nothing_to_sweep"
+                                ? "ok"
+                                : "neutral"
+                          }
+                        >
+                          {sweepStatusLabel(row.sweepStatus)}
+                        </AdminStatusBadge>
                       </td>
                       <td>
                         {row.canSweep ? (
@@ -1467,7 +1508,11 @@ export function AdminPanel() {
                     </td>
                     <td className="admin-num">{task.rewardPoints}</td>
                     <td className="admin-num">{task.completionCount}</td>
-                    <td>{task.isActive ? "Yes" : "No"}</td>
+                    <td>
+                      <AdminStatusBadge tone={task.isActive ? "ok" : "neutral"}>
+                        {task.isActive ? "Active" : "Inactive"}
+                      </AdminStatusBadge>
+                    </td>
                     <td>
                       <AdminBtn
                         onClick={() => void onDeletePromoTask(task.taskKey, task.title)}

@@ -1,6 +1,20 @@
 "use client";
 
-import { type ReactNode } from "react";
+import { type ReactNode, useMemo, useState } from "react";
+import {
+  Boxes,
+  ChevronRight,
+  Command,
+  CreditCard,
+  FileCode2,
+  Gift,
+  Landmark,
+  LayoutDashboard,
+  Menu,
+  RefreshCw,
+  Wallet,
+  X,
+} from "lucide-react";
 import { explorerAddressUrl, shortAddress } from "@/config/chain";
 
 export type AdminTabId =
@@ -15,6 +29,7 @@ type NavItem = {
   id: AdminTabId;
   label: string;
   description: string;
+  icon: React.ElementType;
 };
 
 type NavGroup = {
@@ -52,23 +67,29 @@ export const ADMIN_PAGE_META: Record<AdminTabId, { title: string; description: s
 const NAV_GROUPS: NavGroup[] = [
   {
     label: "Overview",
-    items: [{ id: "dashboard", label: "Dashboard", description: "KPIs & health" }],
+    items: [
+      { id: "dashboard", label: "Dashboard", description: "KPIs & health", icon: LayoutDashboard },
+    ],
   },
   {
     label: "Operations",
     items: [
-      { id: "portfolio", label: "Portfolio", description: "Wallet holdings" },
-      { id: "airdrops", label: "Airdrop sweeps", description: "Escrow recovery" },
-      { id: "promo", label: "Promo tasks", description: "Points campaigns" },
+      { id: "portfolio", label: "Portfolio", description: "Wallet holdings", icon: Wallet },
+      { id: "airdrops", label: "Airdrop sweeps", description: "Escrow recovery", icon: Gift },
+      { id: "promo", label: "Promo tasks", description: "Points campaigns", icon: CreditCard },
     ],
   },
   {
     label: "Finance",
-    items: [{ id: "treasury", label: "Treasury & fees", description: "Fees & withdraw" }],
+    items: [
+      { id: "treasury", label: "Treasury & fees", description: "Fees & withdraw", icon: Landmark },
+    ],
   },
   {
     label: "System",
-    items: [{ id: "contracts", label: "Contracts", description: "On-chain refs" }],
+    items: [
+      { id: "contracts", label: "Contracts", description: "On-chain refs", icon: FileCode2 },
+    ],
   },
 ];
 
@@ -94,78 +115,185 @@ export function AdminLayout({
   children: ReactNode;
 }) {
   const meta = ADMIN_PAGE_META[activeTab];
+  const [mobileOpen, setMobileOpen] = useState(false);
 
-  return (
-    <div className="admin-layout">
-      <aside className="admin-sidebar" aria-label="Admin navigation">
-        <div className="admin-sidebar-brand">
+  const navGroups = useMemo(
+    () =>
+      NAV_GROUPS.map((group) => ({
+        ...group,
+        items: group.items.map((item) => ({
+          ...item,
+          isActive: activeTab === item.id,
+        })),
+      })),
+    [activeTab]
+  );
+
+  const handleNavClick = (id: AdminTabId) => {
+    onTabChange(id);
+    setMobileOpen(false);
+  };
+
+  const renderSidebarContent = () => (
+    <>
+      <div className="admin-sidebar-brand">
+        <div className="admin-sidebar-brand-mark">
+          <Boxes className="admin-sidebar-brand-icon" aria-hidden="true" />
+        </div>
+        <div>
           <p className="admin-sidebar-brand-title">Pump Admin</p>
           <p className="admin-sidebar-brand-sub">BSC Testnet · Operations</p>
         </div>
+      </div>
 
-        <nav className="admin-sidebar-nav">
-          {NAV_GROUPS.map((group) => (
-            <div key={group.label} className="admin-sidebar-group">
-              <p className="admin-sidebar-group-label">{group.label}</p>
-              {group.items.map((item) => {
-                const isActive = activeTab === item.id;
-                return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => onTabChange(item.id)}
-                    className={
-                      isActive
-                        ? "admin-sidebar-link admin-sidebar-link-active"
-                        : "admin-sidebar-link"
-                    }
-                    aria-current={isActive ? "page" : undefined}
-                  >
+      <nav className="admin-sidebar-nav">
+        {navGroups.map((group) => (
+          <div key={group.label} className="admin-sidebar-group">
+            <p className="admin-sidebar-group-label">{group.label}</p>
+            {group.items.map((item) => {
+              const Icon = item.icon;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => handleNavClick(item.id)}
+                  className={
+                    item.isActive
+                      ? "admin-sidebar-link admin-sidebar-link-active"
+                      : "admin-sidebar-link"
+                  }
+                  aria-current={item.isActive ? "page" : undefined}
+                >
+                  <span className="admin-sidebar-link-icon" aria-hidden="true">
+                    <Icon size={18} strokeWidth={1.8} />
+                  </span>
+                  <span className="admin-sidebar-link-text">
                     <span className="admin-sidebar-link-label">{item.label}</span>
                     <span className="admin-sidebar-link-desc">{item.description}</span>
-                  </button>
-                );
-              })}
-            </div>
-          ))}
-        </nav>
-
-        {address ? (
-          <div className="admin-sidebar-foot">
-            Connected{" "}
-            <a
-              href={explorerAddressUrl(address)}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="admin-link admin-num"
-            >
-              {shortAddress(address)}
-            </a>
+                  </span>
+                </button>
+              );
+            })}
           </div>
-        ) : null}
+        ))}
+      </nav>
+
+      <div className="admin-sidebar-foot">
+        {address ? (
+          <div className="admin-wallet-widget">
+            <div className="admin-wallet-widget-main">
+              <span className="admin-wallet-dot" aria-hidden="true" />
+              <a
+                href={explorerAddressUrl(address)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="admin-link admin-num"
+              >
+                {shortAddress(address)}
+              </a>
+            </div>
+            <span className="admin-wallet-network">Connected</span>
+          </div>
+        ) : (
+          <span className="admin-sidebar-foot-note">No wallet connected</span>
+        )}
+      </div>
+    </>
+  );
+
+  return (
+    <div className="admin-layout">
+      {/* Desktop sidebar */}
+      <aside className="admin-sidebar" aria-label="Admin navigation">
+        {renderSidebarContent()}
       </aside>
+
+      {/* Mobile drawer */}
+      <div
+        className={mobileOpen ? "admin-mobile-drawer admin-mobile-drawer--open" : "admin-mobile-drawer"}
+        aria-hidden={!mobileOpen}
+      >
+        <div className="admin-mobile-drawer-scrim" onClick={() => setMobileOpen(false)} />
+        <aside className="admin-mobile-drawer-panel" aria-label="Admin navigation mobile">
+          <div className="admin-mobile-drawer-head">
+            <div className="admin-sidebar-brand">
+              <div className="admin-sidebar-brand-mark">
+                <Boxes className="admin-sidebar-brand-icon" aria-hidden="true" />
+              </div>
+              <div>
+                <p className="admin-sidebar-brand-title">Pump Admin</p>
+                <p className="admin-sidebar-brand-sub">BSC Testnet</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              className="admin-icon-btn"
+              onClick={() => setMobileOpen(false)}
+              aria-label="Close navigation"
+            >
+              <X size={18} />
+            </button>
+          </div>
+          {renderSidebarContent()}
+        </aside>
+      </div>
 
       <div className="admin-main">
         <header className="admin-topbar">
-          <div className="min-w-0">
-            <h1 className="admin-topbar-title">{meta.title}</h1>
-            <p className="admin-topbar-desc">{meta.description}</p>
-          </div>
-          {onRefreshAll || headerActions ? (
-            <div className="admin-topbar-actions">
-              {headerActions}
-              {onRefreshAll ? (
-                <button
-                  type="button"
-                  onClick={onRefreshAll}
-                  disabled={refreshing}
-                  className="admin-btn"
-                >
-                  {refreshing ? "Refreshing…" : "Refresh all"}
-                </button>
-              ) : null}
+          <div className="admin-topbar-start">
+            <button
+              type="button"
+              className="admin-mobile-menu-btn"
+              onClick={() => setMobileOpen(true)}
+              aria-label="Open navigation"
+            >
+              <Menu size={18} />
+            </button>
+            <div className="min-w-0">
+              <nav className="admin-breadcrumb" aria-label="Breadcrumb">
+                <span className="admin-breadcrumb-root">Operations</span>
+                <ChevronRight size={14} className="admin-breadcrumb-sep" aria-hidden="true" />
+                <span className="admin-breadcrumb-current" aria-current="page">
+                  {meta.title}
+                </span>
+              </nav>
+              <h1 className="admin-topbar-title">{meta.title}</h1>
+              <p className="admin-topbar-desc">{meta.description}</p>
             </div>
-          ) : null}
+          </div>
+
+          <div className="admin-topbar-actions">
+            <button
+              type="button"
+              className="admin-search-trigger"
+              aria-label="Search (Cmd+K)"
+              onClick={() => {
+                // Reserved for future command palette integration
+              }}
+            >
+              <Command size={14} aria-hidden="true" />
+              <span>Search</span>
+              <kbd className="admin-kbd">⌘K</kbd>
+            </button>
+
+            {headerActions}
+
+            {onRefreshAll ? (
+              <button
+                type="button"
+                onClick={onRefreshAll}
+                disabled={refreshing}
+                className={refreshing ? "admin-btn admin-btn-loading" : "admin-btn"}
+              >
+                <RefreshCw
+                  size={14}
+                  className={refreshing ? "admin-spin" : ""}
+                  aria-hidden="true"
+                />
+                <span>{refreshing ? "Refreshing…" : "Refresh"}</span>
+              </button>
+            ) : null}
+          </div>
         </header>
 
         <div className="admin-content">
@@ -202,11 +330,13 @@ export function AdminKpiCard({
   value,
   hint,
   tone,
+  icon,
 }: {
   label: string;
   value: ReactNode;
   hint?: ReactNode;
   tone?: "ok" | "warn" | "bad";
+  icon?: React.ElementType;
 }) {
   const toneClass =
     tone === "ok"
@@ -217,12 +347,37 @@ export function AdminKpiCard({
           ? "admin-status-bad"
           : "";
 
+  const Icon = icon;
+
   return (
     <article className="admin-kpi-card">
-      <p className="admin-kpi-label">{label}</p>
+      <div className="admin-kpi-card-head">
+        <p className="admin-kpi-label">{label}</p>
+        {Icon ? (
+          <span className="admin-kpi-icon" aria-hidden="true">
+            <Icon size={16} />
+          </span>
+        ) : null}
+      </div>
       <p className={`admin-kpi-value ${toneClass}`.trim()}>{value}</p>
       {hint ? <p className="admin-kpi-hint">{hint}</p> : null}
     </article>
+  );
+}
+
+export function AdminKpiSkeleton({ count = 4 }: { count?: number }) {
+  return (
+    <div className="admin-kpi-grid">
+      {Array.from({ length: count }).map((_, i) => (
+        <div key={i} className="admin-kpi-card admin-kpi-card--loading">
+          <div className="admin-kpi-card-head">
+            <span className="skeleton-shimmer admin-skeleton-label" />
+            <span className="skeleton-shimmer admin-skeleton-icon" />
+          </div>
+          <span className="skeleton-shimmer admin-skeleton-value" />
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -234,7 +389,13 @@ export function AdminContentGrid({
   children: ReactNode;
 }) {
   return (
-    <div className={columns === 2 ? "admin-content-grid admin-content-grid--2" : "admin-content-grid"}>
+    <div
+      className={
+        columns === 2
+          ? "admin-content-grid admin-content-grid--2"
+          : "admin-content-grid"
+      }
+    >
       {children}
     </div>
   );
@@ -245,11 +406,13 @@ export function AdminCard({
   actions,
   children,
   padded,
+  footer,
 }: {
   title: string;
   actions?: ReactNode;
   children: ReactNode;
   padded?: boolean;
+  footer?: ReactNode;
 }) {
   return (
     <section className="admin-card">
@@ -257,9 +420,14 @@ export function AdminCard({
         <h2 className="admin-card-title">{title}</h2>
         {actions ? <div className="admin-card-actions">{actions}</div> : null}
       </div>
-      <div className={padded ? "admin-card-body admin-card-body--padded" : "admin-card-body"}>
+      <div
+        className={
+          padded ? "admin-card-body admin-card-body--padded" : "admin-card-body"
+        }
+      >
         {children}
       </div>
+      {footer ? <div className="admin-card-foot">{footer}</div> : null}
     </section>
   );
 }
@@ -342,7 +510,12 @@ export function AdminTextButton({
   disabled?: boolean;
 }) {
   return (
-    <button type="button" onClick={onClick} disabled={disabled} className="admin-btn-link">
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className="admin-btn-link"
+    >
       {children}
     </button>
   );
@@ -353,20 +526,61 @@ export function AdminBtn({
   onClick,
   disabled,
   primary,
+  danger,
+  ghost,
+  size = "md",
+  icon,
 }: {
-  children: ReactNode;
+  children?: ReactNode;
   onClick?: () => void;
   disabled?: boolean;
   primary?: boolean;
+  danger?: boolean;
+  ghost?: boolean;
+  size?: "sm" | "md";
+  icon?: React.ElementType;
+}) {
+  const classes = ["admin-btn"];
+  if (primary) classes.push("admin-btn-primary");
+  if (danger) classes.push("admin-btn-danger");
+  if (ghost) classes.push("admin-btn-ghost");
+  if (size === "sm") classes.push("admin-btn-sm");
+
+  const Icon = icon;
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={classes.join(" ")}
+    >
+      {Icon ? <Icon size={14} aria-hidden="true" /> : null}
+      {children}
+    </button>
+  );
+}
+
+export function AdminIconButton({
+  icon: Icon,
+  onClick,
+  disabled,
+  label,
+}: {
+  icon: React.ElementType;
+  onClick?: () => void;
+  disabled?: boolean;
+  label: string;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className={primary ? "admin-btn admin-btn-primary" : "admin-btn"}
+      className="admin-icon-btn"
+      aria-label={label}
     >
-      {children}
+      <Icon size={16} />
     </button>
   );
 }
@@ -396,6 +610,20 @@ export function AdminEmpty({ children }: { children: ReactNode }) {
 
 export function AdminAlert({ children }: { children: ReactNode }) {
   return <div className="admin-alert">{children}</div>;
+}
+
+export function AdminStatusBadge({
+  children,
+  tone = "neutral",
+}: {
+  children: ReactNode;
+  tone?: "ok" | "warn" | "bad" | "neutral";
+}) {
+  return <span className={`admin-status-badge admin-status-badge--${tone}`}>{children}</span>;
+}
+
+export function AdminPill({ children }: { children: ReactNode }) {
+  return <span className="admin-pill">{children}</span>;
 }
 
 /** @deprecated use AdminLayout sidebar navigation */
@@ -438,7 +666,9 @@ export function AdminPageHeader({
       <div>
         <p className="page-kicker">Operations</p>
         <h1 className="page-title">Admin</h1>
-        <p className="page-copy">Protocol operations — on-chain fees, treasury, emergency tools, and promo tasks.</p>
+        <p className="page-copy">
+          Protocol operations — on-chain fees, treasury, emergency tools, and promo tasks.
+        </p>
       </div>
       <div className="flex items-center gap-3">
         {address ? (
@@ -452,7 +682,12 @@ export function AdminPageHeader({
           </a>
         ) : null}
         {onRefreshAll ? (
-          <button type="button" onClick={onRefreshAll} disabled={refreshing} className="admin-btn">
+          <button
+            type="button"
+            onClick={onRefreshAll}
+            disabled={refreshing}
+            className="admin-btn"
+          >
             {refreshing ? "Refreshing…" : "Refresh all"}
           </button>
         ) : null}
@@ -478,5 +713,9 @@ export function AdminSection(props: {
   children: ReactNode;
   compact?: boolean;
 }) {
-  return <AdminBlock title={props.title} actions={props.actions}>{props.children}</AdminBlock>;
+  return (
+    <AdminBlock title={props.title} actions={props.actions}>
+      {props.children}
+    </AdminBlock>
+  );
 }
