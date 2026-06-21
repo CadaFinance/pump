@@ -1,7 +1,10 @@
 #!/bin/bash
 set -euo pipefail
 
-APP_DIR="${APP_DIR:-/var/www/pump/tma}"
+REPO_ROOT="${REPO_ROOT:-/var/www/pump/tma}"
+WEB_DIR="$REPO_ROOT/apps/web"
+ADMIN_DIR="$REPO_ROOT/apps/admin"
+REALTIME_DIR="$REPO_ROOT/apps/realtime"
 PM2_APP="${PM2_APP:-pump-tma}"
 REALTIME_PM2_APP="${REALTIME_PM2_APP:-pump-realtime}"
 HEALTH_URL="${HEALTH_URL:-http://127.0.0.1:3012/api/health}"
@@ -11,44 +14,41 @@ log() {
   echo "[tma-deploy] $*"
 }
 
-cd "$APP_DIR"
+cd "$REPO_ROOT"
+
+GIT_REF="${GIT_REF:-main}"
 
 chmod +x deploy/vm/system-health.sh 2>/dev/null || true
 
-log "Syncing repo to origin/main (discards local changes to tracked files)"
-git fetch origin main
-git reset --hard origin/main
+log "Syncing repo to origin/${GIT_REF}"
+git fetch origin "$GIT_REF"
+git reset --hard "origin/${GIT_REF}"
 git clean -fd
 
-log "Installing dependencies"
+log "Installing workspace dependencies"
 npm ci
 
-log "Building Next.js"
-npm run build
+log "Building Next.js (@pump/web)"
+npm run build -w @pump/web
 
-if [[ -f "$APP_DIR/deploy/admin-console-build.sh" ]]; then
+if [[ -f "$REPO_ROOT/deploy/admin-console-build.sh" ]]; then
   log "Building admin console"
-  chmod +x "$APP_DIR/deploy/admin-console-build.sh"
-  bash "$APP_DIR/deploy/admin-console-build.sh"
+  chmod +x "$REPO_ROOT/deploy/admin-console-build.sh"
+  bash "$REPO_ROOT/deploy/admin-console-build.sh"
 else
   log "WARN: deploy/admin-console-build.sh missing — skip admin build"
 fi
 
 log "Copying static assets into standalone output"
-mkdir -p .next/standalone/.next
-cp -r .next/static .next/standalone/.next/static
-if [ -d public ]; then
-  cp -r public .next/standalone/public
+mkdir -p "$WEB_DIR/.next/standalone/.next"
+cp -r "$WEB_DIR/.next/static" "$WEB_DIR/.next/standalone/.next/static"
+if [ -d "$WEB_DIR/public" ]; then
+  cp -r "$WEB_DIR/public" "$WEB_DIR/.next/standalone/public"
 fi
 
-# git clean -fd above removes untracked realtime/dist/ — rebuild every deploy so reboot/PM2 resurrect works.
 log "Building pump-realtime"
-(
-  cd "$APP_DIR/realtime"
-  npm ci
-  npm run build
-)
-if [ ! -f "$APP_DIR/realtime/dist/server.js" ]; then
+npm run build -w @pump/realtime
+if [ ! -f "$REALTIME_DIR/dist/server.js" ]; then
   log "pump-realtime build did not produce dist/server.js"
   exit 1
 fi
@@ -59,7 +59,7 @@ if pm2 describe "$REALTIME_PM2_APP" >/dev/null 2>&1; then
   pm2 restart "$REALTIME_PM2_APP" --update-env
 else
   log "$REALTIME_PM2_APP not registered in PM2; starting from ecosystem.config.cjs"
-  pm2 start ecosystem.config.cjs --only "$REALTIME_PM2_APP"
+  pm2 start "$REPO_ROOT/ecosystem.config.cjs" --only "$REALTIME_PM2_APP"
 fi
 
 log "Health check: $HEALTH_URL"
@@ -96,21 +96,13 @@ if [ "$realtime_ok" -ne 1 ]; then
   exit 1
 fi
 
-if [[ "${SKIP_INDEXER_DEPLOY:-}" != "1" ]] && [[ -f "$APP_DIR/deploy/vm/indexer-deploy.sh" ]]; then
+if [[ "${SKIP_INDEXER_DEPLOY:-}" != "1" ]] && [[ -f "$REPO_ROOT/deploy/vm/indexer-deploy.sh" ]]; then
   log "Deploying indexer (sync + rebuild + restart)"
-  chmod +x "$APP_DIR/deploy/vm/indexer-deploy.sh"
-  bash "$APP_DIR/deploy/vm/indexer-deploy.sh"
+  chmod +x "$REPO_ROOT/deploy/vm/indexer-deploy.sh"
+  bash "$REPO_ROOT/deploy/vm/indexer-deploy.sh"
 else
   log "Skipping indexer deploy (SKIP_INDEXER_DEPLOY=1 or script missing)"
 fi
 
 log "Deploy finished successfully"
 log "Admin UI: http://<host>/admin/  (nginx location /admin/ — run nginx -t && reload if config changed)"
-
-# Referral system (BondingCurveManager redeploy) — run separately BEFORE app deploy:
-# See deploy/REFERRAL_SYSTEM_DEPLOY.md
-# 1. forge script script/DeployBondingCurveReferral.s.sol --broadcast
-# 2. Update bsc-testnet-pump.json + contract_registry + INDEXER_START_BLOCK
-# 3. Apply db/migrations/005_referral_system.sql
-# 4. Update NEXT_PUBLIC_BONDING_CURVE_MANAGER in .env → tma-deploy.sh
-# Existing tokens stay on the old bonding contract until migrated / testnet reset.

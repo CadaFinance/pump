@@ -1,7 +1,8 @@
 import type { NextConfig } from "next";
 import path from "node:path";
 
-const projectRoot = path.join(__dirname);
+/** Monorepo root — standalone tracing + turbopack resolve shared deps. */
+const monorepoRoot = path.join(__dirname, "../..");
 
 /**
  * Telegram OIDC login + legacy widget + bundler CSP.
@@ -30,9 +31,9 @@ const contentSecurityPolicy = [
 const nextConfig: NextConfig = {
   cacheComponents: true,
   output: "standalone",
-  outputFileTracingRoot: projectRoot,
+  outputFileTracingRoot: monorepoRoot,
   turbopack: {
-    root: projectRoot,
+    root: monorepoRoot,
   },
   async headers() {
     return [

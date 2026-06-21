@@ -2,23 +2,20 @@
 # Build static admin console for nginx /admin/ (same-origin /api proxy).
 set -euo pipefail
 
-APP_DIR="${APP_DIR:-/var/www/pump/tma}"
+REPO_ROOT="${REPO_ROOT:-/var/www/pump/tma}"
 
 log() {
-  echo "[admin-console-build] $*"
+  echo "[admin-build] $*"
 }
 
-cd "$APP_DIR/admin-console"
+cd "$REPO_ROOT"
 
-log "Installing dependencies"
-npm ci
+log "Building admin (@pump/admin, base=/admin/)"
+VITE_ADMIN_BASE=/admin/ npm run build -w @pump/admin
 
-log "Building (base=/admin/, API same-origin)"
-VITE_ADMIN_BASE=/admin/ npm run build
-
-if [[ ! -f dist/index.html ]]; then
-  log "dist/index.html missing"
+if [[ ! -f "$REPO_ROOT/apps/admin/dist/index.html" ]]; then
+  log "apps/admin/dist/index.html missing"
   exit 1
 fi
 
-log "Admin console built → $APP_DIR/admin-console/dist"
+log "Admin console built → $REPO_ROOT/apps/admin/dist"

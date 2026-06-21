@@ -8,7 +8,7 @@ description: >-
 
 # Pump Admin Console
 
-Internal ops console (Vite `admin-console/` + shared `src/components/admin/`). **Not** the consumer Pump UI — browser wallet (injected) is allowed here only.
+Internal ops console (`apps/admin/` + shared `apps/web/src/components/admin/`). **Not** the consumer Pump UI — browser wallet (injected) is allowed here only.
 
 ## Cursor UI skills (external references)
 

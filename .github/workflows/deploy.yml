@@ -1,0 +1,155 @@
+# Pump monorepo deploy — full stack vs UI-only (single workflow)
+#
+# Auto on push to main:
+#   - Non-UI paths changed  → full deploy (tma-deploy.sh)
+#   - UI-only paths changed → fast deploy (ui-deploy.sh)
+#
+# Manual UI deploy:
+#   gh workflow run deploy.yml -f mode=ui
+# Manual full deploy:
+#   gh workflow run deploy.yml -f mode=full
+name: Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Deploy mode (auto = classify from changed files on push only)
+        required: false
+        default: auto
+        type: choice
+        options:
+          - auto
+          - ui
+          - full
+      ref:
+        description: Git ref to deploy (default main)
+        required: false
+        default: main
+        type: string
+  push:
+    branches: [main]
+    paths:
+      - "apps/**"
+      - "contracts/**"
+      - "db/**"
+      - "deploy/**"
+      - "scripts/**"
+      - "package.json"
+      - "package-lock.json"
+      - "ecosystem.config.cjs"
+      - ".github/workflows/deploy.yml"
+
+concurrency:
+  group: deploy-tma-production
+  cancel-in-progress: true
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      full_stack: ${{ steps.classify.outputs.full_stack }}
+      ui_only: ${{ steps.classify.outputs.ui_only }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            full_stack:
+              - 'apps/indexer/**'
+              - 'apps/realtime/**'
+              - 'apps/web/src/app/api/**'
+              - 'apps/web/src/lib/**'
+              - 'apps/web/src/hooks/**'
+              - 'apps/web/src/config/**'
+              - 'apps/web/src/app/layout.tsx'
+              - 'apps/web/src/app/**/route.ts'
+              - 'contracts/**'
+              - 'db/**'
+              - 'scripts/**'
+              - 'deploy/**'
+              - '!deploy/ui-deploy.sh'
+              - '!deploy/admin-console-build.sh'
+              - 'package.json'
+              - 'package-lock.json'
+              - 'apps/web/next.config.ts'
+              - 'apps/web/tsconfig.json'
+              - 'ecosystem.config.cjs'
+              - '.github/workflows/deploy.yml'
+              - 'apps/web/src/**'
+              - '!apps/web/src/components/**'
+              - '!apps/admin/**'
+              - '!apps/web/src/app/globals.css'
+              - '!apps/web/src/app/admin/**'
+              - '!apps/web/src/app/**/page.tsx'
+              - '!apps/web/src/app/**/loading.tsx'
+              - '!apps/web/src/app/**/error.tsx'
+              - '!apps/web/src/app/**/opengraph-image.tsx'
+              - '!apps/web/src/app/**/*Client.tsx'
+            ui_only:
+              - 'apps/admin/**'
+              - 'apps/web/src/components/**'
+              - 'apps/web/src/app/globals.css'
+              - 'apps/web/src/app/admin/**'
+              - 'apps/web/src/app/**/page.tsx'
+              - 'apps/web/src/app/**/loading.tsx'
+              - 'apps/web/src/app/**/error.tsx'
+              - 'apps/web/src/app/**/opengraph-image.tsx'
+              - 'apps/web/src/app/**/*Client.tsx'
+              - 'apps/web/tailwind.config.ts'
+              - 'apps/web/postcss.config.mjs'
+              - 'deploy/ui-deploy.sh'
+              - 'deploy/admin-console-build.sh'
+      - id: classify
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            case "${{ github.event.inputs.mode }}" in
+              full) echo "full_stack=true" >> "$GITHUB_OUTPUT"; echo "ui_only=false" >> "$GITHUB_OUTPUT" ;;
+              ui)   echo "full_stack=false" >> "$GITHUB_OUTPUT"; echo "ui_only=true" >> "$GITHUB_OUTPUT" ;;
+              *)    echo "full_stack=true" >> "$GITHUB_OUTPUT"; echo "ui_only=false" >> "$GITHUB_OUTPUT" ;;
+            esac
+          else
+            echo "full_stack=${{ steps.filter.outputs.full_stack }}" >> "$GITHUB_OUTPUT"
+            echo "ui_only=${{ steps.filter.outputs.ui_only }}" >> "$GITHUB_OUTPUT"
+          fi
+
+  deploy-full:
+    needs: changes
+    if: needs.changes.outputs.full_stack == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Full deploy over SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          port: ${{ secrets.VM_SSH_PORT }}
+          script_stop: true
+          command_timeout: 20m
+          script: |
+            export GIT_REF="${{ github.event.inputs.ref || 'main' }}"
+            cd /var/www/pump/tma
+            chmod +x deploy/tma-deploy.sh
+            ./deploy/tma-deploy.sh
+
+  deploy-ui:
+    needs: changes
+    if: needs.changes.outputs.full_stack != 'true' && needs.changes.outputs.ui_only == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: UI deploy over SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          port: ${{ secrets.VM_SSH_PORT }}
+          script_stop: true
+          command_timeout: 15m
+          script: |
+            export GIT_REF="${{ github.event.inputs.ref || 'main' }}"
+            cd /var/www/pump/tma
+            chmod +x deploy/ui-deploy.sh
+            ./deploy/ui-deploy.sh

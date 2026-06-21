@@ -8,7 +8,7 @@ module.exports = {
   apps: [
     {
       name: "pump-tma",
-      cwd: "/var/www/pump/tma/.next/standalone",
+      cwd: "/var/www/pump/tma/apps/web/.next/standalone",
       script: "server.js",
       exec_mode: "cluster",
       instances: 2,
@@ -23,7 +23,7 @@ module.exports = {
     },
     {
       name: "pump-realtime",
-      cwd: "/var/www/pump/tma/realtime",
+      cwd: "/var/www/pump/tma/apps/realtime",
       script: "dist/server.js",
       exec_mode: "cluster",
       instances: 2,
@@ -32,7 +32,7 @@ module.exports = {
         PORT: "3013",
         REDIS_URL: "redis://127.0.0.1:6379",
       },
-      env_file: "/var/www/pump/tma/realtime/.env",
+      env_file: "/var/www/pump/tma/apps/realtime/.env",
       autorestart: true,
       max_memory_restart: "256M",
     },

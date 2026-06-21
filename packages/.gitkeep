@@ -1,0 +1,2 @@
+# Future shared packages (`@pump/shared`, `@pump/db`, contract ABIs, etc.)
+# Apps import via workspace names once extracted from apps/web/src/lib.

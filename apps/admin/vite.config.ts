@@ -3,8 +3,9 @@ import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
 
 export default defineConfig(({ mode }) => {
-  const repoRoot = path.resolve(__dirname, "..");
-  const env = loadEnv(mode, repoRoot, "");
+  const monorepoRoot = path.resolve(__dirname, "../..");
+  const webSrc = path.resolve(__dirname, "../web/src");
+  const env = loadEnv(mode, monorepoRoot, "");
 
   const chainId = env.NEXT_PUBLIC_CHAIN_ID ?? "97";
   const rpcUrl =
@@ -19,7 +20,7 @@ export default defineConfig(({ mode }) => {
     resolve: {
       dedupe: ["viem", "wagmi", "@tanstack/react-query", "react", "react-dom"],
       alias: {
-        "@": path.resolve(repoRoot, "src"),
+        "@": webSrc,
         "next/link": path.resolve(__dirname, "src/shims/next-link.tsx"),
         viem: path.resolve(__dirname, "node_modules/viem"),
         wagmi: path.resolve(__dirname, "node_modules/wagmi"),

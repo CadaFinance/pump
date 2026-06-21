@@ -1,22 +1,21 @@
 #!/usr/bin/env bash
-# Sync indexer source from pump-tma repo, rebuild, restart systemd services.
-# Run on VM after git pull / tma-deploy, or standalone:
-#   bash /var/www/pump/tma/deploy/vm/indexer-deploy.sh
+# Sync indexer source from pump-tma monorepo, rebuild, restart systemd services.
 set -euo pipefail
 
 TMA_DIR="${TMA_DIR:-/var/www/pump/tma}"
+INDEXER_SRC="${TMA_DIR}/apps/indexer"
 INDEXER_DIR="${INDEXER_DIR:-/var/www/pump/Indexer}"
 
 log() { echo "[indexer-deploy] $*"; }
 
-if [[ ! -d "$TMA_DIR/indexer/src" ]]; then
-  log "Missing $TMA_DIR/indexer/src — run from VM with TMA repo checked out"
+if [[ ! -d "$INDEXER_SRC/src" ]]; then
+  log "Missing $INDEXER_SRC/src — run from VM with monorepo checked out"
   exit 1
 fi
 
 log "Sync indexer source (preserving $INDEXER_DIR/.env)"
 mkdir -p "$INDEXER_DIR"
-rsync -a --exclude '.env' --exclude 'node_modules' "$TMA_DIR/indexer/" "$INDEXER_DIR/"
+rsync -a --exclude '.env' --exclude 'node_modules' "$INDEXER_SRC/" "$INDEXER_DIR/"
 
 log "Installing dependencies"
 cd "$INDEXER_DIR"

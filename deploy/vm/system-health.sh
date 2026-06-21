@@ -220,7 +220,7 @@ fi
 # --- Realtime ---
 probe="GET http://127.0.0.1:3013"
 pm2_status="$(pm2_field pump-realtime status)"
-dist_ok="no"; [[ -f "$APP_DIR/realtime/dist/server.js" ]] && dist_ok="yes"
+dist_ok="no"; [[ -f "$APP_DIR/apps/realtime/dist/server.js" ]] && dist_ok="yes"
 logs_json="$(logs_to_json "$(pm2_logs pump-realtime)")"
 http_ms="$(curl_time_ms http://127.0.0.1:3013 || true)"
 listening="no"; port_listening 3013 && listening="yes"
@@ -238,7 +238,7 @@ probe="ws-smoke → ws://127.0.0.1/ws"
 ws_started="$(now_ms_fn)"
 ws_out=""
 if [[ -f "$APP_DIR/scripts/load/ws-smoke.mjs" ]]; then
-  ws_out="$(cd "$APP_DIR/realtime" && node ../scripts/load/ws-smoke.mjs --connections 1 --url ws://127.0.0.1/ws 2>&1 || true)"
+  ws_out="$(cd "$APP_DIR/apps/realtime" && node ../../scripts/load/ws-smoke.mjs --connections 1 --url ws://127.0.0.1/ws 2>&1 || true)"
 fi
 ws_ms=$(( $(now_ms_fn) - ws_started ))
 ws_elapsed="$(echo "$ws_out" | grep -o '"elapsedMs":[0-9]*' | head -1 | cut -d: -f2)"
@@ -292,7 +292,7 @@ fi
 # --- Static assets ---
 probe="ls .next/standalone/static/chunks"
 ls_started="$(now_ms_fn)"
-chunk_count="$(ls "$APP_DIR/.next/standalone/.next/static/chunks/" 2>/dev/null | wc -l | tr -d ' ')"
+chunk_count="$(ls "$APP_DIR/apps/web/.next/standalone/.next/static/chunks/" 2>/dev/null | wc -l | tr -d ' ')"
 ls_ms=$(( $(now_ms_fn) - ls_started ))
 timings_json="$(make_timings "{\"ls\":${ls_ms}}")"
 if [[ "${chunk_count:-0}" -gt 0 ]]; then

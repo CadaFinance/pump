@@ -1,19 +1,21 @@
 # Dependencies
 node_modules/
-indexer/node_modules/
-admin-console/node_modules/
-admin-console/dist/
+apps/*/node_modules/
 
-# Next.js
-.next/
+# Build outputs
+apps/web/.next/
+apps/admin/dist/
+apps/indexer/dist/
+apps/realtime/dist/
 out/
 
-# Environment (secrets)
+# Environment (secrets) — monorepo root .env for web + PM2
 .env
 .env.*
 !.env.example
 !**/.env.example
-indexer/.env
+apps/indexer/.env
+apps/realtime/.env
 contracts/.env
 
 # Logs
@@ -33,9 +35,6 @@ contracts/out/
 contracts/cache/
 contracts/broadcast/
 contracts/lib/
-
-# Indexer build output
-indexer/dist/
 
 # IDE / editor
 .idea/

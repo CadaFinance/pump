@@ -1,10 +1,10 @@
 #!/bin/bash
-# Fast deploy: Next.js UI + admin-console static only.
-# Skips pump-realtime rebuild, realtime health, and indexer deploy.
-# Use for CSS/components/admin copy changes — full stack: deploy/tma-deploy.sh
+# Fast deploy: Next.js UI + admin static only (monorepo apps/web + apps/admin).
+# Skips realtime rebuild and indexer deploy. Full stack: deploy/tma-deploy.sh
 set -euo pipefail
 
-APP_DIR="${APP_DIR:-/var/www/pump/tma}"
+REPO_ROOT="${REPO_ROOT:-/var/www/pump/tma}"
+WEB_DIR="$REPO_ROOT/apps/web"
 PM2_APP="${PM2_APP:-pump-tma}"
 HEALTH_URL="${HEALTH_URL:-http://127.0.0.1:3012/api/health}"
 GIT_REF="${GIT_REF:-main}"
@@ -13,32 +13,32 @@ log() {
   echo "[ui-deploy] $*"
 }
 
-cd "$APP_DIR"
+cd "$REPO_ROOT"
 
 log "Syncing repo to origin/${GIT_REF}"
 git fetch origin "$GIT_REF"
 git reset --hard "origin/${GIT_REF}"
 git clean -fd
 
-log "Installing dependencies"
+log "Installing workspace dependencies"
 npm ci
 
-log "Building Next.js"
-npm run build
+log "Building Next.js (@pump/web)"
+npm run build -w @pump/web
 
-if [[ -f "$APP_DIR/deploy/admin-console-build.sh" ]]; then
+if [[ -f "$REPO_ROOT/deploy/admin-console-build.sh" ]]; then
   log "Building admin console"
-  chmod +x "$APP_DIR/deploy/admin-console-build.sh"
-  bash "$APP_DIR/deploy/admin-console-build.sh"
+  chmod +x "$REPO_ROOT/deploy/admin-console-build.sh"
+  bash "$REPO_ROOT/deploy/admin-console-build.sh"
 else
   log "WARN: deploy/admin-console-build.sh missing — skip admin build"
 fi
 
 log "Copying static assets into standalone output"
-mkdir -p .next/standalone/.next
-cp -r .next/static .next/standalone/.next/static
-if [ -d public ]; then
-  cp -r public .next/standalone/public
+mkdir -p "$WEB_DIR/.next/standalone/.next"
+cp -r "$WEB_DIR/.next/static" "$WEB_DIR/.next/standalone/.next/static"
+if [ -d "$WEB_DIR/public" ]; then
+  cp -r "$WEB_DIR/public" "$WEB_DIR/.next/standalone/public"
 fi
 
 log "Restarting PM2 app: $PM2_APP (realtime + indexer unchanged)"

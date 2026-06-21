@@ -38,7 +38,7 @@ log "Reminder: edit $TMA_DIR/.env → NEXT_PUBLIC_BONDING_CURVE_MANAGER=${NEW_BO
 log "Then run: cd $TMA_DIR && ./deploy/tma-deploy.sh"
 
 log "Sync indexer source"
-rsync -a --exclude '.env' --exclude 'node_modules' "$TMA_DIR/indexer/" "$INDEXER_DIR/"
+rsync -a --exclude '.env' --exclude 'node_modules' "$TMA_DIR/apps/indexer/" "$INDEXER_DIR/"
 
 if [ -d "$TMA_DIR/contracts/out" ]; then
   log "Sync forge artifacts"
