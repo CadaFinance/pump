@@ -39,10 +39,10 @@ export function Web3Provider({ children }: { children: ReactNode }) {
   );
 
   if (!isTelegramAuthConfigured()) {
-    return (
-      <QueryClientProvider client={queryClient}>
-        <WagmiProvider config={wagmiConfig}>
-          <PumpWalletProviderStub>
+  return (
+    <QueryClientProvider client={queryClient}>
+      <WagmiProvider config={wagmiConfig} reconnectOnMount={false}>
+        <PumpWalletProviderStub>
             <WalletFundingProvider>
               <MissingTelegramConfig>{children}</MissingTelegramConfig>
             </WalletFundingProvider>
@@ -54,7 +54,7 @@ export function Web3Provider({ children }: { children: ReactNode }) {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <WagmiProvider config={wagmiConfig}>
+      <WagmiProvider config={wagmiConfig} reconnectOnMount={false}>
         <PumpWalletProvider>
           <PumpWagmiSetup />
           <WalletFundingProvider>{children}</WalletFundingProvider>

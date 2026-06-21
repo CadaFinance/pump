@@ -265,8 +265,11 @@ function ConnectedWalletButton({ address }: { address: string }) {
 }
 
 export function WalletBar() {
-  const { ready, authenticated, login } = usePumpWallet();
-  const { address, isConnected } = useAccount();
+  const { ready, authenticated, scwAddress, login } = usePumpWallet();
+  const { isConnected } = useAccount();
+
+  const walletReady =
+    ready && authenticated && Boolean(scwAddress) && isConnected;
 
   if (!isTelegramAuthConfigured()) {
     return <span className="text-caption text-pump-muted">Configure Telegram bot to sign in</span>;
@@ -283,12 +286,12 @@ export function WalletBar() {
         },
       })}
     >
-      {!authenticated || !isConnected ? (
+      {!walletReady ? (
         <button type="button" onClick={login} className="toolbar-btn text-body-sm font-semibold">
           Sign in
         </button>
-      ) : address ? (
-        <ConnectedWalletButton address={address} />
+      ) : scwAddress ? (
+        <ConnectedWalletButton address={scwAddress} />
       ) : null}
     </div>
   );

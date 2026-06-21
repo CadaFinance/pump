@@ -1,3 +1,4 @@
+/** Admin console only — injected browser wallet (MetaMask). Never import in Pump UI. */
 import { createConfig, http } from "wagmi";
 import { injected } from "wagmi/connectors";
 import { pumpChain, rpcUrl } from "@/config/chain";

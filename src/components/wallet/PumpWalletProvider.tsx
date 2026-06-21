@@ -20,6 +20,7 @@ import {
 import { withdrawFromKernelClient } from "@/lib/aa/kernel-account";
 import {
   clearPumpConnectorSession,
+  clearPumpWagmiPersistence,
   setPumpConnectorSession,
 } from "@/lib/wagmi";
 import { TelegramLoginModal } from "@/components/wallet/TelegramLoginModal";
@@ -115,6 +116,7 @@ export function PumpWalletProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(async () => {
     clearPumpConnectorSession();
+    clearPumpWagmiPersistence();
     setTelegramId(undefined);
     setTelegramUsername(undefined);
     setTelegramFirstName(undefined);
@@ -122,7 +124,7 @@ export function PumpWalletProvider({ children }: { children: ReactNode }) {
     setKernelClient(null);
     setAuthenticated(false);
     await logoutTelegramSession();
-    disconnect();
+    await disconnect();
   }, [disconnect]);
 
   const withdraw = useCallback(

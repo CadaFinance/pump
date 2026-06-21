@@ -1,9 +1,27 @@
+/**
+ * Pump user app wagmi config — kernel smart wallet only (Telegram auth).
+ * Browser extension wallets belong in admin-console/src/wagmi.ts only.
+ */
 import { createConfig, createConnector } from "wagmi";
 import { http, type EIP1193Provider } from "viem";
 import { pumpChain, rpcUrl } from "@/config/chain";
 
 let activeProvider: EIP1193Provider | null = null;
 let activeAddress: `0x${string}` | null = null;
+
+/** Remove stale wagmi reconnect state (e.g. legacy injected connector sessions). */
+export function clearPumpWagmiPersistence(): void {
+  if (typeof window === "undefined") return;
+  try {
+    for (const key of Object.keys(window.localStorage)) {
+      if (key === "wagmi.store" || key.startsWith("wagmi.")) {
+        window.localStorage.removeItem(key);
+      }
+    }
+  } catch {
+    // ignore
+  }
+}
 
 export function setPumpConnectorSession(
   provider: EIP1193Provider,

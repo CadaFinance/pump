@@ -4,9 +4,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { parseEther, parseEventLogs } from "viem";
 import { useOpenConnectModal } from "@/hooks/useOpenConnectModal";
+import { usePumpSession } from "@/hooks/usePumpSession";
 import { useWalletFunding } from "@/components/wallet/WalletFundingProvider";
 import {
-  useAccount,
   useBalance,
   useReadContract,
   useWaitForTransactionReceipt,
@@ -173,7 +173,9 @@ export function CreateMemeForm() {
   const socialLinksRef = useRef({ twitter: "", website: "", telegram: "", discord: "" });
   const { openConnectModal } = useOpenConnectModal();
   const { openFundChoice } = useWalletFunding();
-  const { address, isConnected, chain } = useAccount();
+  const { signedIn, scwAddress, chain } = usePumpSession();
+  const address = scwAddress;
+  const isConnected = signedIn;
   const [name, setName] = useState("");
   const [symbol, setSymbol] = useState("");
   const [description, setDescription] = useState("");
