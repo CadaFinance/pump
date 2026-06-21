@@ -69,7 +69,7 @@ fi
 sudo sed -i 's|admin-console/dist|apps/admin/dist|g' /etc/nginx/sites-available/pump
 sudo nginx -t && sudo systemctl reload nginx
 
-# 3. Full deploy (build + PM2 start/restart + indexer) — do NOT pm2 delete before this
+# 3. Full deploy (build + PM2 reload + indexer) — do NOT pm2 delete before this
 chmod +x deploy/tma-deploy.sh
 ./deploy/tma-deploy.sh
 
@@ -77,10 +77,10 @@ chmod +x deploy/tma-deploy.sh
 pm2 save
 ```
 
-If you already deleted `pump-tma` from PM2 before the first build, either re-run `./deploy/tma-deploy.sh` after `git pull` or start manually:
+If `pump-realtime` was registered before the monorepo move, `pm2 restart` keeps the old `realtime/` path. Either re-run `./deploy/tma-deploy.sh` after `git pull`, or once manually:
 
 ```bash
-pm2 start ecosystem.config.cjs --only pump-tma
+pm2 startOrRestart ecosystem.config.cjs --update-env
 pm2 save
 bash deploy/vm/indexer-deploy.sh   # if deploy exited before indexer step
 ```
