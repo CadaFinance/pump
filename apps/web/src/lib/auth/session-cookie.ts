@@ -44,9 +44,12 @@ export function verifySessionToken(token: string | undefined | null): string | n
 /** Secure cookies only when the browser connection is HTTPS (or explicitly forced). */
 export function authCookieOptions(request?: Pick<NextRequest, "headers" | "nextUrl">) {
   const forwardedProto = request?.headers.get("x-forwarded-proto")?.split(",")[0]?.trim();
+  const cfVisitor = request?.headers.get("cf-visitor");
   const requestProto = request?.nextUrl?.protocol?.replace(":", "");
   const secure =
     forwardedProto === "https" ||
+    cfVisitor?.includes('"scheme":"https"') ||
+    Boolean(request?.headers.get("cf-ray")) ||
     requestProto === "https" ||
     process.env.FORCE_SECURE_COOKIES === "true";
 

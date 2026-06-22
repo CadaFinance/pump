@@ -3,12 +3,10 @@ import { isAdminWallet } from "@/config/admin";
 import { shortAddress } from "@/config/chain";
 import { ADMIN_COPY } from "@/lib/admin/copy";
 import { useAdminAuth } from "@/lib/admin/auth-client";
-
-function hasBrowserProvider(): boolean {
-  return typeof window !== "undefined" && "ethereum" in window && Boolean(window.ethereum);
-}
+import { useBrowserWalletProvider } from "./useBrowserWalletProvider";
 
 export function MetaMaskGate({ children }: { children: React.ReactNode }) {
+  const walletProviderReady = useBrowserWalletProvider();
   const { address, isConnected, isConnecting } = useAccount();
   const connectors = useConnectors();
   const { connect, isPending, error: connectError } = useConnect();
@@ -37,9 +35,11 @@ export function MetaMaskGate({ children }: { children: React.ReactNode }) {
         <div className="admin-gate-card">
           <h1 className="admin-title">{ADMIN_COPY.auth.gateTitle}</h1>
           <p className="admin-meta mt-3">{ADMIN_COPY.auth.gateBody}</p>
-          {!hasBrowserProvider() ? (
+          {!walletProviderReady ? (
             <p className="admin-status-bad mt-4 text-caption">
-              No wallet extension detected. Install MetaMask and refresh this page.
+              No wallet extension detected yet. Install MetaMask, allow this site, then refresh.
+              Domain logins are a separate origin from the VM IP — approve the connection again in
+              MetaMask.
             </p>
           ) : null}
           <button

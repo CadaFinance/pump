@@ -73,11 +73,21 @@ export function requestOrigin(request: Pick<Request, "headers"> & { nextUrl?: UR
     request.headers.get("x-forwarded-host")?.split(",")[0]?.trim() ??
     request.headers.get("host")?.trim() ??
     "localhost";
+
+  const cfVisitor = request.headers.get("cf-visitor");
+  const forwardedProto = request.headers.get("x-forwarded-proto")?.split(",")[0]?.trim();
   const proto =
-    request.headers.get("x-forwarded-proto")?.split(",")[0]?.trim() ??
-    (host.startsWith("localhost") || host.startsWith("127.0.0.1") ? "http" : "https");
+    forwardedProto ??
+    (cfVisitor?.includes('"scheme":"https"') ? "https" : undefined) ??
+    (request.headers.get("cf-ray") ? "https" : undefined) ??
+    (host.startsWith("localhost") || host.startsWith("127.0.0.1") || host.startsWith("0.0.0.0")
+      ? "http"
+      : "https");
+
+  const hostname = host.split(":")[0] ?? host;
+
   return {
-    domain: host,
+    domain: hostname,
     uri: `${proto}://${host}/admin/`,
   };
 }
