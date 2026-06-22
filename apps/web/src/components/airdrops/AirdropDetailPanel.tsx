@@ -168,6 +168,17 @@ function StepBadge({
   );
 }
 
+function formatQualifyWindowLocal(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  return date.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 function RuleProgressRow({
   label,
   rule,
@@ -175,6 +186,7 @@ function RuleProgressRow({
   tokenAddress,
   buyMode,
   returnTo,
+  footnote,
 }: {
   label: ReactNode;
   rule: { current: string; target: string; met: boolean };
@@ -182,6 +194,7 @@ function RuleProgressRow({
   tokenAddress: string;
   buyMode: "bnb" | "token";
   returnTo?: string;
+  footnote?: string;
 }) {
   const pct =
     Number(rule.target) > 0
@@ -218,6 +231,7 @@ function RuleProgressRow({
         <p className="mt-1 text-caption text-pump-muted">
           {formatAmount(rule.current)} / {formatAmount(rule.target)} {unit}
         </p>
+        {footnote ? <p className="mt-1 text-caption text-pump-muted/90">{footnote}</p> : null}
         <div className="mt-2.5 h-1.5 overflow-hidden rounded-full bg-pump-surface/70">
           <div
             className={`h-full rounded-full transition-all duration-300 ${rule.met ? "bg-pump-accent" : "bg-pump-accent/70"}`}
@@ -844,6 +858,7 @@ function OnchainRequirementsContent({
   linkedToken,
   qualifyStarted,
   qualifyStart,
+  qualifyEnd,
   isConnected,
   hasOnchainRules,
   progressError,
@@ -855,6 +870,7 @@ function OnchainRequirementsContent({
   linkedToken: string;
   qualifyStarted: boolean;
   qualifyStart: string;
+  qualifyEnd: string;
   isConnected: boolean;
   hasOnchainRules: boolean;
   progressError: string | null;
@@ -862,6 +878,7 @@ function OnchainRequirementsContent({
   onConnect: () => void;
   returnTo?: string;
 }) {
+  const qualifyWindowLabel = `${formatQualifyWindowLocal(qualifyStart)} – ${formatQualifyWindowLocal(qualifyEnd)}`;
   return (
     <>
       {!qualifyStarted ? (
@@ -898,6 +915,7 @@ function OnchainRequirementsContent({
               tokenAddress={linkedToken}
               buyMode="token"
               returnTo={returnTo}
+              footnote="Uses your current wallet balance. Tokens from earlier campaigns on this coin still count."
             />
           ) : null}
           {progress.minBuy ? (
@@ -908,6 +926,7 @@ function OnchainRequirementsContent({
               tokenAddress={linkedToken}
               buyMode="bnb"
               returnTo={returnTo}
+              footnote={`Only buys during this campaign window count (${qualifyWindowLabel}). Each new airdrop on the same token starts buy tracking from zero.`}
             />
           ) : null}
         </ul>
@@ -1378,6 +1397,7 @@ export function AirdropDetailPanel({ airdropId }: { airdropId: string }) {
                     linkedToken={detail.linkedToken}
                     qualifyStarted={qualifyStarted}
                     qualifyStart={detail.qualifyStart}
+                    qualifyEnd={detail.qualifyEnd}
                     isConnected={isConnected}
                     hasOnchainRules={hasOnchainRules}
                     progressError={progressError}

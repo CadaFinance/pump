@@ -9,6 +9,10 @@ import {
 import { getAirdropDisplayStatus, isPromotableAirdropStatus, type AirdropDisplayStatus } from "@/lib/airdrop-status";
 import { getLaunchpadPool } from "@/lib/db/launchpad";
 import { sqlBondingMarkPrice } from "@/lib/db/bonding-mark-price-sql";
+import {
+  queryQualifyingBuyVolumeBnb,
+  resolveProgressTraderAddresses,
+} from "@/lib/db/airdrop-qualify-volume";
 
 export type AirdropListItem = {
   id: string;
@@ -587,19 +591,13 @@ export async function getAirdropProgress(airdropId: string, address: string): Pr
 
     if (minBuyBnbWei && minBuyBnbWei !== "0") {
       const buyTarget = weiStringToDecimal(minBuyBnbWei);
-      const buyResult = await pool.query<{ buy_volume: string }>(
-        `
-          SELECT COALESCE(SUM(zug_amount), 0)::text AS buy_volume
-          FROM trades
-          WHERE token_address = $1
-            AND trader_address = $2
-            AND side = 'BUY'
-            AND block_time >= $3::timestamptz
-            AND block_time <= $4::timestamptz
-        `,
-        [airdrop.linkedToken, normalized, airdrop.qualifyStart, airdrop.qualifyEnd]
-      );
-      const current = buyResult.rows[0]?.buy_volume ?? "0";
+      const traderAddresses = await resolveProgressTraderAddresses(pool, normalized);
+      const current = await queryQualifyingBuyVolumeBnb(pool, {
+        linkedToken: airdrop.linkedToken,
+        traderAddresses,
+        qualifyStart: airdrop.qualifyStart,
+        qualifyEnd: airdrop.qualifyEnd,
+      });
       minBuy = {
         current,
         target: buyTarget,
@@ -815,8 +813,9 @@ async function queryParticipantHoldAndBuy(
 ): Promise<{ holdCurrent: number; buyCurrent: number }> {
   const pool = getLaunchpadPool();
   const normalized = address.toLowerCase();
+  const traderAddresses = await resolveProgressTraderAddresses(pool, normalized);
 
-  const [holdResult, buyResult] = await Promise.all([
+  const [holdResult, buyCurrent] = await Promise.all([
     pool.query<{ token_balance: string }>(
       `
         SELECT COALESCE(token_balance, 0)::text AS token_balance
@@ -825,23 +824,17 @@ async function queryParticipantHoldAndBuy(
       `,
       [linkedToken, normalized]
     ),
-    pool.query<{ buy_volume: string }>(
-      `
-        SELECT COALESCE(SUM(zug_amount), 0)::text AS buy_volume
-        FROM trades
-        WHERE token_address = $1
-          AND trader_address = $2
-          AND side = 'BUY'
-          AND block_time >= $3::timestamptz
-          AND block_time <= $4::timestamptz
-      `,
-      [linkedToken, normalized, qualifyStart, qualifyEnd]
-    ),
+    queryQualifyingBuyVolumeBnb(pool, {
+      linkedToken,
+      traderAddresses,
+      qualifyStart,
+      qualifyEnd,
+    }),
   ]);
 
   return {
     holdCurrent: Number(holdResult.rows[0]?.token_balance ?? 0),
-    buyCurrent: Number(buyResult.rows[0]?.buy_volume ?? 0),
+    buyCurrent: Number(buyCurrent),
   };
 }
 
