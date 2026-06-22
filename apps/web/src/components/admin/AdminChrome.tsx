@@ -1,22 +1,13 @@
 "use client";
 
-import { type ReactNode, useMemo, useState } from "react";
+import { type ReactNode, createContext, useContext, useEffect, useMemo, useState } from "react";
 import {
-  Boxes,
+  Bell,
   ChevronRight,
-  CreditCard,
-  FileCode2,
-  Gift,
-  KeyRound,
-  Landmark,
-  LayoutDashboard,
-  ListTodo,
-  Menu,
   RefreshCw,
-  Wallet,
-  X,
+  Search,
 } from "lucide-react";
-import { explorerAddressUrl, shortAddress } from "@/config/chain";
+import { explorerAddressUrl, pumpChain, shortAddress } from "@/config/chain";
 import { ADMIN_COPY } from "@/lib/admin/copy";
 
 export type AdminTabId =
@@ -32,91 +23,47 @@ export type AdminTabId =
 type NavItem = {
   id: AdminTabId;
   label: string;
-  description: string;
-  icon: React.ElementType;
+  icon?: React.ElementType;
 };
 
-type NavGroup = {
-  label: string;
-  items: NavItem[];
+type AdminShellContextValue = {
+  globalQuery: string;
+  setGlobalQuery: (q: string) => void;
 };
+
+const AdminShellContext = createContext<AdminShellContextValue | null>(null);
+
+export function useAdminShell(): AdminShellContextValue {
+  const ctx = useContext(AdminShellContext);
+  if (!ctx) {
+    return { globalQuery: "", setGlobalQuery: () => {} };
+  }
+  return ctx;
+}
 
 export const ADMIN_PAGE_META: Record<AdminTabId, { title: string; description: string }> =
   ADMIN_COPY.pages;
 
-const NAV_GROUPS: NavGroup[] = [
-  {
-    label: ADMIN_COPY.nav.overview,
-    items: [
-      {
-        id: "dashboard",
-        label: ADMIN_COPY.nav.items.dashboard.label,
-        description: ADMIN_COPY.nav.items.dashboard.desc,
-        icon: LayoutDashboard,
-      },
-      {
-        id: "todos",
-        label: ADMIN_COPY.nav.items.todos.label,
-        description: ADMIN_COPY.nav.items.todos.desc,
-        icon: ListTodo,
-      },
-    ],
-  },
-  {
-    label: ADMIN_COPY.nav.operations,
-    items: [
-      {
-        id: "portfolio",
-        label: ADMIN_COPY.nav.items.portfolio.label,
-        description: ADMIN_COPY.nav.items.portfolio.desc,
-        icon: Wallet,
-      },
-      {
-        id: "airdrops",
-        label: ADMIN_COPY.nav.items.airdrops.label,
-        description: ADMIN_COPY.nav.items.airdrops.desc,
-        icon: Gift,
-      },
-      {
-        id: "promo",
-        label: ADMIN_COPY.nav.items.promo.label,
-        description: ADMIN_COPY.nav.items.promo.desc,
-        icon: CreditCard,
-      },
-    ],
-  },
-  {
-    label: ADMIN_COPY.nav.finance,
-    items: [
-      {
-        id: "treasury",
-        label: ADMIN_COPY.nav.items.treasury.label,
-        description: ADMIN_COPY.nav.items.treasury.desc,
-        icon: Landmark,
-      },
-    ],
-  },
-  {
-    label: ADMIN_COPY.nav.system,
-    items: [
-      {
-        id: "contracts",
-        label: ADMIN_COPY.nav.items.contracts.label,
-        description: ADMIN_COPY.nav.items.contracts.desc,
-        icon: FileCode2,
-      },
-      {
-        id: "environment",
-        label: ADMIN_COPY.nav.items.environment.label,
-        description: ADMIN_COPY.nav.items.environment.desc,
-        icon: KeyRound,
-      },
-    ],
-  },
+const NAV_ITEMS: NavItem[] = [
+  { id: "dashboard", label: ADMIN_COPY.nav.items.dashboard.label },
+  { id: "todos", label: ADMIN_COPY.nav.items.todos.label },
+  { id: "portfolio", label: ADMIN_COPY.nav.items.portfolio.label },
+  { id: "airdrops", label: ADMIN_COPY.nav.items.airdrops.label },
+  { id: "promo", label: ADMIN_COPY.nav.items.promo.label },
+  { id: "treasury", label: ADMIN_COPY.nav.items.treasury.label },
+  { id: "contracts", label: ADMIN_COPY.nav.items.contracts.label },
+  { id: "environment", label: ADMIN_COPY.nav.items.environment.label },
 ];
 
 export function AdminShell({ children }: { children: ReactNode }) {
-  return <div className="admin-page">{children}</div>;
+  const [globalQuery, setGlobalQuery] = useState("");
+  const value = useMemo(() => ({ globalQuery, setGlobalQuery }), [globalQuery]);
+
+  return (
+    <AdminShellContext.Provider value={value}>
+      <div className="admin-page admin-enterprise">{children}</div>
+    </AdminShellContext.Provider>
+  );
 }
 
 export function AdminLayout({
@@ -137,178 +84,157 @@ export function AdminLayout({
   children: ReactNode;
 }) {
   const meta = ADMIN_PAGE_META[activeTab];
-  const [mobileOpen, setMobileOpen] = useState(false);
+  const { globalQuery, setGlobalQuery } = useAdminShell();
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
 
-  const navGroups = useMemo(
-    () =>
-      NAV_GROUPS.map((group) => ({
-        ...group,
-        items: group.items.map((item) => ({
-          ...item,
-          isActive: activeTab === item.id,
-        })),
-      })),
-    [activeTab]
-  );
-
-  const handleNavClick = (id: AdminTabId) => {
-    onTabChange(id);
-    setMobileOpen(false);
-  };
-
-  const renderSidebarContent = () => (
-    <>
-      <div className="admin-sidebar-brand">
-        <div className="admin-sidebar-brand-mark">
-          <Boxes className="admin-sidebar-brand-icon" aria-hidden="true" />
-        </div>
-        <div>
-          <p className="admin-sidebar-brand-title">{ADMIN_COPY.brand.title}</p>
-          <p className="admin-sidebar-brand-sub">{ADMIN_COPY.brand.subtitle}</p>
-        </div>
-      </div>
-
-      <nav className="admin-sidebar-nav">
-        {navGroups.map((group) => (
-          <div key={group.label} className="admin-sidebar-group">
-            <p className="admin-sidebar-group-label">{group.label}</p>
-            {group.items.map((item) => {
-              const Icon = item.icon;
-              return (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => handleNavClick(item.id)}
-                  className={
-                    item.isActive
-                      ? "admin-sidebar-link admin-sidebar-link-active"
-                      : "admin-sidebar-link"
-                  }
-                  aria-current={item.isActive ? "page" : undefined}
-                >
-                  <span className="admin-sidebar-link-icon" aria-hidden="true">
-                    <Icon size={18} strokeWidth={1.8} />
-                  </span>
-                  <span className="admin-sidebar-link-text">
-                    <span className="admin-sidebar-link-label">{item.label}</span>
-                    <span className="admin-sidebar-link-desc">{item.description}</span>
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        ))}
-      </nav>
-
-      <div className="admin-sidebar-foot">
-        {address ? (
-          <div className="admin-wallet-widget">
-            <div className="admin-wallet-widget-main">
-              <span className="admin-wallet-dot" aria-hidden="true" />
-              <a
-                href={explorerAddressUrl(address)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="admin-link admin-num"
-              >
-                {shortAddress(address)}
-              </a>
-            </div>
-            <span className="admin-wallet-network">{ADMIN_COPY.auth.sidebarConnected}</span>
-          </div>
-        ) : (
-          <span className="admin-sidebar-foot-note">No wallet connected</span>
-        )}
-      </div>
-    </>
-  );
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        const input = document.querySelector<HTMLInputElement>(".admin-ent-global-search-input");
+        input?.focus();
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
 
   return (
-    <div className="admin-layout">
-      {/* Desktop sidebar */}
-      <aside className="admin-sidebar" aria-label="Admin navigation">
-        {renderSidebarContent()}
-      </aside>
-
-      {/* Mobile drawer */}
-      <div
-        className={mobileOpen ? "admin-mobile-drawer admin-mobile-drawer--open" : "admin-mobile-drawer"}
-        aria-hidden={!mobileOpen}
-      >
-        <div className="admin-mobile-drawer-scrim" onClick={() => setMobileOpen(false)} />
-        <aside className="admin-mobile-drawer-panel" aria-label="Admin navigation mobile">
-          <div className="admin-mobile-drawer-head">
-            <div className="admin-sidebar-brand">
-              <div className="admin-sidebar-brand-mark">
-                <Boxes className="admin-sidebar-brand-icon" aria-hidden="true" />
-              </div>
-              <div>
-                <p className="admin-sidebar-brand-title">{ADMIN_COPY.brand.title}</p>
-                <p className="admin-sidebar-brand-sub">BSC Testnet</p>
-              </div>
-            </div>
-            <button
-              type="button"
-              className="admin-icon-btn"
-              onClick={() => setMobileOpen(false)}
-              aria-label="Close navigation"
-            >
-              <X size={18} />
-            </button>
-          </div>
-          {renderSidebarContent()}
-        </aside>
-      </div>
-
-      <div className="admin-main">
-        <header className="admin-topbar">
-          <div className="admin-topbar-start">
-            <button
-              type="button"
-              className="admin-mobile-menu-btn"
-              onClick={() => setMobileOpen(true)}
-              aria-label="Open navigation"
-            >
-              <Menu size={18} />
-            </button>
-            <div className="min-w-0">
-              <nav className="admin-breadcrumb" aria-label="Breadcrumb">
-                <span className="admin-breadcrumb-root">{ADMIN_COPY.brand.breadcrumbRoot}</span>
-                <ChevronRight size={14} className="admin-breadcrumb-sep" aria-hidden="true" />
-                <span className="admin-breadcrumb-current" aria-current="page">
-                  {meta.title}
-                </span>
-              </nav>
-              <h1 className="admin-topbar-title">{meta.title}</h1>
-              <p className="admin-topbar-desc">{meta.description}</p>
-            </div>
+    <div className="admin-layout admin-layout--enterprise">
+      <header className="admin-ent-header">
+        <div className="admin-ent-header-row">
+          <div className="admin-ent-brand">
+            <span className="admin-ent-brand-title">{ADMIN_COPY.brand.title}</span>
+            <span className="admin-ent-env" title={ADMIN_COPY.nav.environment}>
+              {ADMIN_COPY.brand.envLabel}
+            </span>
           </div>
 
-          <div className="admin-topbar-actions">
-            {headerActions}
+          <nav className="admin-ent-nav" aria-label="Admin sections">
+            {NAV_ITEMS.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => onTabChange(item.id)}
+                className={
+                  activeTab === item.id ? "admin-ent-nav-link admin-ent-nav-link--active" : "admin-ent-nav-link"
+                }
+                aria-current={activeTab === item.id ? "page" : undefined}
+              >
+                {item.label}
+              </button>
+            ))}
+          </nav>
+
+          <div className="admin-ent-header-tools">
+            <label className="admin-ent-global-search">
+              <Search size={14} aria-hidden />
+              <input
+                type="search"
+                value={globalQuery}
+                onChange={(e) => setGlobalQuery(e.target.value)}
+                placeholder={ADMIN_COPY.nav.search}
+                className="admin-ent-global-search-input"
+                aria-label={ADMIN_COPY.nav.search}
+              />
+              <kbd className="admin-kbd">⌘K</kbd>
+            </label>
+
+            <button
+              type="button"
+              className="admin-ent-icon-btn"
+              aria-label={ADMIN_COPY.nav.notifications}
+              disabled
+              title="No new alerts"
+            >
+              <Bell size={15} />
+            </button>
 
             {onRefreshAll ? (
               <button
                 type="button"
                 onClick={onRefreshAll}
                 disabled={refreshing}
-                className={refreshing ? "admin-btn admin-btn-loading" : "admin-btn"}
+                className={refreshing ? "admin-btn admin-btn-sm admin-btn-loading" : "admin-btn admin-btn-sm"}
               >
-                <RefreshCw
-                  size={14}
-                  className={refreshing ? "admin-spin" : ""}
-                  aria-hidden="true"
-                />
-                <span>{refreshing ? ADMIN_COPY.actions.refreshing : ADMIN_COPY.actions.refresh}</span>
+                <RefreshCw size={13} className={refreshing ? "admin-spin" : ""} aria-hidden />
+                {refreshing ? ADMIN_COPY.actions.refreshing : ADMIN_COPY.actions.refresh}
               </button>
             ) : null}
-          </div>
-        </header>
 
-        <div className="admin-content">
-          <div className="admin-content-inner">{children}</div>
+            {headerActions}
+
+            <div className="admin-ent-user">
+              <button
+                type="button"
+                className="admin-ent-user-btn"
+                onClick={() => setUserMenuOpen((o) => !o)}
+                aria-expanded={userMenuOpen}
+                aria-haspopup="menu"
+              >
+                <span className="admin-ent-user-dot" aria-hidden />
+                <span className="admin-num">{address ? shortAddress(address, true) : "—"}</span>
+                <ChevronRight size={12} className="admin-ent-user-chevron" aria-hidden />
+              </button>
+              {userMenuOpen && address ? (
+                <div className="admin-ent-user-menu" role="menu">
+                  <a
+                    href={explorerAddressUrl(address)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="admin-ent-user-menu-item admin-num"
+                    role="menuitem"
+                  >
+                    {shortAddress(address)}
+                  </a>
+                  <span className="admin-ent-user-menu-meta" role="menuitem">
+                    {pumpChain.name} · chain {pumpChain.id}
+                  </span>
+                </div>
+              ) : null}
+            </div>
+          </div>
         </div>
-      </div>
+
+        <div className="admin-ent-page-bar">
+          <h1 className="admin-ent-page-title">{meta.title}</h1>
+          <span className="admin-ent-page-meta">{meta.description}</span>
+        </div>
+      </header>
+
+      <main className="admin-ent-main">
+        <div className="admin-ent-main-inner">{children}</div>
+      </main>
+    </div>
+  );
+}
+
+export function AdminPageGrid({
+  children,
+  className,
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
+  return <div className={["admin-ent-grid", className].filter(Boolean).join(" ")}>{children}</div>;
+}
+
+export function AdminPageGridCell({
+  span = 12,
+  children,
+  className,
+}: {
+  span?: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div
+      className={["admin-ent-grid-cell", `admin-ent-grid-cell--${span}`, className]
+        .filter(Boolean)
+        .join(" ")}
+    >
+      {children}
     </div>
   );
 }
@@ -330,22 +256,26 @@ export function AdminTabPanel({
   );
 }
 
-export function AdminKpiGrid({ children }: { children: ReactNode }) {
-  return <div className="admin-kpi-grid">{children}</div>;
+export function AdminKpiGrid({ children, columns = 6 }: { children: ReactNode; columns?: 4 | 5 | 6 }) {
+  return (
+    <div className={`admin-kpi-grid admin-kpi-grid--${columns}`}>{children}</div>
+  );
 }
 
 export function AdminKpiCard({
   label,
   value,
-  hint,
+  trend,
   tone,
-  icon,
 }: {
   label: string;
   value: ReactNode;
-  hint?: ReactNode;
+  trend?: ReactNode;
   tone?: "ok" | "warn" | "bad";
+  /** @deprecated icons removed in enterprise layout */
   icon?: React.ElementType;
+  /** @deprecated use trend */
+  hint?: ReactNode;
 }) {
   const toneClass =
     tone === "ok"
@@ -356,27 +286,19 @@ export function AdminKpiCard({
           ? "admin-status-bad"
           : "";
 
-  const Icon = icon;
-
   return (
-    <article className="admin-kpi-card">
-      <div className="admin-kpi-card-head">
-        <p className="admin-kpi-label">{label}</p>
-        {Icon ? (
-          <span className="admin-kpi-icon" aria-hidden="true">
-            <Icon size={16} />
-          </span>
-        ) : null}
-      </div>
+    <article className="admin-kpi-card admin-kpi-card--compact">
+      <p className="admin-kpi-label">{label}</p>
       <p className={`admin-kpi-value ${toneClass}`.trim()}>{value}</p>
-      {hint ? <p className="admin-kpi-hint">{hint}</p> : null}
+      {trend ? <p className="admin-kpi-trend">{trend}</p> : null}
     </article>
   );
 }
 
-export function AdminKpiSkeleton({ count = 4 }: { count?: number }) {
+export function AdminKpiSkeleton({ count = 6 }: { count?: number }) {
+  const cols = count >= 6 ? 6 : count >= 5 ? 5 : 4;
   return (
-    <div className="admin-kpi-grid">
+    <div className={`admin-kpi-grid admin-kpi-grid--${cols}`}>
       {Array.from({ length: count }).map((_, i) => (
         <div key={i} className="admin-kpi-card admin-kpi-card--loading">
           <div className="admin-kpi-card-head">
@@ -676,7 +598,7 @@ export function AdminPill({ children }: { children: ReactNode }) {
   return <span className="admin-pill">{children}</span>;
 }
 
-/** @deprecated use AdminLayout sidebar navigation */
+/** @deprecated use AdminLayout top navigation */
 export function AdminTabs({
   active,
   onChange,
@@ -686,7 +608,7 @@ export function AdminTabs({
 }) {
   return (
     <nav className="admin-tabs" aria-label="Admin sections">
-      {NAV_GROUPS.flatMap((g) => g.items).map((tab) => (
+      {NAV_ITEMS.map((tab) => (
         <button
           key={tab.id}
           type="button"

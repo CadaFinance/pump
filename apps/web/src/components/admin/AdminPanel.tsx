@@ -1,13 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import {
-  ArrowRightLeft,
-  Clock,
-  Gift,
-  Landmark,
-  Users,
-} from "lucide-react";
+import { Clock } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { formatEther, isAddress, parseEther } from "viem";
 import {
@@ -29,11 +23,9 @@ import { pumpAirdropManagerAbi } from "@/lib/abis/pump-airdrop-manager";
 import { bondingCurveManagerAbi } from "@/lib/bonding-curve";
 import {
   airdropRewardAmountUsd,
-  formatAirdropReward,
-  formatCountdownMs,
-  formatQualifyDateTime,
 } from "@/lib/airdrop-board-format";
 import { AdminAirdropCreateFeeModal } from "@/components/admin/AdminAirdropCreateFeeModal";
+import { AdminAirdropSweepTable, type SweepRow } from "@/components/admin/AdminAirdropSweepTable";
 import { AdminCreatorShareModal } from "@/components/admin/AdminCreatorShareModal";
 import { AdminReferrerShareModal } from "@/components/admin/AdminReferrerShareModal";
 import { AdminMemeCreateFeeModal } from "@/components/admin/AdminMemeCreateFeeModal";
@@ -60,11 +52,13 @@ import {
   AdminKpiSkeleton,
   AdminLayout,
   AdminNum,
-  AdminSection,
+  AdminPageGrid,
+  AdminPageGridCell,
   AdminShell,
   AdminStatusBadge,
   AdminTabPanel,
   AdminTextButton,
+  useAdminShell,
   type AdminTabId,
 } from "@/components/admin/AdminChrome";
 import { useBnbUsdPrice } from "@/hooks/useBnbUsdPrice";
@@ -75,8 +69,6 @@ import {
   referrerShareBpsToPercent,
   treasurySharePercentFromSplit,
 } from "@/lib/trade-fee-config";
-import { BnbLogo } from "@/components/token/BnbLogo";
-import { TokenAvatar } from "@/components/token/TokenAvatar";
 
 type ProtocolSnapshot = {
   memeFactory: {
@@ -107,24 +99,6 @@ type ProtocolSnapshot = {
 };
 
 type TreasuryWithdrawMode = "bnb" | "token";
-
-type SweepRow = {
-  id: string;
-  onChainId: string;
-  title: string | null;
-  linkedSymbol: string | null;
-  rewardToken: string | null;
-  rewardSymbol: string | null;
-  rewardPriceBnb: string | null;
-  totalFunded: string;
-  totalClaimedBnb: string;
-  remainingBnb: string;
-  claimEnd: string;
-  claimEndUnix: number;
-  canSweep: boolean;
-  sweepStatus: string;
-  sweepRecipient: string | null;
-};
 
 type AdminLinkTask = {
   taskKey: string;
@@ -168,26 +142,6 @@ function formatBnb(value: string): string {
   return "0";
 }
 
-function sweepStatusLabel(status: string): string {
-  const labels = ADMIN_COPY.airdrops.status;
-  switch (status) {
-    case "ready":
-      return labels.ready;
-    case "claim_window_open":
-      return labels.claimWindowOpen;
-    case "claim_window_open_no_winners":
-      return labels.noWinners;
-    case "swept":
-      return labels.swept;
-    case "not_finalized":
-      return labels.notFinalized;
-    case "nothing_to_sweep":
-      return labels.fullyClaimed;
-    default:
-      return status;
-  }
-}
-
 function BnbAmountWithUsd({
   bnb,
   bnbUsd,
@@ -219,92 +173,6 @@ function BnbAmountWithUsd({
       {formatted.usd ? (
         <p className="text-[10px] text-pump-muted md:text-caption">{formatted.usd}</p>
       ) : null}
-    </div>
-  );
-}
-
-function AdminRewardText({
-  amount,
-  rewardToken,
-  rewardSymbol,
-  rewardPriceBnb,
-  bnbUsd,
-}: {
-  amount: string;
-  rewardToken: string | null;
-  rewardSymbol: string | null;
-  rewardPriceBnb: string | null;
-  bnbUsd: number | null;
-}) {
-  const isBnb = !rewardToken;
-  const text = formatAirdropReward(amount, { isBnb, symbol: rewardSymbol });
-  const usd = airdropRewardAmountUsd(
-    amount,
-    { rewardToken, rewardSymbol, rewardPriceBnb, totalFunded: amount },
-    bnbUsd
-  );
-  return (
-    <span className="inline-flex items-center gap-1.5 admin-num">
-      {isBnb ? (
-        <BnbLogo size={14} />
-      ) : (
-        <TokenAvatar
-          address={rewardToken}
-          symbol={rewardSymbol ?? "?"}
-          size={14}
-        />
-      )}
-      <span>
-        {text}
-        {usd != null ? <span className="admin-meta"> · {formatUsdReadable(usd, { compact: true })}</span> : null}
-      </span>
-    </span>
-  );
-}
-
-function AdminSweepCountdown({
-  claimEndUnix,
-  canSweep,
-  sweepStatus,
-}: {
-  claimEndUnix: number;
-  canSweep: boolean;
-  sweepStatus: string;
-}) {
-  const [nowMs, setNowMs] = useState(() => Date.now());
-
-  useEffect(() => {
-    if (canSweep || sweepStatus === "swept" || sweepStatus === "nothing_to_sweep") return;
-    const id = window.setInterval(() => setNowMs(Date.now()), 1000);
-    return () => window.clearInterval(id);
-  }, [canSweep, sweepStatus]);
-
-  if (sweepStatus === "swept" || sweepStatus === "nothing_to_sweep") {
-    return <span className="admin-meta">—</span>;
-  }
-
-  if (canSweep || !claimEndUnix) {
-    const ready = canSweep || (claimEndUnix > 0 && claimEndUnix * 1000 <= nowMs);
-    if (ready) {
-      return <span className="admin-status-ok text-caption font-semibold">Ready now</span>;
-    }
-  }
-
-  if (!claimEndUnix) {
-    return <span className="admin-meta">Unknown</span>;
-  }
-
-  const ms = claimEndUnix * 1000 - nowMs;
-  if (ms <= 0) {
-    return <span className="admin-status-ok text-caption font-semibold">Ready now</span>;
-  }
-
-  return (
-    <div className="space-y-0.5">
-      <p className="financial-value text-caption font-semibold text-pump-warning">
-        in {formatCountdownMs(ms)}
-      </p>
-      <p className="text-[10px] leading-tight text-pump-muted">on-chain claimEnd</p>
     </div>
   );
 }
@@ -346,6 +214,7 @@ export function AdminPanel() {
   const [stats, setStats] = useState<AdminPlatformStats | null>(null);
   const [statsLoading, setStatsLoading] = useState(true);
   const [lastRefreshedAt, setLastRefreshedAt] = useState<Date | null>(null);
+  const { globalQuery, setGlobalQuery } = useAdminShell();
 
   const treasuryContract = protocol?.treasury.address as `0x${string}` | undefined;
   const treasuryOwner = protocol?.treasury.owner;
@@ -674,17 +543,6 @@ export function AdminPanel() {
   }
 
   const readySweeps = airdrops.filter((r) => r.canSweep);
-  const pendingSweeps = useMemo(
-    () =>
-      airdrops.filter(
-        (row) =>
-          !row.canSweep &&
-          row.sweepStatus !== "swept" &&
-          row.sweepStatus !== "nothing_to_sweep" &&
-          Number(row.remainingBnb) > 0
-      ),
-    [airdrops]
-  );
   const treasuryBnb = treasuryLiveBalance
     ? formatEther(treasuryLiveBalance.value)
     : (protocol?.treasury.balanceBnb ?? "0");
@@ -798,153 +656,167 @@ export function AdminPanel() {
         {error ? <AdminAlert>{error}</AdminAlert> : null}
 
         <AdminTabPanel id="dashboard" active={activeTab}>
-          {statsLoading && !stats ? (
-            <AdminKpiSkeleton count={4} />
-          ) : (
-            <AdminKpiGrid>
-              <AdminKpiCard
-                label={ADMIN_COPY.dashboard.kpi.users.label}
-                icon={Users}
-                value={stats?.usersRegistered ?? "—"}
-                hint={
-                  stats
-                    ? `+${stats.usersRegistered24h} last 24h · ${stats.usersTraded} traded`
-                    : ADMIN_COPY.dashboard.kpi.users.hintEmpty
+          <AdminPageGrid>
+            <AdminPageGridCell span={12}>
+              {statsLoading && !stats ? (
+                <AdminKpiSkeleton count={6} />
+              ) : (
+                <AdminKpiGrid columns={6}>
+                  <AdminKpiCard
+                    label={ADMIN_COPY.dashboard.kpi.users.label}
+                    value={<AdminNum>{stats?.usersRegistered ?? "—"}</AdminNum>}
+                    trend={
+                      stats
+                        ? `+${stats.usersRegistered24h} / 24h · ${stats.usersTraded} traded`
+                        : ADMIN_COPY.dashboard.kpi.users.hintEmpty
+                    }
+                  />
+                  <AdminKpiCard
+                    label={ADMIN_COPY.dashboard.kpi.trades24h.label}
+                    value={<AdminNum>{stats?.trades24h ?? "—"}</AdminNum>}
+                    trend={
+                      stats
+                        ? `${stats.totalTrades} total indexed`
+                        : ADMIN_COPY.dashboard.kpi.trades24h.hintEmpty
+                    }
+                  />
+                  <AdminKpiCard
+                    label={ADMIN_COPY.dashboard.kpi.tokens.label}
+                    value={<AdminNum>{stats?.totalTokens ?? "—"}</AdminNum>}
+                    trend={
+                      stats
+                        ? `+${stats.tokensToday} today UTC · ${stats.totalAirdrops} airdrops`
+                        : ADMIN_COPY.dashboard.kpi.tokens.hintEmpty
+                    }
+                  />
+                  <AdminKpiCard
+                    label={ADMIN_COPY.dashboard.kpi.treasury.label}
+                    value={
+                      stats ? (
+                        <BnbAmountWithUsd bnb={stats.treasuryBalanceBnb} bnbUsd={bnbUsd} inline />
+                      ) : (
+                        "—"
+                      )
+                    }
+                    trend={
+                      stats
+                        ? `${formatUsdReadable(bnbToUsd(Number(stats.availableTotalBnb), bnbUsd) ?? 0, { compact: true })} available`
+                        : ADMIN_COPY.dashboard.kpi.treasury.hintEmpty
+                    }
+                  />
+                  <AdminKpiCard
+                    label={ADMIN_COPY.dashboard.kpi.pendingFees.label}
+                    value={
+                      stats ? (
+                        <BnbAmountWithUsd
+                          bnb={String(
+                            Number(stats.pendingCreatorBnb) + Number(stats.pendingReferrerBnb)
+                          )}
+                          bnbUsd={bnbUsd}
+                          inline
+                        />
+                      ) : (
+                        "—"
+                      )
+                    }
+                    trend={
+                      stats
+                        ? `Claimed ${formatBnb(stats.claimedTotalBnb)} BNB total`
+                        : ADMIN_COPY.dashboard.kpi.pendingFees.hintEmpty
+                    }
+                  />
+                  <AdminKpiCard
+                    label={ADMIN_COPY.dashboard.kpi.sweeps.label}
+                    value={<AdminNum>{sweepStats.readyCount}</AdminNum>}
+                    trend={
+                      sweepStats.remainingUsd != null
+                        ? `${formatUsdReadable(sweepStats.remainingUsd, { compact: true })} recoverable`
+                        : `${airdrops.length} campaigns`
+                    }
+                    tone={sweepStats.readyCount > 0 ? "warn" : undefined}
+                  />
+                </AdminKpiGrid>
+              )}
+            </AdminPageGridCell>
+
+            <AdminPageGridCell span={12}>
+              <p className="admin-ent-sync-line">
+                <Clock size={12} aria-hidden />
+                {ADMIN_COPY.dashboard.lastRefreshed}{" "}
+                <span className="admin-num">
+                  {lastRefreshedAt ? lastRefreshedAt.toLocaleTimeString() : "—"}
+                </span>
+                <span aria-hidden> · </span>
+                {ADMIN_COPY.dashboard.autoRefresh}
+              </p>
+            </AdminPageGridCell>
+
+            <AdminPageGridCell span={4}>
+              <AdminSystemHealth />
+            </AdminPageGridCell>
+
+            <AdminPageGridCell span={8}>
+              <AdminBlock title={ADMIN_COPY.dashboard.financialPanel}>
+                <AdminDataTable>
+                  <AdminDataRow label="Treasury share (trades)" loading={statsLoading && !stats}>
+                    {stats ? (
+                      <BnbAmountWithUsd bnb={stats.treasuryShareFromTradesBnb} bnbUsd={bnbUsd} inline />
+                    ) : (
+                      "—"
+                    )}
+                  </AdminDataRow>
+                  <AdminDataRow label="Claimed creator" loading={statsLoading && !stats}>
+                    {stats ? (
+                      <BnbAmountWithUsd bnb={stats.claimedCreatorBnb} bnbUsd={bnbUsd} inline />
+                    ) : (
+                      "—"
+                    )}
+                  </AdminDataRow>
+                  <AdminDataRow label="Claimed referrer" loading={statsLoading && !stats}>
+                    {stats ? (
+                      <BnbAmountWithUsd bnb={stats.claimedReferrerBnb} bnbUsd={bnbUsd} inline />
+                    ) : (
+                      "—"
+                    )}
+                  </AdminDataRow>
+                  <AdminDataRow label="Airdrop escrow" loading={loading && !protocol}>
+                    <BnbAmountWithUsd bnb={escrowBnb} bnbUsd={bnbUsd} inline />
+                  </AdminDataRow>
+                </AdminDataTable>
+                {stats?.feesNote ? <p className="admin-note admin-card-note">{stats.feesNote}</p> : null}
+              </AdminBlock>
+            </AdminPageGridCell>
+
+            <AdminPageGridCell span={12}>
+              <AdminAirdropSweepTable
+                title={ADMIN_COPY.dashboard.recoveryTable}
+                subtitle={ADMIN_COPY.airdrops.callout}
+                rows={airdrops}
+                loading={loading}
+                bnbUsd={bnbUsd}
+                searchQuery={globalQuery}
+                onSearchQueryChange={setGlobalQuery}
+                adminTxPending={adminTxPending}
+                sweepingId={sweepingId}
+                adminTxHash={adminTxHash}
+                onSweep={onSweep}
+                toolbar={
+                  <AdminBtn size="sm" onClick={() => void load()} disabled={loading}>
+                    {loading ? "…" : ADMIN_COPY.actions.refreshList}
+                  </AdminBtn>
                 }
               />
-              <AdminKpiCard
-                label={ADMIN_COPY.dashboard.kpi.trades24h.label}
-                icon={ArrowRightLeft}
-                value={stats?.trades24h ?? "—"}
-                hint={stats ? `${stats.totalTrades} total indexed` : ADMIN_COPY.dashboard.kpi.trades24h.hintEmpty}
+            </AdminPageGridCell>
+
+            <AdminPageGridCell span={12}>
+              <AdminDataWipeCard
+                onWiped={() => {
+                  void load();
+                  void loadStats();
+                }}
               />
-              <AdminKpiCard
-                label={ADMIN_COPY.dashboard.kpi.treasury.label}
-                icon={Landmark}
-                value={
-                  stats ? (
-                    <BnbAmountWithUsd bnb={stats.treasuryBalanceBnb} bnbUsd={bnbUsd} inline />
-                  ) : (
-                    "—"
-                  )
-                }
-                hint={
-                  stats
-                    ? `${formatUsdReadable(bnbToUsd(Number(stats.availableTotalBnb), bnbUsd) ?? 0, { compact: true })} available est.`
-                    : undefined
-                }
-              />
-              <AdminKpiCard
-                label={ADMIN_COPY.dashboard.kpi.sweeps.label}
-                icon={Gift}
-                value={sweepStats.readyCount}
-                hint={
-                  sweepStats.remainingUsd != null
-                    ? `${formatUsdReadable(sweepStats.remainingUsd, { compact: true })} recoverable`
-                    : `${airdrops.length} campaigns tracked`
-                }
-                tone={sweepStats.readyCount > 0 ? "warn" : undefined}
-              />
-            </AdminKpiGrid>
-          )}
-
-          <div className="flex items-center gap-2 admin-meta" style={{ marginBottom: "16px" }}>
-            <Clock size={12} aria-hidden="true" />
-            <span>
-              {ADMIN_COPY.dashboard.lastRefreshed}:{" "}
-              {lastRefreshedAt ? lastRefreshedAt.toLocaleTimeString() : "—"}
-            </span>
-            <span aria-hidden="true">·</span>
-            <span>{ADMIN_COPY.dashboard.autoRefresh}</span>
-          </div>
-
-          <AdminSystemHealth />
-
-          <AdminContentGrid columns={2}>
-            <AdminBlock
-              title={ADMIN_COPY.dashboard.sections.activity.title}
-              description={ADMIN_COPY.dashboard.sections.activity.description}
-            >
-          <AdminDataTable>
-            <AdminDataRow label="Tokens launched" loading={statsLoading && !stats}>
-              <AdminNum>{stats?.totalTokens ?? "—"}</AdminNum>
-              {stats ? <span className="admin-meta"> · {stats.tokensToday} today UTC</span> : null}
-            </AdminDataRow>
-            <AdminDataRow label="Airdrops launched" loading={statsLoading && !stats}>
-              <AdminNum>{stats?.totalAirdrops ?? "—"}</AdminNum>
-              {stats ? <span className="admin-meta"> · {stats.airdropsToday} today UTC</span> : null}
-            </AdminDataRow>
-            <AdminDataRow label="Users (registered)" loading={statsLoading && !stats}>
-              <AdminNum>{stats?.usersRegistered ?? "—"}</AdminNum>
-            </AdminDataRow>
-            <AdminDataRow label="Users (traded)" loading={statsLoading && !stats}>
-              <AdminNum>{stats?.usersTraded ?? "—"}</AdminNum>
-              {stats ? <span className="admin-meta"> · ≥1 trade</span> : null}
-            </AdminDataRow>
-          </AdminDataTable>
-            </AdminBlock>
-
-            <AdminBlock
-              title={ADMIN_COPY.dashboard.sections.fees.title}
-              description={ADMIN_COPY.dashboard.sections.fees.description}
-            >
-          <AdminDataTable>
-            <AdminDataRow label="Pending creator fees" loading={statsLoading && !stats}>
-              {stats ? (
-                <BnbAmountWithUsd bnb={stats.pendingCreatorBnb} bnbUsd={bnbUsd} inline />
-              ) : (
-                "—"
-              )}
-            </AdminDataRow>
-            <AdminDataRow label="Pending referrer fees" loading={statsLoading && !stats}>
-              {stats ? (
-                <BnbAmountWithUsd bnb={stats.pendingReferrerBnb} bnbUsd={bnbUsd} inline />
-              ) : (
-                "—"
-              )}
-            </AdminDataRow>
-            <AdminDataRow label="Claimed creator fees" loading={statsLoading && !stats}>
-              {stats ? (
-                <BnbAmountWithUsd bnb={stats.claimedCreatorBnb} bnbUsd={bnbUsd} inline />
-              ) : (
-                "—"
-              )}
-            </AdminDataRow>
-            <AdminDataRow label="Claimed referrer fees" loading={statsLoading && !stats}>
-              {stats ? (
-                <BnbAmountWithUsd bnb={stats.claimedReferrerBnb} bnbUsd={bnbUsd} inline />
-              ) : (
-                "—"
-              )}
-            </AdminDataRow>
-            <AdminDataRow label="Claimed (total)" loading={statsLoading && !stats}>
-              {stats ? (
-                <BnbAmountWithUsd bnb={stats.claimedTotalBnb} bnbUsd={bnbUsd} inline />
-              ) : (
-                "—"
-              )}
-            </AdminDataRow>
-            <AdminDataRow label="Treasury share (trades)" loading={statsLoading && !stats}>
-              {stats ? (
-                <BnbAmountWithUsd bnb={stats.treasuryShareFromTradesBnb} bnbUsd={bnbUsd} inline />
-              ) : (
-                "—"
-              )}
-            </AdminDataRow>
-            <AdminDataRow label="Airdrop escrow" loading={loading && !protocol}>
-              <BnbAmountWithUsd bnb={escrowBnb} bnbUsd={bnbUsd} inline />
-            </AdminDataRow>
-          </AdminDataTable>
-          {stats?.feesNote ? <p className="admin-note">{stats.feesNote}</p> : null}
-            </AdminBlock>
-          </AdminContentGrid>
-
-          <AdminDataWipeCard
-            onWiped={() => {
-              void load();
-              void loadStats();
-            }}
-          />
+            </AdminPageGridCell>
+          </AdminPageGrid>
         </AdminTabPanel>
 
       <AdminTabPanel id="todos" active={activeTab}>
@@ -1304,161 +1176,24 @@ export function AdminPanel() {
       </AdminTabPanel>
 
       <AdminTabPanel id="airdrops" active={activeTab}>
-        <AdminSection
+        <AdminAirdropSweepTable
           title={ADMIN_COPY.pages.airdrops.title}
-          description={ADMIN_COPY.pages.airdrops.description}
-          callout={ADMIN_COPY.airdrops.callout}
-          actions={
-            <AdminBtn onClick={() => void load()} disabled={loading}>
+          subtitle={ADMIN_COPY.pages.airdrops.description}
+          rows={airdrops}
+          loading={loading}
+          bnbUsd={bnbUsd}
+          searchQuery={globalQuery}
+          onSearchQueryChange={setGlobalQuery}
+          adminTxPending={adminTxPending}
+          sweepingId={sweepingId}
+          adminTxHash={adminTxHash}
+          onSweep={onSweep}
+          toolbar={
+            <AdminBtn size="sm" onClick={() => void load()} disabled={loading}>
               {loading ? "…" : ADMIN_COPY.actions.refreshList}
             </AdminBtn>
           }
-        >
-          {loading ? (
-            <p className="admin-empty">{ADMIN_COPY.empty.loading}</p>
-          ) : airdrops.length === 0 ? (
-            <AdminEmptyState title={ADMIN_COPY.airdrops.empty} />
-          ) : (
-            <>
-              {readySweeps.length > 0 ? (
-                <p className="admin-note">
-                  {readySweeps.length} {ADMIN_COPY.airdrops.ready}
-                  {sweepStats.remainingUsd != null
-                    ? ` · ${formatUsdReadable(sweepStats.remainingUsd, { compact: true })}`
-                    : ""}
-                </p>
-              ) : null}
-              {pendingSweeps.length > 0 ? (
-                <p className="admin-note admin-status-warn">
-                  {pendingSweeps.length} campaign{pendingSweeps.length === 1 ? "" : "s"}{" "}
-                  {ADMIN_COPY.airdrops.locked}
-                </p>
-              ) : null}
-              <AdminGridTable>
-                <thead>
-                  <tr>
-                    <th>{ADMIN_COPY.airdrops.columns.id}</th>
-                    <th>{ADMIN_COPY.airdrops.columns.campaign}</th>
-                    <th>{ADMIN_COPY.airdrops.columns.symbol}</th>
-                    <th>{ADMIN_COPY.airdrops.columns.pool}</th>
-                    <th>{ADMIN_COPY.airdrops.columns.claimed}</th>
-                    <th>{ADMIN_COPY.airdrops.columns.remaining}</th>
-                    <th>{ADMIN_COPY.airdrops.columns.claimUntil}</th>
-                    <th>{ADMIN_COPY.airdrops.columns.sweepIn}</th>
-                    <th>{ADMIN_COPY.airdrops.columns.status}</th>
-                    <th>{ADMIN_COPY.airdrops.columns.action}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {airdrops.map((row) => (
-                    <tr key={row.id}>
-                      <td className="admin-num">{row.onChainId}</td>
-                      <td>
-                        <Link href={`/airdrops/${row.id}`} className="admin-link">
-                          {row.title ?? row.linkedSymbol ?? `#${row.id}`}
-                        </Link>
-                      </td>
-                      <td>{row.linkedSymbol ? `$${row.linkedSymbol}` : "—"}</td>
-                      <td>
-                        <AdminRewardText
-                          amount={row.totalFunded}
-                          rewardToken={row.rewardToken}
-                          rewardSymbol={row.rewardSymbol}
-                          rewardPriceBnb={row.rewardPriceBnb}
-                          bnbUsd={bnbUsd}
-                        />
-                      </td>
-                      <td>
-                        <AdminRewardText
-                          amount={row.totalClaimedBnb}
-                          rewardToken={row.rewardToken}
-                          rewardSymbol={row.rewardSymbol}
-                          rewardPriceBnb={row.rewardPriceBnb}
-                          bnbUsd={bnbUsd}
-                        />
-                      </td>
-                      <td>
-                        <AdminRewardText
-                          amount={row.remainingBnb}
-                          rewardToken={row.rewardToken}
-                          rewardSymbol={row.rewardSymbol}
-                          rewardPriceBnb={row.rewardPriceBnb}
-                          bnbUsd={bnbUsd}
-                        />
-                      </td>
-                      <td className="admin-num">
-                        <div className="space-y-0.5">
-                          <p>
-                            {row.claimEndUnix
-                              ? formatQualifyDateTime(new Date(row.claimEndUnix * 1000).toISOString())
-                              : row.claimEnd
-                                ? formatQualifyDateTime(row.claimEnd)
-                                : "—"}
-                          </p>
-                          {row.sweepStatus === "claim_window_open_no_winners" ? (
-                            <p className="text-[10px] leading-tight text-pump-muted">
-                              No claims possible
-                            </p>
-                          ) : null}
-                        </div>
-                      </td>
-                      <td>
-                        <AdminSweepCountdown
-                          claimEndUnix={row.claimEndUnix}
-                          canSweep={row.canSweep}
-                          sweepStatus={row.sweepStatus}
-                        />
-                      </td>
-                      <td>
-                        <AdminStatusBadge
-                          tone={
-                            row.sweepStatus === "ready"
-                              ? "warn"
-                              : row.sweepStatus === "swept" ||
-                                  row.sweepStatus === "nothing_to_sweep"
-                                ? "ok"
-                                : "neutral"
-                          }
-                        >
-                          {sweepStatusLabel(row.sweepStatus)}
-                        </AdminStatusBadge>
-                      </td>
-                      <td>
-                        {row.canSweep ? (
-                          <AdminBtn
-                            onClick={() => onSweep(row)}
-                            disabled={adminTxPending && sweepingId === row.onChainId}
-                          >
-                            {adminTxPending && sweepingId === row.onChainId ? "…" : ADMIN_COPY.actions.sweep}
-                          </AdminBtn>
-                        ) : row.sweepStatus === "swept" ? (
-                          ADMIN_COPY.airdrops.status.swept
-                        ) : row.sweepStatus === "nothing_to_sweep" ? (
-                          "—"
-                        ) : (
-                          <span className="admin-meta text-caption">Locked</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </AdminGridTable>
-              {adminTxHash && sweepingId ? (
-                <p className="admin-note">
-                  Last sweep tx{" "}
-                  <a
-                    href={explorerTxUrl(adminTxHash)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="admin-link admin-num"
-                  >
-                    {shortAddress(adminTxHash)}
-                  </a>
-                </p>
-              ) : null}
-            </>
-          )}
-        </AdminSection>
+        />
       </AdminTabPanel>
 
       <AdminTabPanel id="promo" active={activeTab}>

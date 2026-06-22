@@ -4,7 +4,8 @@ import type { AdminTabId } from "@/components/admin/AdminChrome";
 export const ADMIN_COPY = {
   brand: {
     title: "Pump Console",
-    subtitle: "Operations · BSC Testnet",
+    subtitle: "Operations",
+    envLabel: "BSC Testnet",
     breadcrumbRoot: "Operations",
   },
 
@@ -48,8 +49,7 @@ export const ADMIN_COPY = {
   pages: {
     dashboard: {
       title: "Dashboard",
-      description:
-        "At-a-glance platform health, treasury position, and recovery queue for BSC Testnet.",
+      description: "Platform metrics, recovery queue, and system status.",
     },
     todos: {
       title: "Ops todo list",
@@ -93,6 +93,9 @@ export const ADMIN_COPY = {
     operations: "Operations",
     finance: "Finance",
     system: "System",
+    search: "Search operations…",
+    environment: "Environment",
+    notifications: "Notifications",
     items: {
       dashboard: { label: "Dashboard", desc: "Metrics & health" },
       todos: { label: "Todo list", desc: "Ops checklist" },
@@ -109,9 +112,13 @@ export const ADMIN_COPY = {
     kpi: {
       users: { label: "Registered users", hintEmpty: "Profiles with app activity" },
       trades24h: { label: "Trades (24h)", hintEmpty: "Indexed on-chain trades" },
+      tokens: { label: "Tokens launched", hintEmpty: "Indexed launches" },
       treasury: { label: "Treasury balance", hintEmpty: "LaunchpadTreasury contract" },
-      sweeps: { label: "Recovery queue", hintEmpty: "Campaigns ready to sweep" },
+      pendingFees: { label: "Pending fees", hintEmpty: "Creator + referrer unclaimed" },
+      sweeps: { label: "Recovery ready", hintEmpty: "Campaigns ready to sweep" },
     },
+    financialPanel: "Fee ledger",
+    recoveryTable: "Operational recovery queue",
     lastRefreshed: "Last updated",
     autoRefresh: "Data refreshes every 60 seconds",
     sections: {
@@ -169,6 +176,7 @@ export const ADMIN_COPY = {
   },
 
   airdrops: {
+    tableTitle: "Recovery queue",
     callout:
       "Recovery unlocks when on-chain claimEnd passes (qualify end + 24 hours). Finalization is not required when there are no winners.",
     ready: "ready for recovery",
