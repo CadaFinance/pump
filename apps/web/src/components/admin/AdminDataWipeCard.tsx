@@ -2,7 +2,7 @@
 
 import { AlertTriangle } from "lucide-react";
 import { useState } from "react";
-import { adminFetch } from "@/lib/admin-api-client";
+import { adminFetch, readAdminJson } from "@/lib/admin-api-client";
 import { ADMIN_COPY } from "@/lib/admin/copy";
 import {
   WIPE_DATA_CONFIRMATION_PHRASE,
@@ -36,29 +36,21 @@ export function AdminDataWipeCard({ onWiped }: AdminDataWipeCardProps) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ confirmation }),
       });
-      const json = (await res.json()) as {
+      const json = await readAdminJson<{
         data?: {
           wipedAt: string;
           indexerResyncFromBlock?: string | null;
-          indexerRestart?: { ok: boolean; detail?: string };
-          warnings?: string[];
+          indexerRestart?: { scheduled?: boolean };
         };
         error?: string;
-      };
+      }>(res);
       if (!res.ok) throw new Error(json.error ?? "Wipe failed");
 
       setConfirmation("");
-      const restartOk = json.data?.indexerRestart?.ok !== false;
       const fromBlock = json.data?.indexerResyncFromBlock;
-      let message = restartOk
-        ? ADMIN_COPY.wipe.success
-        : ADMIN_COPY.wipe.successWithWarning;
+      let message = ADMIN_COPY.wipe.success;
       if (fromBlock) {
         message += ` Resync from block ${fromBlock}.`;
-      }
-      const extraWarnings = json.data?.warnings?.filter(Boolean) ?? [];
-      if (extraWarnings.length > 0) {
-        message += ` ${extraWarnings.join(" ")}`;
       }
       setSuccess(message);
       onWiped?.();

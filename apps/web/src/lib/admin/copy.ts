@@ -327,13 +327,14 @@ export const ADMIN_COPY = {
     wipedTitle: "Deleted",
     confirmLabel: "Type WIPE PUMP DATA to enable",
     button: "Wipe application data",
-    running: "Wiping and restarting indexer…",
-    success: "Application data wiped. Indexer restarted to resync from chain.",
-    successWithWarning: "Data wiped, but indexer restart failed — restart services manually.",
+    running: "Wiping…",
+    success: "Application data wiped. Indexer restart scheduled to resync from chain.",
+    successWithWarning:
+      "Data wiped, but indexer restart could not be confirmed — run systemctl restart manually if needed.",
     finalConfirm:
       "Last chance: wipe all application data except contract registry, missions, platform settings, and admin todos?",
     indexerNote:
-      "Indexer cursor is reset from contract_registry deployment blocks, then pump-indexer and pump-airdrop-keeper restart automatically.",
+      "Indexer cursor resets from contract_registry, then pump-indexer restarts in the background (no proxy timeout).",
   },
 } as const;
 

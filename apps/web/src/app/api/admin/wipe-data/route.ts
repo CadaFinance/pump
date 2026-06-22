@@ -5,11 +5,14 @@ import { restartIndexerServices } from "@/lib/admin/env-reload";
 import {
   WIPE_DATA_CONFIRMATION_PHRASE,
   WIPE_PRESERVED_TABLES,
-  readIndexerCursor,
   wipeLaunchpadAppData,
 } from "@/lib/db/admin-wipe";
 
-const INDEXER_POLL_MS = 4000;
+function scheduleIndexerRestart(): void {
+  void restartIndexerServices().catch((error) => {
+    console.error("[wipe-data] background indexer restart failed:", error);
+  });
+}
 
 export async function POST(request: NextRequest) {
   const admin = requireAdminWallet(request);
@@ -28,25 +31,7 @@ export async function POST(request: NextRequest) {
     }
 
     const wipeResult = await wipeLaunchpadAppData();
-    const warnings: string[] = [];
-
-    let indexerRestart: { command: string; ok: boolean; detail?: string } | null = null;
-    try {
-      const restart = await restartIndexerServices();
-      indexerRestart = { command: restart.command, ok: true };
-    } catch (error) {
-      const detail = error instanceof Error ? error.message : "Indexer restart failed";
-      warnings.push(
-        `${detail}. Run manually: systemctl restart pump-indexer pump-airdrop-keeper`
-      );
-      indexerRestart = { command: "systemctl restart pump-indexer pump-airdrop-keeper", ok: false, detail };
-    }
-
-    if (indexerRestart?.ok) {
-      await new Promise((resolve) => setTimeout(resolve, INDEXER_POLL_MS));
-    }
-
-    const indexerCursor = await readIndexerCursor();
+    scheduleIndexerRestart();
 
     return NextResponse.json({
       data: {
@@ -54,9 +39,7 @@ export async function POST(request: NextRequest) {
         preserved: [...WIPE_PRESERVED_TABLES],
         wipedBy: admin,
         wipedAt: new Date().toISOString(),
-        indexerRestart,
-        indexerCursor,
-        warnings,
+        indexerRestart: { scheduled: true },
       },
     });
   } catch (error) {
