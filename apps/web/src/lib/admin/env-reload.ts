@@ -17,6 +17,15 @@ function ecosystemPath(): string {
   return path.join(resolvePumpRepoRoot(), "ecosystem.config.cjs");
 }
 
+export async function restartIndexerServices(): Promise<EnvReloadResult> {
+  const args = ["restart", "pump-indexer", "pump-airdrop-keeper"];
+  const { stdout, stderr } = await execFileAsync("systemctl", args, {
+    timeout: RELOAD_TIMEOUT_MS,
+    maxBuffer: 2 * 1024 * 1024,
+  });
+  return { command: `systemctl ${args.join(" ")}`, stdout, stderr };
+}
+
 export async function reloadEnvService(id: AdminEnvFileId): Promise<EnvReloadResult> {
   const eco = ecosystemPath();
 
@@ -39,12 +48,7 @@ export async function reloadEnvService(id: AdminEnvFileId): Promise<EnvReloadRes
   }
 
   if (id === "indexer") {
-    const args = ["restart", "pump-indexer", "pump-airdrop-keeper"];
-    const { stdout, stderr } = await execFileAsync("systemctl", args, {
-      timeout: RELOAD_TIMEOUT_MS,
-      maxBuffer: 2 * 1024 * 1024,
-    });
-    return { command: `systemctl ${args.join(" ")}`, stdout, stderr };
+    return restartIndexerServices();
   }
 
   throw new Error("Unknown service");

@@ -9,7 +9,7 @@
 -- Migration sonrası tertemiz başlangıç:
 --   1) Önce bekleyen migration'ları uygula (004, 005, ...)
 --   2) Bu script'i çalıştır
---   3) Indexer'ı yeni deploymentBlock ile sıfırla (indexer_state boşalır; env/registry güncel olsun)
+--   3) Indexer otomatik: admin wipe butonu systemctl restart yapar; veya manuel restart
 
 BEGIN;
 
@@ -47,5 +47,19 @@ RESTART IDENTITY CASCADE;
 -- MV'ler base tablolardan türetilir; satırları yenile (tanımlar korunur)
 REFRESH MATERIALIZED VIEW public.mv_token_trade_stats;
 REFRESH MATERIALIZED VIEW public.mv_token_price_anchors;
+
+-- Indexer yeniden tarama: en erken contract deploy block'tan başla
+INSERT INTO indexer_state (key, last_block_number, updated_at)
+SELECT
+  'launchpad_indexer',
+  GREATEST(0, MIN(deployment_block_number) - 1),
+  now()
+FROM contract_registry
+WHERE is_active = true
+  AND deployment_block_number IS NOT NULL
+  AND deployment_block_number > 0
+ON CONFLICT (key) DO UPDATE
+SET last_block_number = EXCLUDED.last_block_number,
+    updated_at = now();
 
 COMMIT;

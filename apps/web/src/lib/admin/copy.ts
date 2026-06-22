@@ -322,17 +322,18 @@ export const ADMIN_COPY = {
     description:
       "Truncate indexed launchpad data for a clean testnet reset. Contract registry, missions, platform settings, and your todo list are kept.",
     warning:
-      "This permanently deletes users, tokens, trades, airdrops, wallets, and indexer cursor. On-chain state is unchanged — restart or resync the indexer after wipe.",
+      "This permanently deletes users, tokens, trades, airdrops, wallets, and indexer cursor. On-chain state is unchanged — the indexer is restarted automatically to resync from chain.",
     preservedTitle: "Kept",
     wipedTitle: "Deleted",
     confirmLabel: "Type WIPE PUMP DATA to enable",
     button: "Wipe application data",
-    running: "Wiping…",
-    success: "Application data wiped. Refresh stats and resync the indexer.",
+    running: "Wiping and restarting indexer…",
+    success: "Application data wiped. Indexer restarted to resync from chain.",
+    successWithWarning: "Data wiped, but indexer restart failed — restart services manually.",
     finalConfirm:
       "Last chance: wipe all application data except contract registry, missions, platform settings, and admin todos?",
     indexerNote:
-      "After wipe: reset indexer deployment block or let it catch up from an empty indexer_state.",
+      "Indexer cursor is reset from contract_registry deployment blocks, then pump-indexer and pump-airdrop-keeper restart automatically.",
   },
 } as const;
 

@@ -26,7 +26,34 @@ export const WIPE_TRUNCATED_TABLES = [
 export type WipeAppDataResult = {
   ok: true;
   preserved: string[];
+  indexerSeedBlock?: string | null;
+  indexerResyncFromBlock?: string | null;
 };
+
+export async function readIndexerCursor(): Promise<{
+  key: string;
+  block: string;
+  updatedAt: string;
+} | null> {
+  const pool = getLaunchpadPool();
+  const result = await pool.query<{
+    key: string;
+    last_block_number: string;
+    updated_at: Date;
+  }>(
+    `SELECT key, last_block_number::text, updated_at
+     FROM indexer_state
+     WHERE key = 'launchpad_indexer'
+     LIMIT 1`
+  );
+  const row = result.rows[0];
+  if (!row) return null;
+  return {
+    key: row.key,
+    block: row.last_block_number,
+    updatedAt: row.updated_at.toISOString(),
+  };
+}
 
 export async function wipeLaunchpadAppData(): Promise<WipeAppDataResult> {
   const pool = getLaunchpadPool();

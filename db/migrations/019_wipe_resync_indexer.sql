@@ -1,7 +1,5 @@
--- Safe app-data wipe callable by pump_app (admin console). Schema + preserved tables stay.
--- Run: sudo -u postgres psql -d pump_db -f db/migrations/018_wipe_launchpad_app_data_fn.sql
---
--- Preserved: contract_registry, launchpad_tasks, platform_settings, admin_todos
+-- Re-seed indexer cursor from contract_registry after wipe + return seed block for API.
+-- Run after 018: sudo -u postgres psql -d pump_db -f db/migrations/019_wipe_resync_indexer.sql
 
 CREATE OR REPLACE FUNCTION public.wipe_launchpad_app_data()
 RETURNS jsonb
