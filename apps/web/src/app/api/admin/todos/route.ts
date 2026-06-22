@@ -13,8 +13,11 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const todos = await listAdminTodos();
-    return NextResponse.json({ data: { todos } }, { headers: { "Cache-Control": "no-store" } });
+    const { todos, sortMode } = await listAdminTodos();
+    return NextResponse.json(
+      { data: { todos, sortMode } },
+      { headers: { "Cache-Control": "no-store" } }
+    );
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
     return NextResponse.json({ error: message }, { status: 500 });

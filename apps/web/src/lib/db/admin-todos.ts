@@ -2,6 +2,10 @@ import { getLaunchpadPool } from "@/lib/db/launchpad";
 
 export type AdminTodoPriority = "low" | "medium" | "high" | "urgent";
 
+export type AdminTodoSortMode = "priority" | "manual";
+
+export const ADMIN_TODO_SORT_MODE_KEY = "admin_todos_sort_mode";
+
 export type AdminTodo = {
   id: string;
   title: string;
@@ -16,6 +20,56 @@ export type AdminTodo = {
 };
 
 const PRIORITIES: AdminTodoPriority[] = ["low", "medium", "high", "urgent"];
+
+const PRIORITY_SQL_ORDER = `
+  CASE priority
+    WHEN 'urgent' THEN 0
+    WHEN 'high' THEN 1
+    WHEN 'medium' THEN 2
+    ELSE 3
+  END
+`;
+
+export function priorityRank(priority: AdminTodoPriority): number {
+  switch (priority) {
+    case "urgent":
+      return 0;
+    case "high":
+      return 1;
+    case "medium":
+      return 2;
+    default:
+      return 3;
+  }
+}
+
+export async function getAdminTodoSortMode(): Promise<AdminTodoSortMode> {
+  const pool = getLaunchpadPool();
+  const result = await pool.query<{ value: string }>(
+    `SELECT value FROM platform_settings WHERE key = $1`,
+    [ADMIN_TODO_SORT_MODE_KEY]
+  );
+  return result.rows[0]?.value === "manual" ? "manual" : "priority";
+}
+
+export async function setAdminTodoSortMode(
+  mode: AdminTodoSortMode,
+  updatedBy?: string | null
+): Promise<AdminTodoSortMode> {
+  const pool = getLaunchpadPool();
+  await pool.query(
+    `
+      INSERT INTO platform_settings (key, value, updated_by)
+      VALUES ($1, $2, $3)
+      ON CONFLICT (key) DO UPDATE
+      SET value = EXCLUDED.value,
+          updated_by = EXCLUDED.updated_by,
+          updated_at = now()
+    `,
+    [ADMIN_TODO_SORT_MODE_KEY, mode, updatedBy ?? null]
+  );
+  return mode;
+}
 
 function parsePriority(value: string | undefined | null): AdminTodoPriority {
   if (value && PRIORITIES.includes(value as AdminTodoPriority)) {
@@ -50,8 +104,17 @@ function mapRow(row: {
   };
 }
 
-export async function listAdminTodos(): Promise<AdminTodo[]> {
+export async function listAdminTodos(): Promise<{
+  todos: AdminTodo[];
+  sortMode: AdminTodoSortMode;
+}> {
   const pool = getLaunchpadPool();
+  const sortMode = await getAdminTodoSortMode();
+  const orderBy =
+    sortMode === "manual"
+      ? `is_completed ASC, sort_order ASC, id ASC`
+      : `is_completed ASC, ${PRIORITY_SQL_ORDER} ASC, created_at ASC, id ASC`;
+
   const result = await pool.query<{
     id: string;
     title: string;
@@ -68,11 +131,11 @@ export async function listAdminTodos(): Promise<AdminTodo[]> {
       SELECT id::text, title, body, priority, is_completed, sort_order,
              created_by, created_at, updated_at, completed_at
       FROM admin_todos
-      ORDER BY is_completed ASC, sort_order ASC, id ASC
+      ORDER BY ${orderBy}
     `
   );
 
-  return result.rows.map(mapRow);
+  return { todos: result.rows.map(mapRow), sortMode };
 }
 
 export async function createAdminTodo(input: {
@@ -197,7 +260,10 @@ export async function deleteAdminTodo(id: string): Promise<boolean> {
   return (result.rowCount ?? 0) > 0;
 }
 
-export async function reorderAdminTodos(orderedIds: string[]): Promise<AdminTodo[]> {
+export async function reorderAdminTodos(
+  orderedIds: string[],
+  updatedBy?: string | null
+): Promise<{ todos: AdminTodo[]; sortMode: AdminTodoSortMode }> {
   if (!orderedIds.length) return listAdminTodos();
 
   const pool = getLaunchpadPool();
@@ -212,6 +278,18 @@ export async function reorderAdminTodos(orderedIds: string[]): Promise<AdminTodo
         [orderedIds[index], index]
       );
     }
+
+    await client.query(
+      `
+        INSERT INTO platform_settings (key, value, updated_by)
+        VALUES ($1, 'manual', $2)
+        ON CONFLICT (key) DO UPDATE
+        SET value = 'manual',
+            updated_by = EXCLUDED.updated_by,
+            updated_at = now()
+      `,
+      [ADMIN_TODO_SORT_MODE_KEY, updatedBy ?? null]
+    );
 
     await client.query("COMMIT");
   } catch (error) {

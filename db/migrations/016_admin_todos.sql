@@ -1,4 +1,6 @@
 -- Internal ops todo list for Pump admin console (not user-facing missions).
+-- Run as superuser (pump_app cannot CREATE TABLE):
+--   sudo -u postgres psql -d pump_db -f db/migrations/016_admin_todos.sql
 
 CREATE TABLE IF NOT EXISTS admin_todos (
     id bigint NOT NULL,
@@ -29,3 +31,14 @@ ALTER TABLE admin_todos ALTER COLUMN id SET DEFAULT nextval('admin_todos_id_seq'
 
 CREATE INDEX IF NOT EXISTS idx_admin_todos_open_sort
     ON admin_todos (is_completed, sort_order, id);
+
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'pump_app') THEN
+    GRANT SELECT, INSERT, UPDATE, DELETE ON admin_todos TO pump_app;
+    GRANT USAGE, SELECT ON SEQUENCE admin_todos_id_seq TO pump_app;
+  END IF;
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'pump_indexer') THEN
+    GRANT SELECT ON admin_todos TO pump_indexer;
+  END IF;
+END $$;

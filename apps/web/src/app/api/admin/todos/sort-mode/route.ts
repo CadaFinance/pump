@@ -1,7 +1,7 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { requireAdminWallet } from "@/lib/auth/admin-access";
-import { reorderAdminTodos } from "@/lib/db/admin-todos";
+import { listAdminTodos, setAdminTodoSortMode, type AdminTodoSortMode } from "@/lib/db/admin-todos";
 
 export async function POST(request: NextRequest) {
   const admin = requireAdminWallet(request);
@@ -10,13 +10,14 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const body = (await request.json()) as { orderedIds?: string[] };
-    const orderedIds = body.orderedIds?.filter((id) => /^\d+$/.test(id)) ?? [];
-    if (!orderedIds.length) {
-      return NextResponse.json({ error: "orderedIds is required" }, { status: 400 });
+    const body = (await request.json()) as { mode?: string };
+    const mode = body.mode?.trim();
+    if (mode !== "priority" && mode !== "manual") {
+      return NextResponse.json({ error: "mode must be priority or manual" }, { status: 400 });
     }
 
-    const { todos, sortMode } = await reorderAdminTodos(orderedIds, admin);
+    await setAdminTodoSortMode(mode as AdminTodoSortMode, admin);
+    const { todos, sortMode } = await listAdminTodos();
     return NextResponse.json({ data: { todos, sortMode } });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
