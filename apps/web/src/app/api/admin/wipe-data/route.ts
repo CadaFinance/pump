@@ -7,6 +7,7 @@ import {
   WIPE_PRESERVED_TABLES,
   wipeLaunchpadAppData,
 } from "@/lib/db/admin-wipe";
+import { seedIndexerStateFromEnv } from "@/lib/db/indexer-env-seed";
 
 function scheduleIndexerRestart(): void {
   void restartIndexerServices().catch((error) => {
@@ -31,6 +32,13 @@ export async function POST(request: NextRequest) {
     }
 
     const wipeResult = await wipeLaunchpadAppData();
+    const indexerSeed = await seedIndexerStateFromEnv();
+    const warnings: string[] = [];
+
+    if (!indexerSeed.ok) {
+      warnings.push(indexerSeed.reason);
+    }
+
     scheduleIndexerRestart();
 
     return NextResponse.json({
@@ -39,7 +47,9 @@ export async function POST(request: NextRequest) {
         preserved: [...WIPE_PRESERVED_TABLES],
         wipedBy: admin,
         wipedAt: new Date().toISOString(),
+        indexerSeed,
         indexerRestart: { scheduled: true },
+        warnings,
       },
     });
   } catch (error) {
@@ -50,7 +60,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           error:
-            "Wipe function not installed. Run migrations 018 and 019 as postgres.",
+            "Wipe function not installed. Run migrations 018–020 as postgres.",
         },
         { status: 503 }
       );

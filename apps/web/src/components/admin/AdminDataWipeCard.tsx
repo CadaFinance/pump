@@ -39,18 +39,30 @@ export function AdminDataWipeCard({ onWiped }: AdminDataWipeCardProps) {
       const json = await readAdminJson<{
         data?: {
           wipedAt: string;
-          indexerResyncFromBlock?: string | null;
+          indexerSeed?: {
+            ok: boolean;
+            stateKey?: string;
+            resyncFromBlock?: string;
+            reason?: string;
+          };
           indexerRestart?: { scheduled?: boolean };
+          warnings?: string[];
         };
         error?: string;
       }>(res);
       if (!res.ok) throw new Error(json.error ?? "Wipe failed");
 
       setConfirmation("");
-      const fromBlock = json.data?.indexerResyncFromBlock;
       let message = ADMIN_COPY.wipe.success;
-      if (fromBlock) {
-        message += ` Resync from block ${fromBlock}.`;
+      const seed = json.data?.indexerSeed;
+      if (seed?.ok && seed.resyncFromBlock) {
+        message += ` Indexer \`${seed.stateKey ?? "?"}\` from block ${seed.resyncFromBlock}.`;
+      } else if (seed && !seed.ok && seed.reason) {
+        message += ` ${seed.reason}`;
+      }
+      const extraWarnings = json.data?.warnings?.filter(Boolean) ?? [];
+      if (extraWarnings.length > 0) {
+        message += ` ${extraWarnings.join(" ")}`;
       }
       setSuccess(message);
       onWiped?.();

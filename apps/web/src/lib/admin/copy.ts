@@ -342,7 +342,7 @@ export const ADMIN_COPY = {
     finalConfirm:
       "Last chance: wipe all application data except contract registry, missions, platform settings, and admin todos?",
     indexerNote:
-      "Indexer cursor resets from contract_registry, then pump-indexer restarts in the background (no proxy timeout).",
+      "Before wipe: set INDEXER_START_BLOCK to chain head − 1 in Admin → Environment → Indexer .env. Wipe seeds indexer_state from that file (INDEXER_STATE_KEY) and restarts pump-indexer.",
   },
 } as const;
 

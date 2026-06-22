@@ -1,5 +1,6 @@
--- Same as 020 (idempotent). Prefer 020 on VMs that already ran old 019.
--- sudo -u postgres psql -d pump_db -f db/migrations/019_wipe_resync_indexer.sql
+-- Wipe no longer seeds indexer_state from contract_registry.
+-- Post-wipe seed: Admin wipe API reads INDEXER_START_BLOCK from Indexer .env.
+-- Run: sudo -u postgres psql -d pump_db -f db/migrations/020_wipe_indexer_env_seed.sql
 
 CREATE OR REPLACE FUNCTION public.wipe_launchpad_app_data()
 RETURNS jsonb

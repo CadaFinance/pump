@@ -2,6 +2,7 @@
 -- Run: sudo -u postgres psql -d pump_db -f db/migrations/018_wipe_launchpad_app_data_fn.sql
 --
 -- Preserved: contract_registry, launchpad_tasks, platform_settings, admin_todos
+-- Indexer cursor: seeded post-wipe from Indexer .env (INDEXER_START_BLOCK) via admin API.
 
 CREATE OR REPLACE FUNCTION public.wipe_launchpad_app_data()
 RETURNS jsonb
@@ -9,8 +10,6 @@ LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
 AS $$
-DECLARE
-  seed_block bigint;
 BEGIN
   TRUNCATE TABLE
     public.airdrop_task_completions,
@@ -46,21 +45,6 @@ BEGIN
   REFRESH MATERIALIZED VIEW public.mv_token_trade_stats;
   REFRESH MATERIALIZED VIEW public.mv_token_price_anchors;
 
-  SELECT MIN(deployment_block_number) - 1
-  INTO seed_block
-  FROM contract_registry
-  WHERE is_active = true
-    AND deployment_block_number IS NOT NULL
-    AND deployment_block_number > 0;
-
-  IF seed_block IS NOT NULL AND seed_block >= 0 THEN
-    INSERT INTO indexer_state (key, last_block_number, updated_at)
-    VALUES ('launchpad_indexer', seed_block, now())
-    ON CONFLICT (key) DO UPDATE
-    SET last_block_number = EXCLUDED.last_block_number,
-        updated_at = now();
-  END IF;
-
   RETURN jsonb_build_object(
     'ok', true,
     'preserved', jsonb_build_array(
@@ -68,15 +52,10 @@ BEGIN
       'launchpad_tasks',
       'platform_settings',
       'admin_todos'
-    ),
-    'indexerSeedBlock', CASE WHEN seed_block IS NULL THEN NULL ELSE seed_block::text END,
-    'indexerResyncFromBlock', CASE
-      WHEN seed_block IS NULL THEN NULL
-      ELSE (seed_block + 1)::text
-    END
+    )
   );
 END;
 $$;
 
-REVOKE ALL ON FUNCTION public.wipe_launchpad_app_data() FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.wipe_launchpad_app_data() TO PUBLIC;
 GRANT EXECUTE ON FUNCTION public.wipe_launchpad_app_data() TO pump_app;

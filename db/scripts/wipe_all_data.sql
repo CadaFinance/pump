@@ -9,7 +9,8 @@
 -- Migration sonrası tertemiz başlangıç:
 --   1) Önce bekleyen migration'ları uygula (004, 005, ...)
 --   2) Bu script'i çalıştır
---   3) Indexer otomatik: admin wipe butonu systemctl restart yapar; veya manuel restart
+--   3) Indexer cursor: Admin → Environment → set INDEXER_START_BLOCK (head − 1),
+--      then Admin → Dashboard → Wipe (seeds indexer_state + restarts indexer)
 
 BEGIN;
 
@@ -48,18 +49,6 @@ RESTART IDENTITY CASCADE;
 REFRESH MATERIALIZED VIEW public.mv_token_trade_stats;
 REFRESH MATERIALIZED VIEW public.mv_token_price_anchors;
 
--- Indexer yeniden tarama: en erken contract deploy block'tan başla
-INSERT INTO indexer_state (key, last_block_number, updated_at)
-SELECT
-  'launchpad_indexer',
-  GREATEST(0, MIN(deployment_block_number) - 1),
-  now()
-FROM contract_registry
-WHERE is_active = true
-  AND deployment_block_number IS NOT NULL
-  AND deployment_block_number > 0
-ON CONFLICT (key) DO UPDATE
-SET last_block_number = EXCLUDED.last_block_number,
-    updated_at = now();
+-- indexer_state boş kalır; Admin wipe veya INDEXER_START_BLOCK ile manuel seed
 
 COMMIT;
