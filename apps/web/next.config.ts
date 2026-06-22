@@ -1,8 +1,12 @@
 import type { NextConfig } from "next";
 import path from "node:path";
+import { loadMonorepoRootEnv } from "./src/lib/load-monorepo-env";
 
 /** Monorepo root — standalone tracing + turbopack resolve shared deps. */
 const monorepoRoot = path.join(__dirname, "../..");
+
+/** VM + local: single `.env` at repo root (PM2), not apps/web/.env */
+loadMonorepoRootEnv(monorepoRoot);
 
 /**
  * Telegram OIDC login + legacy widget + bundler CSP.

@@ -23,6 +23,11 @@ git clean -fd
 log "Installing workspace dependencies"
 npm ci
 
+if [[ -f "$REPO_ROOT/.env" ]]; then
+  log "Linking root .env for Next.js build (NEXT_PUBLIC_* inlined at build time)"
+  ln -sfn "$REPO_ROOT/.env" "$WEB_DIR/.env"
+fi
+
 log "Building Next.js (@pump/web)"
 npm run build -w @pump/web
 
