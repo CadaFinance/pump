@@ -79,32 +79,55 @@ async function waitViaEntryPointLogs(
 
 async function waitViaBundlerReceipt(
   client: KernelAccountClient,
-  userOpHash: Hash
+  userOpHash: Hash,
+  deadline: number
 ): Promise<Hash> {
-  const receipt = await getAction(
-    client,
-    waitForUserOperationReceipt,
-    "waitForUserOperationReceipt"
-  )({
-    hash: userOpHash,
-    pollingInterval: POLL_MS,
-    timeout: CONFIRM_TIMEOUT_MS,
-  });
+  while (Date.now() < deadline) {
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) break;
 
-  bundlerDebug("info", "bundler receipt", userOpHash, {
-    txHash: receipt.receipt.transactionHash,
-    success: receipt.success,
-  });
+    try {
+      const receipt = await getAction(
+        client,
+        waitForUserOperationReceipt,
+        "waitForUserOperationReceipt"
+      )({
+        hash: userOpHash,
+        pollingInterval: POLL_MS,
+        timeout: Math.min(CONFIRM_TIMEOUT_MS, remaining),
+      });
 
-  if (!receipt.success) {
-    throw new Error(
-      receipt.reason
-        ? `UserOperation failed: ${receipt.reason}`
-        : `UserOperation failed (${userOpHash})`
-    );
+      bundlerDebug("info", "bundler receipt", userOpHash, {
+        txHash: receipt.receipt.transactionHash,
+        success: receipt.success,
+      });
+
+      if (!receipt.success) {
+        throw new Error(
+          receipt.reason
+            ? `UserOperation failed: ${receipt.reason}`
+            : `UserOperation failed (${userOpHash})`
+        );
+      }
+
+      return receipt.receipt.transactionHash;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const lower = message.toLowerCase();
+      if (
+        lower.includes("failed to get user operation receipt") ||
+        lower.includes("user operation not found") ||
+        lower.includes("timed out")
+      ) {
+        tradeBundlerLog("bundler receipt pending", { userOpHash, message });
+        await sleep(POLL_MS);
+        continue;
+      }
+      throw error;
+    }
   }
 
-  return receipt.receipt.transactionHash;
+  throw new Error(`Timed out waiting for bundler UserOperation receipt (${userOpHash})`);
 }
 
 /** Bundler receipt OR EntryPoint logs — whichever confirms first (Skandha receipt often lags on BSC). */
@@ -121,7 +144,7 @@ export async function waitForUserOpConfirmation(
     timeoutMs: CONFIRM_TIMEOUT_MS,
   });
 
-  const bundlerPromise = waitViaBundlerReceipt(client, userOpHash);
+  const bundlerPromise = waitViaBundlerReceipt(client, userOpHash, deadline);
   const entryPointPromise = waitViaEntryPointLogs(
     publicClient,
     userOpHash,

@@ -31,13 +31,14 @@ import {
 } from "@/lib/airdrop-social";
 import { useOpenConnectModal } from "@/hooks/useOpenConnectModal";
 import { useWalletFunding } from "@/components/wallet/WalletFundingProvider";
+import { useKernelWriteContract } from "@/hooks/useKernelWriteContract";
+import { formatTradeError } from "@/lib/trade-errors";
 import {
   useAccount,
   useBalance,
   useReadContract,
   useReadContracts,
   useWaitForTransactionReceipt,
-  useWriteContract,
 } from "wagmi";
 import { contracts, pumpChain } from "@/config/chain";
 import { pumpAirdropManagerAbi } from "@/lib/abis/pump-airdrop-manager";
@@ -222,8 +223,17 @@ export function CreateAirdropForm({
     query: { enabled: Boolean(rewardTokenAddress && address) },
   });
 
-  const { writeContract, data: txHash, isPending, reset } = useWriteContract();
-  const { data: receipt, isSuccess: receiptOk } = useWaitForTransactionReceipt({ hash: txHash });
+  const { writeContract, data: txHash, isPending, reset, error: writeError } =
+    useKernelWriteContract();
+  const { data: receipt, isSuccess: receiptOk, isLoading: isConfirming } =
+    useWaitForTransactionReceipt({ hash: txHash });
+
+  useEffect(() => {
+    if (!writeError) return;
+    setPendingAction(null);
+    pendingCreateRef.current = null;
+    setError(formatTradeError(writeError));
+  }, [writeError]);
 
   useEffect(() => {
     (async () => {
@@ -495,6 +505,7 @@ export function CreateAirdropForm({
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    reset();
 
     if (!isConnected || !address) {
       openConnectModal?.();
@@ -895,7 +906,8 @@ export function CreateAirdropForm({
     });
   }
 
-  const busy = isPending || Boolean(txHash && !error);
+  const busy = isPending || isConfirming || (Boolean(txHash) && !receiptOk && !error && !writeError);
+  const displayError = error ?? (writeError ? formatTradeError(writeError) : null);
   const canUseFundingCta = formValidation.needsBnbFunding && isConnected;
   const submitDisabled = busy || (!formValidation.canSubmit && !canUseFundingCta);
   const displayTitle = title.trim() || "Your campaign";
@@ -1356,7 +1368,7 @@ export function CreateAirdropForm({
             </div>
           </dl>
 
-          {error ? <p className="notice-error mt-3 text-caption">{error}</p> : null}
+          {displayError ? <p className="notice-error mt-3 text-caption">{displayError}</p> : null}
 
           {formValidation.warnings.length > 0 ? (
             <ul className="mt-3 space-y-1 rounded-md border border-pump-warning/30 bg-pump-warning/5 px-2.5 py-2">

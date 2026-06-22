@@ -12,6 +12,8 @@ export function isReceiptPendingError(error: { code?: number; message?: string }
     msg.includes("userophash") ||
     msg.includes("user operation not found") ||
     msg.includes("missing/invalid userophash") ||
+    msg.includes("failed to get user operation receipt") ||
+    msg.includes("failed to get useroperation receipt") ||
     (error.code === -32601 && msg.includes("receipt"))
   );
 }

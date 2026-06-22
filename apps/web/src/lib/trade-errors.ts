@@ -8,6 +8,9 @@ export function formatTradeError(err: unknown): string {
 
   const lower = raw.toLowerCase();
 
+  if (lower.includes("failed to get user operation receipt") || lower.includes("timed out while waiting for user operation")) {
+    return "Transaction submitted — confirmation is slow. Check the Airdrops board in a minute, or retry if nothing appears.";
+  }
   if (lower.includes("maxfeepergas must be at least") || lower.includes("pimlico_getuseroperationgasprice")) {
     return "Gas price too low for the bundler — wait a moment and try again.";
   }
