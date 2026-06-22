@@ -1,7 +1,7 @@
 -- Tüm uygulama verisini siler; şema (tablolar, index, trigger, MV tanımları, fonksiyonlar) aynen kalır.
 --
--- Korunan: contract_registry, launchpad_tasks, platform_settings
--- (system mission tanımları + admin platform ayarları)
+-- Korunan: contract_registry, launchpad_tasks, platform_settings, admin_todos
+-- (system mission tanımları, admin platform ayarları, ops todo listesi)
 --
 -- VM örnek:
 --   sudo -u postgres psql -d pump_db -f db/scripts/wipe_all_data.sql

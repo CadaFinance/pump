@@ -1777,3 +1777,76 @@
   background: rgba(34, 197, 94, 0.2);
   box-shadow: inset 0 0 0 2px rgba(34, 197, 94, 0.85);
 }
+
+.admin-wipe-zone {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.admin-wipe-warning {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  background: rgba(239, 68, 68, 0.08);
+  color: #fecaca;
+  font-size: var(--text-body-sm, 0.875rem);
+}
+
+.admin-wipe-warning p {
+  margin: 0;
+}
+
+.admin-wipe-columns {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 640px) {
+  .admin-wipe-columns {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.admin-wipe-list-title {
+  margin: 0 0 6px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--pump-muted);
+}
+
+.admin-wipe-list {
+  margin: 0;
+  padding-left: 1.1rem;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.admin-wipe-list--ok {
+  color: #86efac;
+}
+
+.admin-wipe-list--danger {
+  color: #fca5a5;
+}
+
+.admin-wipe-confirm {
+  display: block;
+  max-width: 28rem;
+}
+
+.admin-wipe-input {
+  font-family: ui-monospace, monospace;
+}
+
+.admin-wipe-success {
+  margin: 0;
+  color: #86efac;
+  font-size: var(--text-body-sm, 0.875rem);
+}

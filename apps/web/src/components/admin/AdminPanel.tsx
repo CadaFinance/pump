@@ -41,6 +41,7 @@ import { AdminMinInitialBuyModal } from "@/components/admin/AdminMinInitialBuyMo
 import { AdminFeeExemptModal } from "@/components/admin/AdminFeeExemptModal";
 import { AdminProtocolFeeModal } from "@/components/admin/AdminProtocolFeeModal";
 import { AdminEnvTab } from "@/components/admin/AdminEnvTab";
+import { AdminDataWipeCard } from "@/components/admin/AdminDataWipeCard";
 import { AdminTodosTab } from "@/components/admin/AdminTodosTab";
 import { AdminSystemHealth } from "@/components/admin/AdminSystemHealth";
 import { AdminPortfolioTab } from "@/components/admin/AdminPortfolioTab";
@@ -937,6 +938,13 @@ export function AdminPanel() {
           {stats?.feesNote ? <p className="admin-note">{stats.feesNote}</p> : null}
             </AdminBlock>
           </AdminContentGrid>
+
+          <AdminDataWipeCard
+            onWiped={() => {
+              void load();
+              void loadStats();
+            }}
+          />
         </AdminTabPanel>
 
       <AdminTabPanel id="todos" active={activeTab}>

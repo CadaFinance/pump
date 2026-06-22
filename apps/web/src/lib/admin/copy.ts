@@ -316,6 +316,24 @@ export const ADMIN_COPY = {
   errors: {
     dismiss: "Review the message below and try again.",
   },
+
+  wipe: {
+    title: "Reset application data",
+    description:
+      "Truncate indexed launchpad data for a clean testnet reset. Contract registry, missions, platform settings, and your todo list are kept.",
+    warning:
+      "This permanently deletes users, tokens, trades, airdrops, wallets, and indexer cursor. On-chain state is unchanged — restart or resync the indexer after wipe.",
+    preservedTitle: "Kept",
+    wipedTitle: "Deleted",
+    confirmLabel: "Type WIPE PUMP DATA to enable",
+    button: "Wipe application data",
+    running: "Wiping…",
+    success: "Application data wiped. Refresh stats and resync the indexer.",
+    finalConfirm:
+      "Last chance: wipe all application data except contract registry, missions, platform settings, and admin todos?",
+    indexerNote:
+      "After wipe: reset indexer deployment block or let it catch up from an empty indexer_state.",
+  },
 } as const;
 
 export function adminPageMeta(id: AdminTabId) {
