@@ -51,8 +51,9 @@ jobs:
       full_stack: ${{ steps.classify.outputs.full_stack }}
       ui_only: ${{ steps.classify.outputs.ui_only }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: dorny/paths-filter@v3
+      # Node 24-native majors (GitHub deprecates Node 20 action runtimes Jun 2026)
+      - uses: actions/checkout@v6
+      - uses: dorny/paths-filter@v4
         id: filter
         with:
           filters: |

@@ -1,10 +1,13 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { normalizeAddressParam } from "@/lib/address";
+import { ensureDynamicRoute } from "@/lib/api/route-dynamic";
 import { persistReferrerFeeClaimFromTx } from "@/lib/record-referrer-fee-claim";
 
 /** POST /api/referrals/claims/record — save referrer claim tx after UI claim. */
 export async function POST(request: NextRequest) {
+  await ensureDynamicRoute();
+
   try {
     const body = (await request.json()) as { txHash?: string; referrerAddress?: string };
     const txHash = body.txHash?.trim().toLowerCase();
