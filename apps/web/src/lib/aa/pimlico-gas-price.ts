@@ -12,10 +12,6 @@ function maxBigInt(a: bigint, b: bigint): bigint {
   return a > b ? a : b;
 }
 
-function minBigInt(a: bigint, b: bigint): bigint {
-  return a < b ? a : b;
-}
-
 function clampUserOpFees(maxFeePerGas: bigint, maxPriorityFeePerGas: bigint) {
   const priority = maxBigInt(maxPriorityFeePerGas, MIN_USER_OP_PRIORITY_FEE);
   const maxFee = maxBigInt(maxFeePerGas, maxBigInt(priority, MIN_USER_OP_MAX_FEE));
@@ -76,9 +72,10 @@ export async function resolveUserOpGasPrice(
   const bundler = await fetchPimlicoUserOpGasPrice().catch(() => null);
 
   if (chainFees && bundler) {
+    // Bundler enforces a floor (e.g. Alto min 1.2 gwei); chain RPC can be lower — take the higher.
     return clampUserOpFees(
-      minBigInt(chainFees.maxFeePerGas, bundler.maxFeePerGas),
-      minBigInt(chainFees.maxPriorityFeePerGas, bundler.maxPriorityFeePerGas)
+      maxBigInt(chainFees.maxFeePerGas, bundler.maxFeePerGas),
+      maxBigInt(chainFees.maxPriorityFeePerGas, bundler.maxPriorityFeePerGas)
     );
   }
 

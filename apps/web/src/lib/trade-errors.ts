@@ -8,6 +8,9 @@ export function formatTradeError(err: unknown): string {
 
   const lower = raw.toLowerCase();
 
+  if (lower.includes("maxfeepergas must be at least") || lower.includes("pimlico_getuseroperationgasprice")) {
+    return "Gas price too low for the bundler — wait a moment and try again.";
+  }
   if (lower.includes("validateuserop") || lower.includes("aa23") || lower.includes("-32500")) {
     return "Transaction rejected (AA23) — deposit BNB to your smart wallet address (not login wallet) for trade amount + gas, then retry.";
   }

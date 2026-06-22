@@ -10,8 +10,9 @@ import {
   useBalance,
   useReadContract,
   useWaitForTransactionReceipt,
-  useWriteContract,
 } from "wagmi";
+import { useKernelWriteContract } from "@/hooks/useKernelWriteContract";
+import { formatTradeError } from "@/lib/trade-errors";
 import { contracts, pumpChain } from "@/config/chain";
 import { memeFactoryAbi } from "@/lib/abis/meme-factory";
 import {
@@ -270,10 +271,16 @@ export function CreateMemeForm() {
     chainId: pumpChain.id,
   });
 
-  const { writeContract, data: txHash, isPending, reset } = useWriteContract();
+  const { writeContract, data: txHash, isPending, reset, error: writeError } =
+    useKernelWriteContract();
   const { data: receipt, isLoading: isConfirming } = useWaitForTransactionReceipt({
     hash: txHash,
   });
+
+  useEffect(() => {
+    if (!writeError) return;
+    setError(formatTradeError(writeError));
+  }, [writeError]);
 
   const { data: bnbBalance, isLoading: bnbBalanceLoading } = useBalance({
     address,
@@ -519,6 +526,7 @@ export function CreateMemeForm() {
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    reset();
 
     if (!isConnected || !address) {
       openConnectModal?.();
@@ -562,6 +570,8 @@ export function CreateMemeForm() {
       setError(err instanceof Error ? err.message : "Transaction failed");
     }
   }
+
+  const displayError = error ?? (writeError ? formatTradeError(writeError) : null);
 
   const isBusy = isPending || isConfirming || launchFinalizing;
 
@@ -805,7 +815,7 @@ export function CreateMemeForm() {
             logoPreview={logoPreview}
             totalValue={totalValue}
           />
-          {error ? <p className="notice-error mt-3 text-caption leading-snug">{error}</p> : null}
+          {displayError ? <p className="notice-error mt-3 text-caption leading-snug">{displayError}</p> : null}
           {txHash ? (
             <p className="mt-3 field-hint break-all">
               Tx: {txHash}
@@ -923,7 +933,7 @@ export function CreateMemeForm() {
             totalValue={totalValue}
           />
 
-          {error ? <p className="notice-error mt-4">{error}</p> : null}
+          {displayError ? <p className="notice-error mt-4">{displayError}</p> : null}
 
           {txHash ? (
             <p className="mt-4 field-hint break-all">
@@ -963,7 +973,7 @@ export function CreateMemeForm() {
       />
 
       <div className="create-mobile-dock md:hidden">
-        {error ? <p className="notice-error mb-2 text-caption leading-snug">{error}</p> : null}
+        {displayError ? <p className="notice-error mb-2 text-caption leading-snug">{displayError}</p> : null}
         <div className="flex items-center gap-3">
           <TokenAvatar
             address="0x0000000000000000000000000000000000000000"
