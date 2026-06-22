@@ -5,7 +5,7 @@ import { requireAdminWallet } from "@/lib/auth/admin-access";
 export async function GET(request: NextRequest) {
   const wallet = requireAdminWallet(request);
   if (!wallet) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
+    return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
   return NextResponse.json(
