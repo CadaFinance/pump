@@ -21,6 +21,7 @@ export default defineConfig(({ mode }) => {
       dedupe: ["viem", "wagmi", "@tanstack/react-query", "react", "react-dom"],
       alias: {
         "@": webSrc,
+        buffer: "buffer",
         "next/link": path.resolve(__dirname, "src/shims/next-link.tsx"),
       },
     },
