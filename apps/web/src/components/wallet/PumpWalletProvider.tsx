@@ -13,21 +13,24 @@ import type { KernelAccountClient } from "@zerodev/sdk";
 import type { Address } from "viem";
 import { useDisconnect } from "wagmi";
 import {
-  logoutTelegramSession,
-  restoreTelegramKernelSession,
-  type TelegramAccountSession,
-} from "@/lib/aa/telegram-account";
+  logoutPumpSession,
+  restorePumpKernelSession,
+  type PumpAccountSession,
+} from "@/lib/aa/pump-account";
 import { withdrawFromKernelClient } from "@/lib/aa/kernel-account";
 import {
   clearPumpConnectorSession,
   clearPumpWagmiPersistence,
   setPumpConnectorSession,
 } from "@/lib/wagmi";
-import { TelegramLoginModal } from "@/components/wallet/TelegramLoginModal";
+import { SignInModal } from "@/components/wallet/SignInModal";
 
 type PumpWalletContextValue = {
   ready: boolean;
   authenticated: boolean;
+  authProvider: "telegram" | "google" | "apple" | undefined;
+  accountId: string | undefined;
+  displayName: string | null | undefined;
   telegramId: string | undefined;
   telegramUsername: string | null | undefined;
   telegramFirstName: string | null | undefined;
@@ -49,12 +52,15 @@ export function usePumpWallet() {
 }
 
 const noopAsync = async () => {
-  throw new Error("Configure Telegram bot auth in .env");
+  throw new Error("Configure sign-in providers in .env");
 };
 
 const stubPumpWallet: PumpWalletContextValue = {
   ready: true,
   authenticated: false,
+  authProvider: undefined,
+  accountId: undefined,
+  displayName: undefined,
   telegramId: undefined,
   telegramUsername: undefined,
   telegramFirstName: undefined,
@@ -75,6 +81,9 @@ export function PumpWalletProvider({ children }: { children: ReactNode }) {
   const { disconnect } = useDisconnect();
   const [ready, setReady] = useState(false);
   const [authenticated, setAuthenticated] = useState(false);
+  const [authProvider, setAuthProvider] = useState<"telegram" | "google" | "apple" | undefined>();
+  const [accountId, setAccountId] = useState<string | undefined>();
+  const [displayName, setDisplayName] = useState<string | null | undefined>();
   const [telegramId, setTelegramId] = useState<string | undefined>();
   const [telegramUsername, setTelegramUsername] = useState<string | null | undefined>();
   const [telegramFirstName, setTelegramFirstName] = useState<string | null | undefined>();
@@ -82,9 +91,12 @@ export function PumpWalletProvider({ children }: { children: ReactNode }) {
   const [kernelClient, setKernelClient] = useState<KernelAccountClient | null>(null);
   const [loginModalOpen, setLoginModalOpen] = useState(false);
 
-  const applySession = useCallback((session: TelegramAccountSession) => {
+  const applySession = useCallback((session: PumpAccountSession) => {
     setPumpConnectorSession(session.provider, session.scwAddress);
-    setTelegramId(session.telegramId);
+    setAuthProvider(session.authProvider);
+    setAccountId(session.accountId);
+    setDisplayName(session.displayName);
+    setTelegramId(session.telegramId || undefined);
     setTelegramUsername(session.telegramUsername);
     setTelegramFirstName(session.firstName);
     setScwAddress(session.scwAddress);
@@ -96,7 +108,7 @@ export function PumpWalletProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
     async function hydrate() {
       try {
-        const session = await restoreTelegramKernelSession();
+        const session = await restorePumpKernelSession();
         if (session && !cancelled) applySession(session);
       } catch {
         // ignore stale session
@@ -117,13 +129,16 @@ export function PumpWalletProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(async () => {
     clearPumpConnectorSession();
     clearPumpWagmiPersistence();
+    setAuthProvider(undefined);
+    setAccountId(undefined);
+    setDisplayName(undefined);
     setTelegramId(undefined);
     setTelegramUsername(undefined);
     setTelegramFirstName(undefined);
     setScwAddress(undefined);
     setKernelClient(null);
     setAuthenticated(false);
-    await logoutTelegramSession();
+    await logoutPumpSession();
     await disconnect();
   }, [disconnect]);
 
@@ -141,6 +156,9 @@ export function PumpWalletProvider({ children }: { children: ReactNode }) {
     () => ({
       ready,
       authenticated,
+      authProvider,
+      accountId,
+      displayName,
       telegramId,
       telegramUsername,
       telegramFirstName,
@@ -153,6 +171,9 @@ export function PumpWalletProvider({ children }: { children: ReactNode }) {
     [
       ready,
       authenticated,
+      authProvider,
+      accountId,
+      displayName,
       telegramId,
       telegramUsername,
       telegramFirstName,
@@ -167,7 +188,7 @@ export function PumpWalletProvider({ children }: { children: ReactNode }) {
   return (
     <PumpWalletContext.Provider value={value}>
       {children}
-      <TelegramLoginModal
+      <SignInModal
         open={loginModalOpen}
         onClose={() => setLoginModalOpen(false)}
         onSuccess={() => setLoginModalOpen(false)}

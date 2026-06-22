@@ -3,13 +3,10 @@
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { ShieldCheck } from "lucide-react";
-import {
-  markPumpSessionHint,
-  restorePumpKernelSession,
-} from "@/lib/aa/pump-account";
+import { markPumpSessionHint, restorePumpKernelSession } from "@/lib/aa/pump-account";
 import { ICON_STROKE } from "@/lib/icons";
 
-export function TelegramAuthCompleteClient() {
+export function OAuthAuthCompleteClient() {
   const searchParams = useSearchParams();
   const handledRef = useRef(false);
   const [message, setMessage] = useState("Completing sign-in…");
@@ -21,6 +18,7 @@ export function TelegramAuthCompleteClient() {
 
     const status = searchParams.get("status");
     const errorMessage = searchParams.get("message");
+    const provider = searchParams.get("provider") ?? "account";
 
     if (status !== "ok") {
       setFailed(true);
@@ -35,7 +33,11 @@ export function TelegramAuthCompleteClient() {
         window.location.replace("/");
       } catch (error) {
         setFailed(true);
-        setMessage(error instanceof Error ? error.message : "Could not restore your session.");
+        setMessage(
+          error instanceof Error
+            ? error.message
+            : `Could not restore your ${provider} session.`
+        );
       }
     })();
   }, [searchParams]);

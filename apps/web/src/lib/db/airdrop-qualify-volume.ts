@@ -24,6 +24,9 @@ export async function resolveProgressTraderAddresses(
       SELECT eoa_address, scw_address FROM telegram_wallets
       WHERE eoa_address = $1 OR scw_address = $1
       UNION
+      SELECT eoa_address, scw_address FROM oauth_wallets
+      WHERE eoa_address = $1 OR scw_address = $1
+      UNION
       SELECT eoa_address, scw_address FROM email_wallets
       WHERE eoa_address = $1 OR scw_address = $1
     `,

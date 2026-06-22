@@ -115,6 +115,14 @@ export const memeFactoryAbi = [
   },
   {
     type: "event",
+    name: "FeeExemptUpdated",
+    inputs: [
+      { name: "account", type: "address", indexed: true },
+      { name: "exempt", type: "bool", indexed: false },
+    ],
+  },
+  {
+    type: "event",
     name: "TokenCreated",
     inputs: [
       { name: "token", type: "address", indexed: true },

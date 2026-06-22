@@ -144,6 +144,20 @@ export const ADMIN_COPY = {
     },
   },
 
+  feeExempt: {
+    title: "Fee exemption",
+    listTitle: "Exempt addresses",
+    addTitle: "Add or update",
+    address: "Wallet address",
+    applyTo: "Apply to",
+    status: "Status",
+    grant: "Grant",
+    revoke: "Revoke exempt",
+    submit: "Update on-chain",
+    confirming: "Confirming…",
+    empty: "No exempt addresses (owner/admin are always free).",
+  },
+
   airdrops: {
     tableTitle: "Recovery queue",
     callout: "",

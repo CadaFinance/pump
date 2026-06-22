@@ -1,7 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { loadWalletSessionFromRequest } from "@/lib/auth/wallet-session";
 
-/** Backward-compatible alias — same cookie + unified wallet resolver as /api/auth/me */
 export async function GET(request: NextRequest) {
   try {
     const wallet = await loadWalletSessionFromRequest(request);
@@ -12,6 +11,10 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(
       {
         data: {
+          authProvider: wallet.authProvider,
+          accountId: wallet.accountId,
+          displayName: wallet.displayName,
+          email: wallet.email,
           telegramId: wallet.telegramId,
           telegramUsername: wallet.telegramUsername,
           firstName: wallet.firstName,

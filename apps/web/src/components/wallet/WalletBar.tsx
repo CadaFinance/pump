@@ -12,7 +12,7 @@ import { bnbToUsd } from "@/lib/format-usd";
 import { copyToClipboard } from "@/lib/copy-to-clipboard";
 import { useWalletFunding } from "@/components/wallet/WalletFundingProvider";
 import { usePumpWallet } from "@/components/wallet/PumpWalletProvider";
-import { isTelegramAuthConfigured } from "@/lib/telegram-config";
+import { isPumpAuthConfigured } from "@/lib/auth-config";
 
 function formatHeaderBalanceUsd(usd: number | null): string {
   if (usd == null || !Number.isFinite(usd)) return "$0.00";
@@ -271,8 +271,8 @@ export function WalletBar() {
   const walletReady =
     ready && authenticated && Boolean(scwAddress) && isConnected;
 
-  if (!isTelegramAuthConfigured()) {
-    return <span className="text-caption text-pump-muted">Configure Telegram bot to sign in</span>;
+  if (!isPumpAuthConfigured()) {
+    return <span className="text-caption text-pump-muted">Configure sign-in to continue</span>;
   }
 
   return (

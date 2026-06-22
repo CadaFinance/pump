@@ -9,11 +9,11 @@ const monorepoRoot = path.join(__dirname, "../..");
 loadMonorepoRootEnv(monorepoRoot);
 
 /**
- * Telegram OIDC login + legacy widget + bundler CSP.
+ * Telegram OIDC + Google/Apple OAuth + legacy widget + bundler CSP.
  * COOP must allow popup postMessage from oauth.telegram.org.
  */
 const scriptSrc =
-  "'self' 'unsafe-inline' 'unsafe-eval' https://telegram.org https://oauth.telegram.org";
+  "'self' 'unsafe-inline' 'unsafe-eval' https://telegram.org https://oauth.telegram.org https://accounts.google.com https://appleid.cdn-apple.com";
 
 const contentSecurityPolicy = [
   "default-src 'self'",
@@ -22,13 +22,13 @@ const contentSecurityPolicy = [
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https:",
   "font-src 'self'",
-  "connect-src 'self' https: wss: https://oauth.telegram.org",
-  "child-src 'self' https://oauth.telegram.org https://telegram.org",
-  "frame-src 'self' https://oauth.telegram.org https://telegram.org",
+  "connect-src 'self' https: wss: https://oauth.telegram.org https://accounts.google.com https://appleid.apple.com",
+  "child-src 'self' https://oauth.telegram.org https://telegram.org https://accounts.google.com https://appleid.apple.com",
+  "frame-src 'self' https://oauth.telegram.org https://telegram.org https://accounts.google.com https://appleid.apple.com",
   "worker-src 'self' blob:",
   "object-src 'none'",
   "base-uri 'self'",
-  "form-action 'self' https://oauth.telegram.org",
+  "form-action 'self' https://oauth.telegram.org https://accounts.google.com https://appleid.apple.com",
   "frame-ancestors 'none'",
 ].join("; ");
 

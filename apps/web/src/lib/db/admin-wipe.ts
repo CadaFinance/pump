@@ -20,6 +20,7 @@ export const WIPE_TRUNCATED_TABLES = [
   "user_positions",
   "indexer_state",
   "telegram_wallets",
+  "oauth_wallets",
   "email_wallets",
   "…and related airdrop / points / referral rows",
 ] as const;

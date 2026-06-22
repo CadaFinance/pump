@@ -1823,6 +1823,125 @@
   padding: 10px 14px;
 }
 
+.admin-fee-exempt-modal {
+  max-width: 30rem;
+}
+
+.admin-fee-exempt-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.admin-fee-exempt-section + .admin-fee-exempt-section {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid rgb(var(--pump-border) / 0.22);
+}
+
+.admin-fee-exempt-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.admin-fee-exempt-section-title {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: rgb(var(--pump-muted));
+}
+
+.admin-fee-exempt-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid rgb(var(--pump-border) / 0.28);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.admin-fee-exempt-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-bottom: 1px solid rgb(var(--pump-border) / 0.14);
+}
+
+.admin-fee-exempt-row:last-child {
+  border-bottom: 0;
+}
+
+.admin-fee-exempt-row:hover {
+  background: rgb(var(--pump-border) / 0.05);
+}
+
+.admin-fee-exempt-addr {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+}
+
+.admin-fee-exempt-tags {
+  display: inline-flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.admin-fee-exempt-revoke {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: rgb(var(--pump-muted));
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.admin-fee-exempt-revoke:hover:not(:disabled) {
+  border-color: rgb(var(--pump-danger) / 0.35);
+  background: rgb(var(--pump-danger) / 0.1);
+  color: rgb(var(--pump-danger));
+}
+
+.admin-fee-exempt-revoke:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.admin-fee-exempt-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.admin-fee-exempt-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: rgb(var(--pump-text));
+}
+
+.admin-fee-exempt-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  border-top: 1px solid rgb(var(--pump-border) / 0.3);
+  padding: 10px 14px;
+}
+
 .admin-todo-check {
   position: relative;
   display: inline-flex;

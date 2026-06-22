@@ -148,6 +148,14 @@ export const pumpAirdropManagerAbi = [
   },
   {
     type: "event",
+    name: "FeeExemptUpdated",
+    inputs: [
+      { name: "account", type: "address", indexed: true },
+      { name: "exempt", type: "bool", indexed: false },
+    ],
+  },
+  {
+    type: "event",
     name: "AirdropCreated",
     inputs: [
       { name: "airdropId", type: "uint256", indexed: true },
