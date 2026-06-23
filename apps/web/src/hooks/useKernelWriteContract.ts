@@ -4,9 +4,11 @@ import { useCallback, useState } from "react";
 import type { Abi, Address, Hash } from "viem";
 import { encodeFunctionData } from "viem";
 import { usePumpWallet } from "@/components/wallet/PumpWalletProvider";
+import { createTradeHttpPublicClient } from "@/config/flashblocks";
 import { tradeBundlerLog } from "@/lib/aa/bundler-debug";
 import { createPumpPublicClient } from "@/lib/aa/kernel-account";
 import { sendKernelTransaction } from "@/lib/aa/send-kernel-transaction";
+import type { UserOpConfirmationOptions } from "@/lib/aa/wait-user-op-confirmation";
 
 export type KernelWriteContractParams = {
   address: Address;
@@ -31,7 +33,7 @@ export function useKernelWriteContract() {
   }, []);
 
   const writeContract = useCallback(
-    (params: KernelWriteContractParams) => {
+    (params: KernelWriteContractParams, options?: UserOpConfirmationOptions) => {
       if (!kernelClient) {
         setError(new Error("Sign in to trade."));
         return;
@@ -50,10 +52,14 @@ export function useKernelWriteContract() {
             to: params.address,
             fn: params.functionName,
             value: params.value?.toString() ?? "0",
+            flashblocks: Boolean(options?.flashblocks),
           });
+          const publicClient = options?.flashblocks
+            ? createTradeHttpPublicClient()
+            : createPumpPublicClient();
           const hash = await sendKernelTransaction(
             kernelClient,
-            createPumpPublicClient(),
+            publicClient,
             {
               to: params.address,
               data: encodeFunctionData({
@@ -62,7 +68,8 @@ export function useKernelWriteContract() {
                 args: params.args,
               }),
               value: params.value ?? 0n,
-            }
+            },
+            options
           );
           tradeBundlerLog("sendTransaction done", { txHash: hash });
           setData(hash);

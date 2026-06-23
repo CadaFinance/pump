@@ -3,7 +3,10 @@ import { sendUserOperation } from "viem/account-abstraction";
 import { getAction } from "viem/utils";
 import type { Address, Hash, Hex, PublicClient } from "viem";
 import { tradeBundlerLog } from "@/lib/aa/bundler-debug";
-import { waitForUserOpConfirmation } from "@/lib/aa/wait-user-op-confirmation";
+import {
+  waitForUserOpConfirmation,
+  type UserOpConfirmationOptions,
+} from "@/lib/aa/wait-user-op-confirmation";
 
 export type KernelTransactionCall = {
   to: Address;
@@ -14,7 +17,8 @@ export type KernelTransactionCall = {
 export async function sendKernelTransaction(
   client: KernelAccountClient,
   publicClient: PublicClient,
-  call: KernelTransactionCall
+  call: KernelTransactionCall,
+  options?: UserOpConfirmationOptions
 ): Promise<Hash> {
   const account = client.account;
   if (!account) {
@@ -36,5 +40,5 @@ export async function sendKernelTransaction(
 
   tradeBundlerLog("userOp submitted", { userOpHash, fromBlock: fromBlock.toString() });
 
-  return waitForUserOpConfirmation(client, publicClient, userOpHash, fromBlock);
+  return waitForUserOpConfirmation(client, publicClient, userOpHash, fromBlock, options);
 }

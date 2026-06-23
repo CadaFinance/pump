@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { formatEther, formatUnits, parseEther, parseSignature, parseUnits } from "viem";
 import type { TransactionReceipt } from "viem";
 import { useOpenConnectModal } from "@/hooks/useOpenConnectModal";
@@ -16,9 +16,13 @@ import {
   useGasPrice,
   useReadContract,
   useSignTypedData,
-  useWaitForTransactionReceipt,
 } from "wagmi";
-import { useKernelWriteContract } from "@/hooks/useKernelWriteContract";
+import { useFlashblocksTransactionReceipt } from "@/hooks/useFlashblocksTransactionReceipt";
+import {
+  useKernelWriteContract,
+  type KernelWriteContractParams,
+} from "@/hooks/useKernelWriteContract";
+import { isTradeFlashblocksActive } from "@/config/flashblocks";
 import { usePumpWallet } from "@/components/wallet/PumpWalletProvider";
 import { contracts, pumpChain } from "@/config/chain";
 import { erc20Abi, maxUint256 } from "@/lib/abis/erc20";
@@ -441,8 +445,16 @@ export function TradePanel({
 
   const { writeContract, data: txHash, isPending, reset, error: writeError } =
     useKernelWriteContract();
-  const { data: receipt, isLoading: isConfirming } = useWaitForTransactionReceipt({ hash: txHash });
+  const tradeWrite = useCallback(
+    (params: KernelWriteContractParams) => writeContract(params, { flashblocks: true }),
+    [writeContract]
+  );
+  const { data: receipt, isLoading: isConfirming } = useFlashblocksTransactionReceipt({
+    hash: txHash,
+    query: { enabled: Boolean(txHash) },
+  });
   const activeReceipt = receipt;
+  const fastTradeConfirm = isTradeFlashblocksActive();
 
   useEffect(() => {
     if (!writeError) return;
@@ -855,7 +867,7 @@ export function TradePanel({
         handledReceiptHashRef.current = null;
         reset();
         setPendingAction("sell");
-        writeContract({
+        tradeWrite({
           address: contracts.bondingCurveManager,
           abi: bondingCurveManagerAbi,
           functionName: tradeReferrer ? "sellWithReferrer" : "sell",
@@ -933,7 +945,7 @@ export function TradePanel({
     reset,
     onTradeConfirmed,
     tokenAddress,
-    writeContract,
+    tradeWrite,
     bnbUsd,
     estimatedQuotePriceUsd,
   ]);
@@ -1081,7 +1093,7 @@ export function TradePanel({
       await assertScwReadyForUserOp(address, buyParams.value);
     }
     setPendingAction("buy");
-    writeContract({
+    tradeWrite({
       address: contracts.bondingCurveManager,
       abi: bondingCurveManagerAbi,
       functionName: buyParams.referrer ? "buyWithReferrer" : "buy",
@@ -1104,7 +1116,7 @@ export function TradePanel({
     setPendingAction("sell");
     if (params.permit) {
       const { deadline, v, r, s } = params.permit;
-      writeContract({
+      tradeWrite({
         address: contracts.bondingCurveManager,
         abi: bondingCurveManagerAbi,
         functionName: params.referrer ? "sellWithReferrerAndPermit" : "sellWithPermit",
@@ -1124,7 +1136,7 @@ export function TradePanel({
       });
       return;
     }
-    writeContract({
+    tradeWrite({
       address: contracts.bondingCurveManager,
       abi: bondingCurveManagerAbi,
       functionName: params.referrer ? "sellWithReferrer" : "sell",
@@ -1292,7 +1304,7 @@ export function TradePanel({
           minBnbOut,
         };
         setPendingAction("approve");
-        writeContract({
+        tradeWrite({
           address: tokenAddress,
           abi: erc20Abi,
           functionName: "approve",
@@ -1374,7 +1386,7 @@ export function TradePanel({
           pendingTradeReferrerRef.current = sellParams.referrer ?? null;
           quoteUsdAtSubmitRef.current = estimatedQuotePriceUsd;
           setPendingAction("approve");
-          writeContract({
+          tradeWrite({
             address: tokenAddress,
             abi: erc20Abi,
             functionName: "approve",
@@ -1672,10 +1684,16 @@ export function TradePanel({
             Tx: {txHash}
             {isConfirming
               ? pendingAction === "approve"
-                ? " — confirming approval…"
+                ? fastTradeConfirm
+                  ? " — confirming approval (~200ms)…"
+                  : " — confirming approval…"
                 : pendingAction === "sell"
-                  ? " — confirming sell…"
-                  : " — confirming…"
+                  ? fastTradeConfirm
+                    ? " — confirming sell (~200ms)…"
+                    : " — confirming sell…"
+                  : fastTradeConfirm
+                    ? " — confirming (~200ms)…"
+                    : " — confirming…"
               : null}
           </p>
         ) : null}

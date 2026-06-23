@@ -1,15 +1,35 @@
 import type { KernelAccountClient } from "@zerodev/sdk";
 import {
   entryPoint07Abi,
+  getUserOperationReceipt,
   waitForUserOperationReceipt,
 } from "viem/account-abstraction";
 import { getAction } from "viem/utils";
 import type { Hash, PublicClient } from "viem";
 import { bundlerDebug, tradeBundlerLog } from "@/lib/aa/bundler-debug";
 import { entryPoint } from "@/lib/aa/kernel-account";
+import {
+  createTradeWebSocketPublicClient,
+  FLASHBLOCKS_POLL_MS,
+  isTradeFlashblocksActive,
+  waitForFlashblocksTransactionReceiptWs,
+} from "@/config/flashblocks";
 
 const CONFIRM_TIMEOUT_MS = 180_000;
-const POLL_MS = 2_000;
+const LEGACY_POLL_MS = 2_000;
+
+export type UserOpConfirmationOptions = {
+  /** Base Flashblocks fast path — trade buy/sell only. */
+  flashblocks?: boolean;
+};
+
+function fastConfirmEnabled(options?: UserOpConfirmationOptions): boolean {
+  return Boolean(options?.flashblocks && isTradeFlashblocksActive());
+}
+
+function pollIntervalMs(options?: UserOpConfirmationOptions): number {
+  return fastConfirmEnabled(options) ? FLASHBLOCKS_POLL_MS : LEGACY_POLL_MS;
+}
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -21,7 +41,7 @@ async function getUserOpEventChunked(
   fromBlock: bigint
 ) {
   const head = await publicClient.getBlockNumber();
-  const maxSpan = 9n; // Alchemy free tier: 10 blocks inclusive
+  const maxSpan = 9n;
   let start = fromBlock > 5n ? fromBlock - 5n : fromBlock;
 
   while (start <= head) {
@@ -45,8 +65,11 @@ async function waitViaEntryPointLogs(
   publicClient: PublicClient,
   userOpHash: Hash,
   fromBlock: bigint,
-  deadline: number
+  deadline: number,
+  options?: UserOpConfirmationOptions
 ): Promise<Hash> {
+  const pollMs = pollIntervalMs(options);
+
   while (Date.now() < deadline) {
     try {
       const log = await getUserOpEventChunked(publicClient, userOpHash, fromBlock);
@@ -61,6 +84,12 @@ async function waitViaEntryPointLogs(
         if (!log.args.success) {
           throw new Error(`UserOperation reverted on-chain (${userOpHash})`);
         }
+        if (fastConfirmEnabled(options)) {
+          await waitForFlashblocksTransactionReceiptWs(txHash, {
+            timeout: Math.min(deadline - Date.now(), 15_000),
+            client: createTradeWebSocketPublicClient(),
+          });
+        }
         return txHash;
       }
     } catch (error) {
@@ -71,7 +100,7 @@ async function waitViaEntryPointLogs(
       }
     }
 
-    await sleep(POLL_MS);
+    await sleep(pollMs);
   }
 
   throw new Error(`Timed out waiting for EntryPoint UserOperationEvent (${userOpHash})`);
@@ -80,8 +109,11 @@ async function waitViaEntryPointLogs(
 async function waitViaBundlerReceipt(
   client: KernelAccountClient,
   userOpHash: Hash,
-  deadline: number
+  deadline: number,
+  options?: UserOpConfirmationOptions
 ): Promise<Hash> {
+  const pollMs = pollIntervalMs(options);
+
   while (Date.now() < deadline) {
     const remaining = deadline - Date.now();
     if (remaining <= 0) break;
@@ -93,7 +125,7 @@ async function waitViaBundlerReceipt(
         "waitForUserOperationReceipt"
       )({
         hash: userOpHash,
-        pollingInterval: POLL_MS,
+        pollingInterval: pollMs,
         timeout: Math.min(CONFIRM_TIMEOUT_MS, remaining),
       });
 
@@ -110,7 +142,14 @@ async function waitViaBundlerReceipt(
         );
       }
 
-      return receipt.receipt.transactionHash;
+      const txHash = receipt.receipt.transactionHash;
+      if (fastConfirmEnabled(options)) {
+        await waitForFlashblocksTransactionReceiptWs(txHash, {
+          timeout: Math.min(remaining, 15_000),
+          client: createTradeWebSocketPublicClient(),
+        });
+      }
+      return txHash;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       const lower = message.toLowerCase();
@@ -120,7 +159,7 @@ async function waitViaBundlerReceipt(
         lower.includes("timed out")
       ) {
         tradeBundlerLog("bundler receipt pending", { userOpHash, message });
-        await sleep(POLL_MS);
+        await sleep(pollMs);
         continue;
       }
       throw error;
@@ -130,30 +169,80 @@ async function waitViaBundlerReceipt(
   throw new Error(`Timed out waiting for bundler UserOperation receipt (${userOpHash})`);
 }
 
+async function waitViaFlashblocksBundlerPoll(
+  client: KernelAccountClient,
+  userOpHash: Hash,
+  deadline: number
+): Promise<Hash> {
+  const fbClient = createTradeWebSocketPublicClient();
+
+  while (Date.now() < deadline) {
+    try {
+      const receipt = await getAction(
+        client,
+        getUserOperationReceipt,
+        "getUserOperationReceipt"
+      )({ hash: userOpHash });
+
+      if (receipt?.receipt.transactionHash) {
+        if (!receipt.success) {
+          throw new Error(
+            receipt.reason
+              ? `UserOperation failed: ${receipt.reason}`
+              : `UserOperation failed (${userOpHash})`
+          );
+        }
+
+        const txHash = receipt.receipt.transactionHash;
+        await waitForFlashblocksTransactionReceiptWs(txHash, {
+          timeout: Math.min(deadline - Date.now(), 15_000),
+          client: fbClient,
+        });
+
+        tradeBundlerLog("confirmed via Flashblocks WSS", { userOpHash, txHash });
+        return txHash;
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (message.includes("UserOperation failed")) {
+        throw error;
+      }
+      tradeBundlerLog("flashblocks bundler poll pending", { userOpHash, message });
+    }
+
+    await sleep(FLASHBLOCKS_POLL_MS);
+  }
+
+  throw new Error(`Timed out waiting for Flashblocks UserOperation receipt (${userOpHash})`);
+}
+
 /** Bundler receipt OR EntryPoint logs — whichever confirms first (Skandha receipt often lags on BSC). */
 export async function waitForUserOpConfirmation(
   client: KernelAccountClient,
   publicClient: PublicClient,
   userOpHash: Hash,
-  fromBlock: bigint
+  fromBlock: bigint,
+  options?: UserOpConfirmationOptions
 ): Promise<Hash> {
   const deadline = Date.now() + CONFIRM_TIMEOUT_MS;
   tradeBundlerLog("waiting confirmation", {
     userOpHash,
     fromBlock: fromBlock.toString(),
     timeoutMs: CONFIRM_TIMEOUT_MS,
+    flashblocks: fastConfirmEnabled(options),
   });
 
-  const bundlerPromise = waitViaBundlerReceipt(client, userOpHash, deadline);
-  const entryPointPromise = waitViaEntryPointLogs(
-    publicClient,
-    userOpHash,
-    fromBlock,
-    deadline
-  );
+  const racers: Promise<Hash>[] = [
+    waitViaBundlerReceipt(client, userOpHash, deadline, options),
+    waitViaEntryPointLogs(publicClient, userOpHash, fromBlock, deadline, options),
+  ];
+
+  if (fastConfirmEnabled(options)) {
+    racers.push(waitViaFlashblocksBundlerPoll(client, userOpHash, deadline));
+  }
 
   try {
-    return await Promise.any([bundlerPromise, entryPointPromise]);
+    return await Promise.any(racers);
   } catch (aggregate) {
     const errors =
       aggregate instanceof AggregateError
