@@ -802,7 +802,7 @@ export function TradePanel({
       needsLegacyApproval,
       sellUsesPermit,
       allowanceSufficient,
-      bondingCurve,
+      bondingCurve: bondingCurve ?? undefined,
       protocolFeeBps,
       buyCostWei,
       sellTokenWei,

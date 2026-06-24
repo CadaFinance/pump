@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { TradePanel, type TradeConfirmedPayload, type TradeSubmittedPayload } from "@/components/token/TradePanel";
+import { TradePanel, type TradeConfirmedPayload, type TradeOptimisticPayload, type TradeSubmittedPayload } from "@/components/token/TradePanel";
 import type { TradePrefillConfig } from "@/lib/token-trade-prefill";
 import type { BondingCurveSnapshot } from "@/lib/bonding-curve";
 
