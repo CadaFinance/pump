@@ -1,10 +1,14 @@
 import {
   applyActorOptimisticCandleBucket,
   CANDLE_INTERVALS,
+  ensureVisibleCandleBodies,
+  fillGapsForStoredCandles,
   mergeWsCandleUpdate,
   pinTailCandleToLiveMark,
   sanitizeCandleSeries,
+  sanitizeTailCandleSeries,
   scaleCandleBars,
+  seriesHasTemporalGaps,
   type ActorOptimisticChartSpot,
   type CandleBar,
   type CandleInterval,
@@ -59,7 +63,7 @@ export type ChartSeriesAction =
       priceScale: number;
     };
 
-/** Extend only the live tail bucket — no full regap when API already gap-filled. */
+/** Extend only the live tail bucket — used when series is already gap-filled through prior buckets. */
 function extendLiveTailBucket(
   candles: CandleBar[],
   volumes: VolumeBar[],
@@ -86,6 +90,20 @@ function extendLiveTailBucket(
     });
   }
   return { candles: nextCandles, volumes: nextVolumes };
+}
+
+function gapFillChartSeries(
+  candles: CandleBar[],
+  volumes: VolumeBar[],
+  interval: CandleInterval,
+  endTimeMs: number,
+  gapFilledByApi: boolean
+): { candles: CandleBar[]; volumes: VolumeBar[] } {
+  if (candles.length === 0) return { candles, volumes };
+  if (!gapFilledByApi || seriesHasTemporalGaps(candles, interval)) {
+    return fillGapsForStoredCandles(candles, volumes, interval, { endTimeMs });
+  }
+  return extendLiveTailBucket(candles, volumes, interval, endTimeMs);
 }
 
 export function chartSeriesReducer(
@@ -115,28 +133,23 @@ export function chartSeriesReducer(
     }
     case "apply_live": {
       if (state.candles.length === 0) return state;
-      let candles = state.candles;
-      let volumes = state.volumes;
-      if (state.gapFilledByApi) {
-        const extended = extendLiveTailBucket(
-          candles,
-          volumes,
-          action.interval,
-          action.endTimeMs
-        );
-        candles = extended.candles;
-        volumes = extended.volumes;
-      }
+      const gapFilled = gapFillChartSeries(
+        state.candles,
+        state.volumes,
+        action.interval,
+        action.endTimeMs,
+        state.gapFilledByApi
+      );
       const pinned = pinTailCandleToLiveMark(
-        candles,
-        volumes,
+        gapFilled.candles,
+        gapFilled.volumes,
         action.liveMarkBnb,
         action.interval,
         action.endTimeMs
       );
       return {
         ...state,
-        candles: sanitizeCandleSeries(
+        candles: sanitizeTailCandleSeries(
           pinned.candles,
           action.liveMarkBnb * action.priceScale
         ),
@@ -197,22 +210,20 @@ export function deriveChartSeries(input: DeriveChartSeriesInput): {
       ? state.volumes
       : state.volumes.map((v) => ({ ...v, value: v.value * priceScale }));
 
+  const gapFilled = gapFillChartSeries(
+    candles,
+    volumes,
+    displayInterval,
+    endTimeMs,
+    state.gapFilledByApi
+  );
+  candles = gapFilled.candles;
+  volumes = gapFilled.volumes;
+
   if (liveMarkPriceBnb != null && liveMarkPriceBnb > 0) {
-    let working = candles;
-    let workingVolumes = volumes;
-    if (state.gapFilledByApi) {
-      const extended = extendLiveTailBucket(
-        working,
-        workingVolumes,
-        displayInterval,
-        endTimeMs
-      );
-      working = extended.candles;
-      workingVolumes = extended.volumes;
-    }
     const pinned = pinTailCandleToLiveMark(
-      working,
-      workingVolumes,
+      candles,
+      volumes,
       liveMarkPriceBnb * priceScale,
       displayInterval,
       endTimeMs
@@ -231,19 +242,26 @@ export function deriveChartSeries(input: DeriveChartSeriesInput): {
     );
     const anchor = actorOptimisticSpot.spotAfterBnb * priceScale;
     return {
-      candles: sanitizeCandleSeries(patched.candles, anchor),
+      candles: ensureVisibleCandleBodies(
+        sanitizeTailCandleSeries(patched.candles, anchor)
+      ),
       volumes: patched.volumes,
     };
   }
 
   if (liveMarkPriceBnb != null && liveMarkPriceBnb > 0) {
     return {
-      candles: sanitizeCandleSeries(candles, liveMarkPriceBnb * priceScale),
+      candles: ensureVisibleCandleBodies(
+        sanitizeTailCandleSeries(candles, liveMarkPriceBnb * priceScale)
+      ),
       volumes,
     };
   }
 
-  return { candles, volumes };
+  return {
+    candles: ensureVisibleCandleBodies(candles),
+    volumes,
+  };
 }
 
 /** True when lightweight-charts can patch tail buckets with series.update(). */

@@ -497,6 +497,45 @@ export function fillGapsForStoredCandles(
   return { candles: nextCandles, volumes: nextVolumes };
 }
 
+/** True when consecutive buckets skip one or more interval steps (sparse DB series). */
+export function seriesHasTemporalGaps(
+  candles: CandleBar[],
+  interval: CandleInterval
+): boolean {
+  if (candles.length < 2) return false;
+  const intervalSec =
+    (CANDLE_INTERVALS.find((i) => i.id === interval)?.ms ?? 60_000) / 1000;
+  for (let i = 1; i < candles.length; i++) {
+    if (candles[i]!.time - candles[i - 1]!.time > intervalSec) return true;
+  }
+  return false;
+}
+
+/**
+ * Expand sub-pixel OHLC spans so lightweight-charts renders bodies on micro-cap prices.
+ * Flat gap-fill bars (open=high=low=close) are left unchanged.
+ */
+export function ensureVisibleCandleBodies(candles: CandleBar[]): CandleBar[] {
+  return candles.map((c) => {
+    if (c.open === c.high && c.high === c.low && c.low === c.close) return c;
+    const anchor = Math.max(c.open, c.close, c.high, c.low);
+    if (!Number.isFinite(anchor) || anchor <= 0) return c;
+    const bodySpan = Math.abs(c.close - c.open);
+    const wickSpan = c.high - c.low;
+    const minSpan = anchor * 1e-5;
+    if (wickSpan >= minSpan && bodySpan >= minSpan * 0.25) return c;
+    const half = Math.max(minSpan / 2, bodySpan / 2);
+    const mid = (c.open + c.close) / 2;
+    return {
+      time: c.time,
+      open: c.open,
+      close: c.close,
+      high: Math.max(c.high, c.open, c.close, mid + half),
+      low: Math.min(c.low, c.open, c.close, mid - half),
+    };
+  });
+}
+
 export function wsCandleUpdateToBars(
   update: CandleWsUpdate,
   priceScale = 1
@@ -744,6 +783,14 @@ export function sanitizeCandleSeries(candles: CandleBar[], anchor: number): Cand
   return candles.map((c) => sanitizeCandleOhlc(c, anchor));
 }
 
+/** Sanitize only the live tail — avoid collapsing historical OHLC against the header mark. */
+export function sanitizeTailCandleSeries(candles: CandleBar[], anchor: number): CandleBar[] {
+  if (candles.length === 0 || !Number.isFinite(anchor) || anchor <= 0) return candles;
+  const next = candles.slice();
+  next[next.length - 1] = sanitizeCandleOhlc(next[next.length - 1]!, anchor);
+  return next;
+}
+
 export function scaleCandleBars(candles: CandleBar[], scale: number): CandleBar[] {
   if (scale === 1) return candles;
   return candles.map((c) => ({
@@ -940,7 +987,10 @@ export function resolveChartPriceFormat(
     precision = Math.max(4, Math.min(12, -exp + 2));
   }
 
-  const minMove = Math.pow(10, -precision);
+  let minMove = Math.pow(10, -precision);
+  if (max > 0) {
+    minMove = Math.min(minMove, max * 1e-5);
+  }
   const usdRate = bnbUsd != null && bnbUsd > 0 ? bnbUsd : 1;
 
   return {

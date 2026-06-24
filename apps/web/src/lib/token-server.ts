@@ -60,10 +60,16 @@ async function fetchInitialChartCandles(
       );
       if (gapFilled.length > 0) {
         const bars = storedCandlesToBars(gapFilled);
+        const filled = fillGapsForStoredCandles(
+          bars.candles,
+          bars.volumes,
+          SSR_CHART_INTERVAL,
+          { endTimeMs: Date.now() }
+        );
         return {
           interval: SSR_CHART_INTERVAL,
-          candles: bars.candles,
-          volumes: bars.volumes,
+          candles: filled.candles,
+          volumes: filled.volumes,
           source: "db",
           gapFilledByApi: true,
         };
@@ -74,7 +80,9 @@ async function fetchInitialChartCandles(
   }
 
   const raw = storedCandlesToBars(stored);
-  const filled = fillGapsForStoredCandles(raw.candles, raw.volumes, SSR_CHART_INTERVAL);
+  const filled = fillGapsForStoredCandles(raw.candles, raw.volumes, SSR_CHART_INTERVAL, {
+    endTimeMs: Date.now(),
+  });
   return {
     interval: SSR_CHART_INTERVAL,
     candles: filled.candles,

@@ -4,6 +4,7 @@ import {
   buildCandlesFromTrades,
   CANDLE_INTERVALS,
   fillGapsForStoredCandles,
+  seriesHasTemporalGaps,
   storedCandlesToBars,
   type CandleInterval,
 } from "@/lib/candles";
@@ -59,10 +60,15 @@ export async function GET(request: NextRequest, context: RouteContext) {
         raw = storedCandlesToBars(stored);
       }
 
-      const { candles, volumes } =
-        gapFill === "sql"
-          ? raw
-          : fillGapsForStoredCandles(raw.candles, raw.volumes, interval);
+      const { candles, volumes } = fillGapsForStoredCandles(
+        raw.candles,
+        raw.volumes,
+        interval,
+        { endTimeMs: Date.now() }
+      );
+      if (gapFill === "sql" && seriesHasTemporalGaps(candles, interval)) {
+        gapFill = "ts";
+      }
 
       return NextResponse.json(
         {
