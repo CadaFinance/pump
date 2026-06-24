@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict ai7h3ffG5vVRFSjYylBO2Qbv7JsLzMt6rV24wUev4ebnvWRddmSbqpj6dvd0gWb
+\restrict VG0d7PZXkTzeNHOMBR66T1B1Dpcmke5LlJdeKglnwD5TaIXGVbTZDyj1s5Akday
 
 -- Dumped from database version 16.14 (Ubuntu 16.14-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.14 (Ubuntu 16.14-0ubuntu0.24.04.1)
@@ -141,9 +141,107 @@ END;
 $$;
 
 
+--
+-- Name: wipe_launchpad_app_data(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.wipe_launchpad_app_data() RETURNS jsonb
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+BEGIN
+  TRUNCATE TABLE
+    public.airdrop_task_completions,
+    public.airdrop_saves,
+    public.airdrop_claims,
+    public.airdrop_allocations,
+    public.airdrop_participants,
+    public.airdrop_social_tasks,
+    public.airdrops,
+    public.bonding_states,
+    public.creator_fee_claims,
+    public.referrer_fee_claims,
+    public.referral_bindings,
+    public.creator_follows,
+    public.deep_links,
+    public.king_history,
+    public.launchpad_points_sync_log,
+    public.launchpad_user_daily_completions,
+    public.launchpad_user_task_completions,
+    public.points_audit_log,
+    public.trades,
+    public.token_candles,
+    public.token_favorites,
+    public.token_media,
+    public.user_positions,
+    public.user_volumes,
+    public.tokens,
+    public.users,
+    public.telegram_wallets,
+    public.oauth_wallets,
+    public.email_wallets,
+    public.indexer_state
+  RESTART IDENTITY CASCADE;
+
+  REFRESH MATERIALIZED VIEW public.mv_token_trade_stats;
+  REFRESH MATERIALIZED VIEW public.mv_token_price_anchors;
+
+  RETURN jsonb_build_object(
+    'ok', true,
+    'preserved', jsonb_build_array(
+      'contract_registry',
+      'launchpad_tasks',
+      'platform_settings',
+      'admin_todos'
+    )
+  );
+END;
+$$;
+
+
 SET default_tablespace = '';
 
 SET default_table_access_method = heap;
+
+--
+-- Name: admin_todos; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.admin_todos (
+    id bigint NOT NULL,
+    title text NOT NULL,
+    body text,
+    priority text DEFAULT 'medium'::text NOT NULL,
+    is_completed boolean DEFAULT false NOT NULL,
+    sort_order integer DEFAULT 0 NOT NULL,
+    created_by text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    completed_at timestamp with time zone,
+    CONSTRAINT admin_todos_created_by_check CHECK (((created_by IS NULL) OR (created_by = lower(created_by)))),
+    CONSTRAINT admin_todos_priority_check CHECK ((priority = ANY (ARRAY['low'::text, 'medium'::text, 'high'::text, 'urgent'::text]))),
+    CONSTRAINT admin_todos_title_check CHECK ((btrim(title) <> ''::text))
+);
+
+
+--
+-- Name: admin_todos_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.admin_todos_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: admin_todos_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.admin_todos_id_seq OWNED BY public.admin_todos.id;
+
 
 --
 -- Name: airdrop_allocations; Type: TABLE; Schema: public; Owner: -
@@ -760,6 +858,30 @@ CREATE TABLE public.trades (
 
 
 --
+-- Name: token_candles; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.token_candles (
+    token_address text NOT NULL,
+    candle_interval text NOT NULL,
+    bucket_ts timestamp with time zone NOT NULL,
+    open_zug numeric NOT NULL,
+    high_zug numeric NOT NULL,
+    low_zug numeric NOT NULL,
+    close_zug numeric NOT NULL,
+    volume_zug numeric DEFAULT 0 NOT NULL,
+    buy_volume_zug numeric DEFAULT 0 NOT NULL,
+    trade_count integer DEFAULT 0 NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT token_candles_address_check CHECK ((token_address = lower(token_address))),
+    CONSTRAINT token_candles_interval_check CHECK ((candle_interval = ANY (ARRAY['15s'::text, '1m'::text, '5m'::text, '15m'::text, '1h'::text, '4h'::text]))),
+    CONSTRAINT token_candles_ohlc_check CHECK (((open_zug >= (0)::numeric) AND (high_zug >= (0)::numeric) AND (low_zug >= (0)::numeric) AND (close_zug >= (0)::numeric) AND (high_zug >= low_zug))),
+    CONSTRAINT token_candles_trade_count_check CHECK ((trade_count >= 0)),
+    CONSTRAINT token_candles_volume_check CHECK (((volume_zug >= (0)::numeric) AND (buy_volume_zug >= (0)::numeric) AND (buy_volume_zug <= volume_zug)))
+);
+
+
+--
 -- Name: mv_token_price_anchors; Type: MATERIALIZED VIEW; Schema: public; Owner: -
 --
 
@@ -805,6 +927,26 @@ CREATE MATERIALIZED VIEW public.mv_token_trade_stats AS
    FROM public.trades tr
   GROUP BY token_address
   WITH NO DATA;
+
+
+--
+-- Name: oauth_wallets; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.oauth_wallets (
+    provider text NOT NULL,
+    subject text NOT NULL,
+    email text,
+    display_name text,
+    eoa_address text NOT NULL,
+    scw_address text NOT NULL,
+    encrypted_private_key text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT oauth_wallets_eoa_address_check CHECK ((eoa_address = lower(eoa_address))),
+    CONSTRAINT oauth_wallets_provider_check CHECK ((provider = ANY (ARRAY['google'::text, 'apple'::text]))),
+    CONSTRAINT oauth_wallets_scw_address_check CHECK ((scw_address = lower(scw_address)))
+);
 
 
 --
@@ -1063,6 +1205,13 @@ CREATE TABLE public.users (
 
 
 --
+-- Name: admin_todos id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.admin_todos ALTER COLUMN id SET DEFAULT nextval('public.admin_todos_id_seq'::regclass);
+
+
+--
 -- Name: airdrop_allocations id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -1158,6 +1307,14 @@ ALTER TABLE ONLY public.token_media ALTER COLUMN id SET DEFAULT nextval('public.
 --
 
 ALTER TABLE ONLY public.trades ALTER COLUMN id SET DEFAULT nextval('public.trades_id_seq'::regclass);
+
+
+--
+-- Name: admin_todos admin_todos_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.admin_todos
+    ADD CONSTRAINT admin_todos_pkey PRIMARY KEY (id);
 
 
 --
@@ -1409,6 +1566,14 @@ ALTER TABLE ONLY public.launchpad_user_task_completions
 
 
 --
+-- Name: oauth_wallets oauth_wallets_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.oauth_wallets
+    ADD CONSTRAINT oauth_wallets_pkey PRIMARY KEY (provider, subject);
+
+
+--
 -- Name: platform_settings platform_settings_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1537,6 +1702,14 @@ ALTER TABLE ONLY public.trades
 
 
 --
+-- Name: token_candles token_candles_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.token_candles
+    ADD CONSTRAINT token_candles_pkey PRIMARY KEY (token_address, candle_interval, bucket_ts);
+
+
+--
 -- Name: user_positions user_positions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1558,6 +1731,13 @@ ALTER TABLE ONLY public.user_volumes
 
 ALTER TABLE ONLY public.users
     ADD CONSTRAINT users_pkey PRIMARY KEY (address);
+
+
+--
+-- Name: idx_admin_todos_open_sort; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_admin_todos_open_sort ON public.admin_todos USING btree (is_completed, sort_order, id);
 
 
 --
@@ -1722,6 +1902,27 @@ CREATE UNIQUE INDEX idx_mv_token_trade_stats_token ON public.mv_token_trade_stat
 
 
 --
+-- Name: idx_oauth_wallets_email; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_oauth_wallets_email ON public.oauth_wallets USING btree (lower(email)) WHERE (email IS NOT NULL);
+
+
+--
+-- Name: idx_oauth_wallets_eoa; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_oauth_wallets_eoa ON public.oauth_wallets USING btree (eoa_address);
+
+
+--
+-- Name: idx_oauth_wallets_scw; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_oauth_wallets_scw ON public.oauth_wallets USING btree (scw_address);
+
+
+--
 -- Name: idx_points_audit_log_address; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1866,6 +2067,13 @@ CREATE INDEX idx_trades_token_time_desc ON public.trades USING btree (token_addr
 --
 
 CREATE INDEX idx_trades_trader_time ON public.trades USING btree (trader_address, block_time DESC);
+
+
+--
+-- Name: idx_token_candles_lookup; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_token_candles_lookup ON public.token_candles USING btree (token_address, candle_interval, bucket_ts DESC);
 
 
 --
@@ -2039,6 +2247,14 @@ ALTER TABLE ONLY public.trades
 
 
 --
+-- Name: token_candles token_candles_token_address_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.token_candles
+    ADD CONSTRAINT token_candles_token_address_fkey FOREIGN KEY (token_address) REFERENCES public.tokens(address) ON DELETE CASCADE;
+
+
+--
 -- Name: user_positions user_positions_token_address_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2050,5 +2266,5 @@ ALTER TABLE ONLY public.user_positions
 -- PostgreSQL database dump complete
 --
 
-\unrestrict ai7h3ffG5vVRFSjYylBO2Qbv7JsLzMt6rV24wUev4ebnvWRddmSbqpj6dvd0gWb
+\unrestrict VG0d7PZXkTzeNHOMBR66T1B1Dpcmke5LlJdeKglnwD5TaIXGVbTZDyj1s5Akday
 

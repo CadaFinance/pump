@@ -7,7 +7,7 @@ export type ServerMessage =
   | { type: "subscribed"; room: string }
   | { type: "replay"; room: string; events: unknown[] }
   | { type: "pong" }
-  | { type: "trade"; tokenAddress: string; trade: unknown; bonding: unknown }
+  | { type: "trade"; tokenAddress: string; trade: unknown; bonding: unknown; candleUpdates?: unknown[] }
   | { type: "wallet_trade"; walletAddress: string; tokenAddress: string; trade: unknown; position: unknown; bonding: unknown }
   | { type: "board_delta"; tokens?: unknown[] }
   | { type: "koth"; [key: string]: unknown };

@@ -2,11 +2,13 @@ import {
   BONDING_TOKEN_SUPPLY_HUMAN,
 } from "@/lib/bonding-curve";
 import type { TokenDetail, TradeItem } from "@/lib/db/launchpad";
+import type { CandleWsUpdate } from "@/lib/candles";
 import { arenaWsSpotPriceBnb, type ArenaTradeWsPayload } from "@/lib/arena-live-delta";
 
 export type TokenTradeWsPayload = {
   type?: string;
   tokenAddress?: string;
+  candleUpdates?: CandleWsUpdate[];
   trade?: {
     id: string;
     side: string;

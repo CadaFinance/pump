@@ -26,10 +26,24 @@ function getRedis(): Redis | null {
   return redis;
 }
 
+export type CandleWsUpdatePayload = {
+  interval: string;
+  time: number;
+  open: string;
+  high: string;
+  low: string;
+  close: string;
+  volume: string;
+  buyVolume: string;
+  tradeCount: number;
+  isNewBucket: boolean;
+};
+
 export type TradePublishPayload = {
   type: "trade";
   seq?: number;
   tokenAddress: string;
+  candleUpdates?: CandleWsUpdatePayload[];
   trade: {
     id: string;
     side: string;

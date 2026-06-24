@@ -17,6 +17,7 @@ import {
   seedBoardStatsOnTokenCreated,
   upsertBoardStatsAfterTrade,
 } from "./board-stats.js";
+import { upsertCandlesAfterTrade } from "./candles.js";
 import { invalidateArenaCaches } from "./redis-cache.js";
 import { FIRST_SMART_BUY_MIN_WEI, VOLUME_MONSTER_MIN_BNB } from "./mission-thresholds.js";
 
@@ -324,9 +325,21 @@ export class LaunchpadEventHandlers {
         traderAddress: trader,
       });
 
+      const candleUpdates = await upsertCandlesAfterTrade(client, {
+        tokenAddress: token,
+        blockTime,
+        isBuy,
+        reserveAfter: reserveZug,
+        soldAfter: soldTokens,
+        zugAmount,
+        feeZug,
+        tokenAmount,
+      });
+
       return {
         tradeId: inserted.rows[0].id,
         bonding: b,
+        candleUpdates,
       };
     });
 
@@ -360,6 +373,7 @@ export class LaunchpadEventHandlers {
     await publishTrade({
       type: "trade",
       tokenAddress: token,
+      candleUpdates: tradeResult.candleUpdates,
       trade: {
         id: tradeResult.tradeId,
         side,

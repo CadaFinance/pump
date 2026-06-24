@@ -9,6 +9,7 @@ import {
   bondingCurveManagerAbi,
   bondingCurveSnapshotFromTuple,
 } from "@/lib/bonding-curve";
+import type { CandleWsUpdate } from "@/lib/candles";
 import { resolveLatestSpotPriceBnb, sortTradesChronologically } from "@/lib/candles";
 import { resolveMarkPriceBnb } from "@/lib/mark-price";
 import {
@@ -55,7 +56,6 @@ import { useLiveChannel, resolveLivePollDelay } from "@/hooks/useLiveChannel";
 import { useRafMessageQueue } from "@/hooks/useRafMessageQueue";
 import { useBondingCurveMachine } from "@/hooks/useBondingCurveMachine";
 import {
-  mergeChartTradePatch,
   patchTokenDetailFromWsTrade,
   prependTradeIfNew,
   wsPayloadToTradeItem,
@@ -208,7 +208,7 @@ export function TokenDetailLive({
 }: TokenDetailLiveProps) {
   const [token, setToken] = useState(initialToken);
   const [dbTrades, setDbTrades] = useState(initialTrades);
-  const [chartTradePatches, setChartTradePatches] = useState<TradeItem[]>([]);
+  const [liveCandleUpdates, setLiveCandleUpdates] = useState<CandleWsUpdate[]>([]);
   const [holdersRefreshKey, setHoldersRefreshKey] = useState(0);
   const [optimisticTrades, setOptimisticTrades] = useState<TradeItem[]>([]);
   const [actorChartSpot, setActorChartSpot] = useState<{
@@ -306,9 +306,6 @@ export function TokenDetailLive({
       );
 
       setDbTrades(body.data.trades);
-      setChartTradePatches((prev) =>
-        prev.filter((t) => !dbHashes.has(t.txHash.toLowerCase()))
-      );
       setOptimisticTrades((prev) =>
         prev.filter((t) => !dbHashes.has(t.txHash.toLowerCase()))
       );
@@ -353,7 +350,9 @@ export function TokenDetailLive({
             setLatestWsBonding(payload.bonding);
           }
           setDbTrades((prev) => prependTradeIfNew(prev, tradeItem));
-          setChartTradePatches((prev) => mergeChartTradePatch(prev, tradeItem));
+          if (payload.candleUpdates?.length) {
+            setLiveCandleUpdates(payload.candleUpdates as CandleWsUpdate[]);
+          }
           setToken((prev) => patchTokenDetailFromWsTrade(prev, payload) ?? prev);
           setOptimisticTrades((prev) =>
             prev.filter((t) => t.txHash.toLowerCase() !== tradeItem.txHash.toLowerCase())
@@ -748,7 +747,7 @@ export function TokenDetailLive({
             optimisticTrades={optimisticTrades}
             actorOptimisticSpot={actorChartSpot}
             curveSnapshot={tradeCurveSnapshot}
-            streamedTrades={chartTradePatches}
+            liveCandleUpdates={liveCandleUpdates}
             wsConnected={wsConnected}
             bnbUsd={bnbUsd}
             currentPriceUsd={priceUsd}

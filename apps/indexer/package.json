@@ -14,6 +14,7 @@
     "backfill-cost-basis": "tsx src/backfill-cost-basis.ts",
     "backfill-spot-price": "tsx src/backfill-spot-price.ts",
     "backfill-board-stats": "tsx src/backfill-board-stats.ts",
+    "backfill-candles": "tsx src/backfill-candles.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

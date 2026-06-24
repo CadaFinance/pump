@@ -17,14 +17,15 @@ import {
 import type { TradeItem } from "@/lib/db/launchpad";
 import {
   applyActorOptimisticSpotToCandles,
-  buildCandlesFromTrades,
   CANDLE_INTERVALS,
+  fillGapsForStoredCandles,
   formatPumpSubscriptPrice,
-  mergeTradesForChart,
+  mergeWsCandleUpdate,
   resolveChartPriceFormat,
-  sortTradesChronologically,
   type CandleBar,
   type CandleInterval,
+  type CandleWsUpdate,
+  type StoredCandleSource,
   type VolumeBar,
 } from "@/lib/candles";
 import type { BondingCurveSnapshot } from "@/lib/bonding-curve";
@@ -44,10 +45,10 @@ type PriceChartProps = {
   optimisticTrades?: TradeItem[];
   /** Trader-only optimistic spot pin (other viewers rely on WS). */
   actorOptimisticSpot?: { spotAfterBnb: number; side: "buy" | "sell" } | null;
-  /** On-chain virtual reserves for spot replay (must match curve). */
+  /** On-chain virtual reserves for spot replay fallback (pre-backfill). */
   curveSnapshot?: BondingCurveSnapshot;
-  /** WS trade deltas merged into chart without full refetch. */
-  streamedTrades?: TradeItem[];
+  /** WS candle buckets from indexer (db source). */
+  liveCandleUpdates?: CandleWsUpdate[];
   wsConnected?: boolean;
   bnbUsd?: number | null;
   currentPriceUsd?: number | null;
@@ -136,6 +137,22 @@ function formatUtcMs(ms: number): string {
   return `${iso.slice(0, 10)} ${iso.slice(11, 19)} UTC`;
 }
 
+function scaleCandleBars(candles: CandleBar[], scale: number): CandleBar[] {
+  if (scale === 1) return candles;
+  return candles.map((c) => ({
+    time: c.time,
+    open: c.open * scale,
+    high: c.high * scale,
+    low: c.low * scale,
+    close: c.close * scale,
+  }));
+}
+
+function scaleVolumeBars(volumes: VolumeBar[], scale: number): VolumeBar[] {
+  if (scale === 1) return volumes;
+  return volumes.map((v) => ({ ...v, value: v.value * scale }));
+}
+
 export function PriceChart({
   tokenAddress,
   symbol,
@@ -143,7 +160,7 @@ export function PriceChart({
   optimisticTrades = [],
   actorOptimisticSpot = null,
   curveSnapshot,
-  streamedTrades = [],
+  liveCandleUpdates = [],
   wsConnected = false,
   bnbUsd = null,
   currentPriceUsd = null,
@@ -163,7 +180,10 @@ export function PriceChart({
 
   const [timeInterval, setTimeInterval] = useState<CandleInterval>("1m");
   const [currency, setCurrency] = useState<"usd" | "mcap">("usd");
-  const [dbTrades, setDbTrades] = useState<TradeItem[]>([]);
+  const [storedCandles, setStoredCandles] = useState<CandleBar[]>([]);
+  const [storedVolumes, setStoredVolumes] = useState<VolumeBar[]>([]);
+  const storedVolumesRef = useRef<VolumeBar[]>([]);
+  const [candleSource, setCandleSource] = useState<StoredCandleSource>("db");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [hoverOhlc, setHoverOhlc] = useState<CandleBar | null>(null);
@@ -182,33 +202,43 @@ export function PriceChart({
         : 1;
   const unitLabel = currency === "usd" ? "USD" : "MCAP";
 
-  const fetchChartTrades = useCallback(async () => {
+  const fetchCandles = useCallback(async () => {
     try {
-      const res = await fetch(`/api/tokens/${tokenAddress}/chart-trades`, {
-        cache: "no-store",
-      });
-      if (!res.ok) throw new Error("Failed to load chart trades");
-      const body = (await res.json()) as { data?: TradeItem[] };
-      setDbTrades(body.data ?? []);
+      const res = await fetch(
+        `/api/tokens/${tokenAddress}/candles?interval=${timeInterval}&limit=1000`,
+        { cache: "no-store" }
+      );
+      if (!res.ok) throw new Error("Failed to load chart candles");
+      const body = (await res.json()) as {
+        data?: {
+          candles?: CandleBar[];
+          volumes?: VolumeBar[];
+          source?: StoredCandleSource;
+        };
+      };
+      setStoredCandles(body.data?.candles ?? []);
+      setStoredVolumes(body.data?.volumes ?? []);
+      storedVolumesRef.current = body.data?.volumes ?? [];
+      setCandleSource(body.data?.source ?? "trades");
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Chart load failed");
     } finally {
       setLoading(false);
     }
-  }, [tokenAddress]);
+  }, [tokenAddress, timeInterval]);
 
   useEffect(() => {
     setLoading(true);
-    void fetchChartTrades();
-  }, [fetchChartTrades]);
+    void fetchCandles();
+  }, [fetchCandles]);
 
   useEffect(() => {
     if (frozen) return;
     const pollMs = wsConnected ? WS_FALLBACK_POLL_MS : POLL_MS;
-    const timer = setInterval(() => void fetchChartTrades(), pollMs);
+    const timer = setInterval(() => void fetchCandles(), pollMs);
     return () => clearInterval(timer);
-  }, [fetchChartTrades, frozen, wsConnected]);
+  }, [fetchCandles, frozen, wsConnected]);
 
   useEffect(() => {
     if (frozen) return;
@@ -216,38 +246,46 @@ export function PriceChart({
     return () => clearInterval(timer);
   }, [frozen]);
 
-  const mergedTrades = useMemo(
-    () => mergeTradesForChart(dbTrades, [...streamedTrades, ...optimisticTrades]),
-    [dbTrades, streamedTrades, optimisticTrades]
-  );
-
   const chartEndTimeMs = useMemo(() => {
-    if (frozen && mergedTrades.length > 0) {
-      const sorted = sortTradesChronologically(mergedTrades);
-      return new Date(sorted[sorted.length - 1]!.blockTime).getTime();
+    if (frozen && storedCandles.length > 0) {
+      return storedCandles[storedCandles.length - 1]!.time * 1000;
     }
     return nowMs;
-  }, [frozen, mergedTrades, nowMs]);
+  }, [frozen, storedCandles, nowMs]);
 
-  const chartBuildOptions = useMemo(
-    () => ({
-      fillGaps: true as const,
-      endTimeMs: chartEndTimeMs,
-      virtualZugReserve: curveSnapshot
-        ? BigInt(curveSnapshot.virtualZugReserve)
-        : undefined,
-      virtualTokenReserve: curveSnapshot
-        ? BigInt(curveSnapshot.virtualTokenReserve)
-        : undefined,
-    }),
-    [chartEndTimeMs, curveSnapshot]
-  );
+  useEffect(() => {
+    if (candleSource !== "db" || liveCandleUpdates.length === 0) return;
+    const update = liveCandleUpdates.find((item) => item.interval === timeInterval);
+    if (!update) return;
+    setStoredCandles((prevCandles) => {
+      const merged = mergeWsCandleUpdate(prevCandles, storedVolumesRef.current, update, 1);
+      setStoredVolumes(merged.volumes);
+      storedVolumesRef.current = merged.volumes;
+      return merged.candles;
+    });
+  }, [liveCandleUpdates, timeInterval, candleSource]);
 
-  const { candles, volumes } = useMemo(
-    () =>
-      buildCandlesFromTrades(mergedTrades, timeInterval, priceScale, chartBuildOptions),
-    [mergedTrades, timeInterval, priceScale, chartBuildOptions]
-  );
+  const { candles, volumes } = useMemo(() => {
+    if (storedCandles.length > 0) {
+      const scaledCandles = scaleCandleBars(storedCandles, priceScale);
+      const scaledVolumes = scaleVolumeBars(storedVolumes, priceScale);
+      if (candleSource === "db") {
+        return fillGapsForStoredCandles(scaledCandles, scaledVolumes, timeInterval, {
+          endTimeMs: chartEndTimeMs,
+        });
+      }
+      return { candles: scaledCandles, volumes: scaledVolumes };
+    }
+
+    return { candles: [], volumes: [] };
+  }, [
+    candleSource,
+    storedCandles,
+    storedVolumes,
+    timeInterval,
+    priceScale,
+    chartEndTimeMs,
+  ]);
 
   const candlesForChart = useMemo(() => {
     if (
@@ -325,10 +363,10 @@ export function PriceChart({
   }, [scheduleFitViewport]);
 
   useEffect(() => {
-    if (mergedTrades.length > 0) {
+    if (storedCandles.length > 0 || candleSource === "db") {
       shouldFitViewportRef.current = true;
     }
-  }, [mergedTrades.length, tokenAddress]);
+  }, [storedCandles.length, candleSource, tokenAddress]);
 
   useEffect(() => {
     if (prevPriceScaleRef.current != null && prevPriceScaleRef.current !== priceScale) {
@@ -611,8 +649,8 @@ export function PriceChart({
   const volumeUsdLabel =
     volumeUsd != null ? formatUsdReadable(volumeUsd, { compact: true }) : null;
 
-  const showEmpty = !loading && !error && mergedTrades.length === 0;
-  const showError = !loading && error && mergedTrades.length === 0;
+  const showEmpty = !loading && !error && candles.length === 0;
+  const showError = !loading && error && candles.length === 0;
 
   return (
     <section className="panel-surface overflow-hidden">
@@ -730,9 +768,9 @@ export function PriceChart({
 
       {/* Chart container always mounted so lightweight-charts can init on first load */}
       <div className="relative">
-        {(loading && mergedTrades.length === 0) || showEmpty || showError ? (
+        {(loading && candles.length === 0) || showEmpty || showError ? (
           <div className="absolute inset-0 z-10 flex items-center justify-center bg-pump-card/92 px-4 text-center text-sm">
-            {loading && mergedTrades.length === 0 ? (
+            {loading && candles.length === 0 ? (
               <span className="text-pump-muted">Loading chart…</span>
             ) : showError ? (
               <span className="text-pump-danger">{error}</span>

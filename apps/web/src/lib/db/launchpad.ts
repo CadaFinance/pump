@@ -1315,6 +1315,67 @@ export async function listTradesForChart(address: string, limit = 5000): Promise
   });
 }
 
+export type StoredTokenCandleRow = {
+  bucketSec: number;
+  openZug: string;
+  highZug: string;
+  lowZug: string;
+  closeZug: string;
+  volumeZug: string;
+  buyVolumeZug: string;
+  tradeCount: number;
+};
+
+/** Pre-aggregated spot candles (descending bucket query, returned ascending). */
+export async function listTokenCandlesFromDb(
+  address: string,
+  interval: string,
+  limit = 1000
+): Promise<StoredTokenCandleRow[]> {
+  const db = getLaunchpadReadPool();
+  const result = await db.query<{
+    bucket_sec: string;
+    open_zug: string;
+    high_zug: string;
+    low_zug: string;
+    close_zug: string;
+    volume_zug: string;
+    buy_volume_zug: string;
+    trade_count: number;
+  }>(
+    `
+    SELECT
+      EXTRACT(EPOCH FROM bucket_ts)::bigint::text AS bucket_sec,
+      open_zug::text,
+      high_zug::text,
+      low_zug::text,
+      close_zug::text,
+      volume_zug::text,
+      buy_volume_zug::text,
+      trade_count
+    FROM token_candles
+    WHERE token_address = $1
+      AND candle_interval = $2
+    ORDER BY bucket_ts DESC
+    LIMIT $3
+    `,
+    [address.toLowerCase(), interval, limit]
+  );
+
+  return result.rows
+    .map((row) => ({
+      bucketSec: Number(row.bucket_sec),
+      openZug: row.open_zug,
+      highZug: row.high_zug,
+      lowZug: row.low_zug,
+      closeZug: row.close_zug,
+      volumeZug: row.volume_zug,
+      buyVolumeZug: row.buy_volume_zug,
+      tradeCount: row.trade_count,
+    }))
+    .reverse();
+}
+
 export async function getUserVolumeBnb(address: string): Promise<number> {
   const db = getLaunchpadReadPool();
   const result = await db.query<{ total_volume_zug: string | null }>(
