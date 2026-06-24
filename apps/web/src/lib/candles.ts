@@ -967,35 +967,70 @@ export function formatChartPrice(value: number, currency: "bnb" | "usd" | "mcap"
   return formatPumpSubscriptPrice(value, "").replace(/^\$/, "") + " BNB";
 }
 
-export function resolveChartPriceFormat(
-  candles: CandleBar[],
-  currency: "bnb" | "usd" | "mcap",
-  bnbUsd?: number | null
-): {
+/** LWC custom price format — `base` (1/minMove) must be a power of 10 or tick math throws "unexpected base". */
+export type ChartCustomPriceFormat = {
   type: "custom";
   formatter: (price: number) => string;
-  minMove: number;
-} {
+  base: number;
+};
+
+export type ChartBuiltinPriceFormat = {
+  type: "price";
+  precision: number;
+};
+
+export type ChartPriceFormat = ChartCustomPriceFormat | ChartBuiltinPriceFormat;
+
+const CHART_PRICE_PRECISION_MIN = 4;
+const CHART_PRICE_PRECISION_MAX = 12;
+const CHART_PRICE_BASE_EXP_MAX = 18;
+
+/** Power-of-10 base for LWC — arbitrary minMove values break 1/minMove tick math on log scale. */
+export function resolveChartPriceBase(candles: CandleBar[]): number {
   let max = 0;
   for (const c of candles) {
     max = Math.max(max, c.high, c.close);
   }
 
   let precision = 8;
-  if (max > 0) {
+  if (max > 0 && Number.isFinite(max)) {
     const exp = Math.floor(Math.log10(max));
-    precision = Math.max(4, Math.min(12, -exp + 2));
+    precision = Math.max(CHART_PRICE_PRECISION_MIN, Math.min(CHART_PRICE_PRECISION_MAX, -exp + 2));
+
+    // Match ensureVisibleCandleBodies span (~max × 1e-5) using a power-of-10 step only.
+    const minVisibleStep = max * 1e-5;
+    if (minVisibleStep > 0 && Number.isFinite(minVisibleStep)) {
+      const stepPrecision = Math.min(
+        CHART_PRICE_PRECISION_MAX,
+        Math.max(0, -Math.floor(Math.log10(minVisibleStep)))
+      );
+      precision = Math.max(precision, stepPrecision);
+    }
   }
 
-  let minMove = Math.pow(10, -precision);
-  if (max > 0) {
-    minMove = Math.min(minMove, max * 1e-5);
-  }
+  const baseExp = Math.max(0, Math.min(CHART_PRICE_BASE_EXP_MAX, precision));
+  const base = Math.pow(10, baseExp);
+  return Number.isFinite(base) && base > 0 ? base : 1e8;
+}
+
+export function chartPriceFormatFromBase(
+  base: number,
+  currency: "bnb" | "usd" | "mcap",
+  bnbUsd?: number | null
+): ChartCustomPriceFormat {
+  const safeBase =
+    Number.isFinite(base) && base > 0
+      ? base
+      : 1e8;
+  const precision = Math.max(
+    CHART_PRICE_PRECISION_MIN,
+    Math.min(CHART_PRICE_PRECISION_MAX, Math.round(Math.log10(safeBase)))
+  );
   const usdRate = bnbUsd != null && bnbUsd > 0 ? bnbUsd : 1;
 
   return {
     type: "custom",
-    minMove,
+    base: safeBase,
     formatter: (price: number) => {
       if (!Number.isFinite(price)) return "—";
       if (price === 0) return currency === "usd" || currency === "mcap" ? "$0" : "0";
@@ -1013,4 +1048,39 @@ export function resolveChartPriceFormat(
       return formatPumpSubscriptPrice(price, "") + " BNB";
     },
   };
+}
+
+export function resolveChartPriceFormat(
+  candles: CandleBar[],
+  currency: "bnb" | "usd" | "mcap",
+  bnbUsd?: number | null
+): ChartCustomPriceFormat {
+  return chartPriceFormatFromBase(resolveChartPriceBase(candles), currency, bnbUsd);
+}
+
+/** Built-in LWC price format fallback when custom base/minMove is rejected. */
+export function chartBuiltinPriceFormatFallback(candles: CandleBar[]): ChartBuiltinPriceFormat {
+  const base = resolveChartPriceBase(candles);
+  const precision = Math.max(
+    CHART_PRICE_PRECISION_MIN,
+    Math.min(CHART_PRICE_PRECISION_MAX, Math.round(Math.log10(base)))
+  );
+  return { type: "price", precision };
+}
+
+type SeriesPriceFormatTarget = {
+  applyOptions: (options: { priceFormat: ChartPriceFormat }) => void;
+};
+
+/** Apply series priceFormat without crashing the token page on invalid LWC tick math. */
+export function applyCandleSeriesPriceFormat(
+  series: SeriesPriceFormatTarget,
+  priceFormat: ChartCustomPriceFormat,
+  candles: CandleBar[]
+): void {
+  try {
+    series.applyOptions({ priceFormat });
+  } catch {
+    series.applyOptions({ priceFormat: chartBuiltinPriceFormatFallback(candles) });
+  }
 }

@@ -15,6 +15,7 @@ import {
   CrosshairMode,
 } from "lightweight-charts";
 import {
+  applyCandleSeriesPriceFormat,
   CANDLE_INTERVALS,
   formatPumpSubscriptPrice,
   resolveChartPriceFormat,
@@ -691,7 +692,7 @@ export function PriceChart({
 
     const candleSeries = candleSeriesRef.current;
     const volumeSeries = volumeSeriesRef.current;
-    candleSeries.applyOptions({ priceFormat });
+    applyCandleSeriesPriceFormat(candleSeries, priceFormat, candlesForChart);
 
     const nextCandles = candlesForChart;
     const nextVolumes = volumesForChart;
