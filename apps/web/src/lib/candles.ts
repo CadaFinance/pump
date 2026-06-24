@@ -319,11 +319,8 @@ export function buildCandlesFromTrades(
   let startSec = sortedTimes[0]!;
   const lastTradeSec = sortedTimes[sortedTimes.length - 1]!;
   const endBucketMs = Math.floor(endTimeMs / intervalMs) * intervalMs;
-  const gapTail =
-    options.maxGapBarsAfterLastTrade ?? gapTailBarsForInterval(interval);
-  const tailEndSec = lastTradeSec + gapTail * intervalSec;
   const liveEndSec = Math.floor(endBucketMs / 1000);
-  const endSec = Math.max(lastTradeSec, Math.min(liveEndSec, tailEndSec));
+  const endSec = Math.max(lastTradeSec, liveEndSec);
 
   const span = Math.floor((endSec - startSec) / intervalSec) + 1;
   if (span > MAX_CANDLES) {
@@ -438,15 +435,13 @@ export function fillGapsForStoredCandles(
   const intervalMs = CANDLE_INTERVALS.find((i) => i.id === interval)?.ms ?? 5 * 60_000;
   const intervalSec = intervalMs / 1000;
   const endTimeMs = options.endTimeMs ?? Date.now();
-  const gapTail = options.maxGapBarsAfterLastTrade ?? gapTailBarsForInterval(interval);
 
   const volumeByTime = new Map(volumes.map((v) => [v.time, v]));
   const sortedTimes = candles.map((c) => c.time).sort((a, b) => a - b);
   const lastTradeSec = sortedTimes[sortedTimes.length - 1]!;
   const endBucketMs = Math.floor(endTimeMs / intervalMs) * intervalMs;
-  const tailEndSec = lastTradeSec + gapTail * intervalSec;
   const liveEndSec = Math.floor(endBucketMs / 1000);
-  const endSec = Math.max(lastTradeSec, Math.min(liveEndSec, tailEndSec));
+  const endSec = Math.max(lastTradeSec, liveEndSec);
 
   let startSec = sortedTimes[0]!;
   const span = Math.floor((endSec - startSec) / intervalSec) + 1;

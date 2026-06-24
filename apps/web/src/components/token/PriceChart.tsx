@@ -138,27 +138,34 @@ function formatOhlc(
   return formatPumpSubscriptPrice(value, "");
 }
 
-/** UTC label for axis + crosshair (lightweight-charts uses unix seconds). */
-function formatUtcTime(time: Time): string {
+/** User-local time for crosshair + axis labels. */
+function formatLocalChartTime(time: Time, showSeconds = false): string {
   if (typeof time !== "number") return "";
-  return formatUtcMs(time * 1000);
+  const d = new Date(time * 1000);
+  return d.toLocaleString(undefined, {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: showSeconds ? "2-digit" : undefined,
+    hour12: false,
+  });
 }
 
-function formatUtcMs(ms: number): string {
-  const iso = new Date(ms).toISOString();
-  return `${iso.slice(0, 10)} ${iso.slice(11, 19)} UTC`;
+function formatLocalChartTick(time: Time, showSeconds: boolean): string {
+  if (typeof time !== "number") return "";
+  const d = new Date(time * 1000);
+  const hh = d.getHours().toString().padStart(2, "0");
+  const mm = d.getMinutes().toString().padStart(2, "0");
+  if (!showSeconds) return `${hh}:${mm}`;
+  const ss = d.getSeconds().toString().padStart(2, "0");
+  return `${hh}:${mm}:${ss}`;
 }
 
 function scaleVolumeBars(volumes: VolumeBar[], scale: number): VolumeBar[] {
   if (scale === 1) return volumes;
   return volumes.map((v) => ({ ...v, value: v.value * scale }));
-}
-
-function commonCandlePrefixByTime(a: CandleBar[], b: CandleBar[]): number {
-  const n = Math.min(a.length, b.length);
-  let i = 0;
-  while (i < n && a[i]!.time === b[i]!.time) i++;
-  return i;
 }
 
 function candleToChartData(c: CandleBar): CandlestickData {
@@ -183,14 +190,27 @@ function volumeToChartData(v: VolumeBar): HistogramData {
 function canIncrementalChartPatch(prev: CandleBar[], next: CandleBar[]): boolean {
   if (prev.length === 0 || next.length === 0) return false;
   if (next.length < prev.length) return false;
-  const prefix = commonCandlePrefixByTime(prev, next);
-  return prefix >= prev.length - 1;
+  if (next.length > prev.length + 1) return false;
+
+  const sharedPrefix = Math.min(prev.length, next.length);
+  if (sharedPrefix === 0) return false;
+
+  // All shared times must match exactly — no gap-fill inserts in the middle.
+  for (let i = 0; i < sharedPrefix; i++) {
+    if (prev[i]!.time !== next[i]!.time) return false;
+  }
+
+  if (next.length === prev.length + 1) {
+    return next[next.length - 1]!.time > prev[prev.length - 1]!.time;
+  }
+
+  // Same length — only the last bucket may have changed.
+  return prev.length === 1 || prev[prev.length - 2]!.time === next[next.length - 2]!.time;
 }
 
 function incrementalPatchStartIndex(prev: CandleBar[], next: CandleBar[]): number {
-  const prefix = commonCandlePrefixByTime(prev, next);
-  if (prefix === 0 && prev.length > 0 && next.length > 0) return 0;
-  return Math.max(0, Math.min(prefix, prev.length) - 1);
+  if (next.length > prev.length) return prev.length;
+  return Math.max(0, prev.length - 1);
 }
 
 /** Force setData when OHLC values jump (e.g. decade-scale reconcile). */
@@ -240,10 +260,11 @@ export function PriceChart({
   const [storedVolumes, setStoredVolumes] = useState<VolumeBar[]>([]);
   const storedVolumesRef = useRef<VolumeBar[]>([]);
   const [candleSource, setCandleSource] = useState<StoredCandleSource>("db");
+  const [fetchedInterval, setFetchedInterval] = useState<CandleInterval | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [hoverOhlc, setHoverOhlc] = useState<CandleBar | null>(null);
-  const [hoverTimeUtc, setHoverTimeUtc] = useState<string | null>(null);
+  const [hoverTimeLabel, setHoverTimeLabel] = useState<string | null>(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [ready, setReady] = useState(false);
 
@@ -254,9 +275,10 @@ export function PriceChart({
   const unitLabel = currency === "usd" ? "USD" : "MCAP";
 
   const fetchCandles = useCallback(async () => {
+    const intervalAtFetch = timeInterval;
     try {
       const res = await fetch(
-        `/api/tokens/${tokenAddress}/candles?interval=${timeInterval}&limit=1000`,
+        `/api/tokens/${tokenAddress}/candles?interval=${intervalAtFetch}&limit=1000`,
         { cache: "no-store" }
       );
       if (!res.ok) throw new Error("Failed to load chart candles");
@@ -271,6 +293,7 @@ export function PriceChart({
       setStoredVolumes(body.data?.volumes ?? []);
       storedVolumesRef.current = body.data?.volumes ?? [];
       setCandleSource(body.data?.source ?? "trades");
+      setFetchedInterval(intervalAtFetch);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Chart load failed");
@@ -280,6 +303,14 @@ export function PriceChart({
   }, [tokenAddress, timeInterval]);
 
   useEffect(() => {
+    setFetchedInterval(null);
+    setStoredCandles([]);
+    setStoredVolumes([]);
+    storedVolumesRef.current = [];
+    renderedCandlesRef.current = [];
+    renderedVolumesRef.current = [];
+    renderedFingerprintRef.current = "";
+    shouldFitViewportRef.current = true;
     setLoading(true);
     void fetchCandles();
   }, [fetchCandles]);
@@ -321,20 +352,17 @@ export function PriceChart({
     let baseCandles: CandleBar[] = [];
     let baseVolumes: VolumeBar[] = [];
 
-    if (storedCandles.length > 0) {
-      const scaledCandles = scaleCandleBars(storedCandles, candleUnitScale);
-      const scaledVolumes = scaleVolumeBars(storedVolumes, candleUnitScale);
-      if (candleSource === "db") {
-        const filled = fillGapsForStoredCandles(scaledCandles, scaledVolumes, timeInterval, {
-          endTimeMs: chartEndTimeMs,
-        });
-        baseCandles = filled.candles;
-        baseVolumes = filled.volumes;
-      } else {
-        baseCandles = scaledCandles;
-        baseVolumes = scaledVolumes;
-      }
+    if (fetchedInterval !== timeInterval || storedCandles.length === 0) {
+      return { candles: baseCandles, volumes: baseVolumes };
     }
+
+    const scaledCandles = scaleCandleBars(storedCandles, candleUnitScale);
+    const scaledVolumes = scaleVolumeBars(storedVolumes, candleUnitScale);
+    const filled = fillGapsForStoredCandles(scaledCandles, scaledVolumes, timeInterval, {
+      endTimeMs: chartEndTimeMs,
+    });
+    baseCandles = filled.candles;
+    baseVolumes = filled.volumes;
 
     if (liveMarkPriceBnb != null && liveMarkPriceBnb > 0 && baseCandles.length > 0) {
       const reconciled = reconcileCandleSeriesToLiveMark(
@@ -380,6 +408,7 @@ export function PriceChart({
     return { candles: baseCandles, volumes: baseVolumes };
   }, [
     candleSource,
+    fetchedInterval,
     storedCandles,
     storedVolumes,
     timeInterval,
@@ -393,7 +422,9 @@ export function PriceChart({
   const volumesForChart = volumes;
 
   const lastCandle = candlesForChart[candlesForChart.length - 1] ?? null;
-  const displayTimeUtc = hoverTimeUtc ?? (frozen ? null : formatUtcMs(nowMs));
+  const displayTimeLabel =
+    hoverTimeLabel ??
+    (frozen ? null : formatLocalChartTime(Math.floor(nowMs / 1000) as Time, timeInterval === "15s"));
   const displayCandle = hoverOhlc ?? lastCandle;
 
   const priceFormat = useMemo(
@@ -435,6 +466,9 @@ export function PriceChart({
 
   const selectInterval = useCallback((id: CandleInterval) => {
     shouldFitViewportRef.current = true;
+    renderedCandlesRef.current = [];
+    renderedVolumesRef.current = [];
+    renderedFingerprintRef.current = "";
     setTimeInterval((prev) => {
       if (prev === id) {
         scheduleFitViewport();
@@ -515,14 +549,8 @@ export function PriceChart({
         rightOffset: 8,
         fixLeftEdge: false,
         fixRightEdge: false,
-        tickMarkFormatter: (time: Time) => {
-          if (typeof time !== "number") return "";
-          const d = new Date(time * 1000);
-          const hh = d.getUTCHours().toString().padStart(2, "0");
-          const mm = d.getUTCMinutes().toString().padStart(2, "0");
-          const ss = d.getUTCSeconds().toString().padStart(2, "0");
-          return `${hh}:${mm}:${ss}`;
-        },
+        tickMarkFormatter: (time: Time) =>
+          formatLocalChartTick(time, timeInterval === "15s"),
       },
       handleScroll: {
         mouseWheel: true,
@@ -538,8 +566,9 @@ export function PriceChart({
       width: el.clientWidth || el.offsetWidth,
       height,
       localization: {
-        locale: "en-US",
-        timeFormatter: formatUtcTime,
+        locale: typeof navigator !== "undefined" ? navigator.language : "en-US",
+        timeFormatter: (time: Time) =>
+          formatLocalChartTime(time, timeInterval === "15s"),
         priceFormatter: (price: number) => chartPriceFormatterRef.current(price),
       },
     });
@@ -567,10 +596,10 @@ export function PriceChart({
     chart.subscribeCrosshairMove((param) => {
       if (!param.time || !param.seriesData.size) {
         setHoverOhlc(null);
-        setHoverTimeUtc(null);
+        setHoverTimeLabel(null);
         return;
       }
-      setHoverTimeUtc(formatUtcTime(param.time));
+      setHoverTimeLabel(formatLocalChartTime(param.time, timeInterval === "15s"));
       const bar = param.seriesData.get(candleSeries) as CandlestickData | undefined;
       if (!bar || bar.open == null) {
         setHoverOhlc(null);
@@ -677,6 +706,24 @@ export function PriceChart({
     });
   }, [candles, currency]);
 
+  // Local timezone labels + seconds on 15s interval.
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (!chart) return;
+    const showSeconds = timeInterval === "15s";
+    chart.applyOptions({
+      timeScale: {
+        secondsVisible: showSeconds,
+        tickMarkFormatter: (time: Time) => formatLocalChartTick(time, showSeconds),
+      },
+      localization: {
+        locale: typeof navigator !== "undefined" ? navigator.language : "en-US",
+        timeFormatter: (time: Time) => formatLocalChartTime(time, showSeconds),
+        priceFormatter: (price: number) => chartPriceFormatterRef.current(price),
+      },
+    });
+  }, [timeInterval, priceFormat]);
+
   // Push candle data — setData on structural changes; series.update() for live tail.
   useEffect(() => {
     if (!ready || !candleSeriesRef.current || !volumeSeriesRef.current) return;
@@ -758,22 +805,6 @@ export function PriceChart({
     currency,
     candleUnitScale,
   ]);
-
-  // Trader optimistic: paint tail bucket before React batches the main series effect.
-  useLayoutEffect(() => {
-    if (!ready || !actorOptimisticSpot || candlesForChart.length === 0) return;
-    const candleSeries = candleSeriesRef.current;
-    const volumeSeries = volumeSeriesRef.current;
-    if (!candleSeries || !volumeSeries) return;
-
-    const last = candlesForChart[candlesForChart.length - 1]!;
-    const lastVol = volumesForChart[volumesForChart.length - 1];
-    candleSeries.update(candleToChartData(last));
-    if (lastVol) volumeSeries.update(volumeToChartData(lastVol));
-    renderedCandlesRef.current = candlesForChart;
-    renderedVolumesRef.current = volumesForChart;
-    chartRef.current?.timeScale().scrollToRealTime();
-  }, [actorOptimisticSpot, candlesForChart, volumesForChart, ready]);
 
   const summaryValue =
     currency === "usd"
@@ -904,8 +935,8 @@ export function PriceChart({
           <span className="shrink-0">
             C <span className="text-pump-text">{formatOhlc(displayCandle.close, currency, bnbUsd)}</span>
           </span>
-          {hoverOhlc && displayTimeUtc ? (
-            <span className="hidden shrink-0 sm:inline">{displayTimeUtc}</span>
+          {hoverOhlc && displayTimeLabel ? (
+            <span className="hidden shrink-0 sm:inline">{displayTimeLabel}</span>
           ) : null}
         </div>
       ) : null}
