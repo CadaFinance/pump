@@ -646,9 +646,47 @@ export type ActorOptimisticChartSpot = {
   blockTimeMs: number;
 };
 
+/** Pure computation of the optimistic bar + volume for a given actor trade.
+ * Can be used both for full derive and for direct series.update() instant feedback. */
+export function createOptimisticCandleBar(
+  actor: ActorOptimisticChartSpot,
+  interval: CandleInterval,
+  previousCloseHint?: number,
+  priceScale = 1
+): { candle: CandleBar; volume: VolumeBar } | null {
+  const after = actor.spotAfterBnb * priceScale;
+  const before = actor.spotBeforeBnb * priceScale;
+  const tradeVol = Math.max(0, actor.volumeBnb * priceScale);
+  if (!Number.isFinite(after) || after <= 0) return null;
+
+  const intervalMs = CANDLE_INTERVALS.find((i) => i.id === interval)?.ms ?? 60_000;
+  const bucketSec = Math.floor(actor.blockTimeMs / intervalMs) * (intervalMs / 1000);
+
+  let open = before > 0 ? before : after;
+  if (previousCloseHint != null && previousCloseHint > 0) {
+    // Prefer the actual previous close in the series if provided (for correct open on new bar)
+    open = previousCloseHint;
+  }
+  if (actor.side === "buy" && after < open) open = after;
+  if (actor.side === "sell" && after > open) open = after;
+
+  const touch = [open, before > 0 ? before : open, after];
+  const high = Math.max(...touch);
+  const low = Math.min(...touch);
+
+  const candle: CandleBar = { time: bucketSec, open, high, low, close: after };
+  const volBar: VolumeBar = {
+    time: bucketSec,
+    value: tradeVol,
+    color: volumeBarColor(tradeVol, actor.side === "buy" ? tradeVol : 0),
+  };
+  return { candle, volume: volBar };
+}
+
 /**
  * Upsert the actor's in-flight trade into the active interval bucket.
  * Works with DB-backed candles — does not require trade replay.
+ * Now uses the pure creator + merges volume correctly against existing.
  */
 export function applyActorOptimisticCandleBucket(
   candles: CandleBar[],
@@ -669,20 +707,20 @@ export function applyActorOptimisticCandleBucket(
   const idx = candles.findIndex((c) => c.time === bucketSec);
   const last = candles[candles.length - 1];
 
-  let open = before > 0 ? before : after;
+  // Determine the open we should use for this optimistic bar
+  let openBase = before > 0 ? before : after;
   if (idx >= 0) {
-    open = candles[idx]!.open;
+    openBase = candles[idx]!.open;
   } else if (last) {
-    open = last.close;
+    openBase = last.close;
   }
-  if (actor.side === "buy" && after < open) open = after;
-  if (actor.side === "sell" && after > open) open = after;
 
-  const touch = [open, before > 0 ? before : open, after];
-  const high = Math.max(...touch);
-  const low = Math.min(...touch);
-  const patched: CandleBar = { time: bucketSec, open, high, low, close: after };
+  const opt = createOptimisticCandleBar(actor, interval, openBase, priceScale);
+  if (!opt) return { candles, volumes };
 
+  const { candle: patched, volume: baseVol } = opt;
+
+  // Accumulate volume if the bucket already had some (from WS or previous optimistic)
   const prevVol = idx >= 0 ? (volumes[idx]?.value ?? 0) : 0;
   const nextVol = prevVol + tradeVol;
   const volBar: VolumeBar = {
@@ -694,17 +732,13 @@ export function applyActorOptimisticCandleBucket(
   if (idx >= 0) {
     const existing = candles[idx]!;
     const priorClose = idx > 0 ? candles[idx - 1]!.close : undefined;
-    const open = coherentOpenForBar(
-      existing.open,
-      after,
-      before > 0 ? before : priorClose
-    );
+    const open = coherentOpenForBar(existing.open, after, before > 0 ? before : priorClose);
     const merged = sanitizeCandleOhlc(
       {
         time: bucketSec,
         open,
-        high: Math.max(existing.high, high),
-        low: Math.min(existing.low, low),
+        high: Math.max(existing.high, patched.high),
+        low: Math.min(existing.low, patched.low),
         close: after,
       },
       after
@@ -725,19 +759,15 @@ export function applyActorOptimisticCandleBucket(
 
   if (bucketSec === last.time) {
     const priorClose = candles.length > 1 ? candles[candles.length - 2]!.close : undefined;
-    const open = coherentOpenForBar(
-      last.open,
-      after,
-      before > 0 ? before : priorClose
-    );
+    const open = coherentOpenForBar(last.open, after, before > 0 ? before : priorClose);
     const nextCandles = candles.slice();
     const nextVolumes = volumes.slice();
     nextCandles[nextCandles.length - 1] = sanitizeCandleOhlc(
       {
         time: last.time,
         open,
-        high: Math.max(last.high, high),
-        low: Math.min(last.low, low),
+        high: Math.max(last.high, patched.high),
+        low: Math.min(last.low, patched.low),
         close: after,
       },
       after
@@ -746,7 +776,6 @@ export function applyActorOptimisticCandleBucket(
     return { candles: nextCandles, volumes: nextVolumes };
   }
 
-  // Gap-filled tail can extend past the trade bucket — pin the live tail for the trader.
   if (bucketSec < last.time) {
     return applyActorOptimisticSpotToCandles(candles, volumes, after, actor.side);
   }

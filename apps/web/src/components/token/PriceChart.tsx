@@ -17,6 +17,7 @@ import {
 import {
   applyCandleSeriesPriceFormat,
   CANDLE_INTERVALS,
+  createOptimisticCandleBar,
   formatPumpSubscriptPrice,
   resolveChartPriceFormat,
   type ActorOptimisticChartSpot,
@@ -350,11 +351,64 @@ export function PriceChart({
     return () => clearInterval(timer);
   }, [fetchCandles, frozen, wsConnected]);
 
+  // When the actor (the trader on this page) submits a buy/sell, give INSTANT visual feedback on the chart.
+  // This follows the professional pattern: acting user sees optimistic candle update immediately via direct series.update(),
+  // while other viewers wait for the indexer WS. We still keep actor in derive for full rebuilds.
+  const lastOptimisticSigRef = useRef<string | null>(null);
+
   useEffect(() => {
-    if (!actorOptimisticSpot) return;
+    if (!actorOptimisticSpot) {
+      lastOptimisticSigRef.current = null;
+      return;
+    }
     setNowMs(Date.now());
     shouldFitViewportRef.current = true;
-  }, [actorOptimisticSpot]);
+
+    if (!ready || !candleSeriesRef.current) return;
+
+    const sig = `${actorOptimisticSpot.blockTimeMs}|${actorOptimisticSpot.spotAfterBnb}|${actorOptimisticSpot.side}`;
+    if (lastOptimisticSigRef.current === sig) return;
+    lastOptimisticSigRef.current = sig;
+
+    // Use the last rendered authoritative close as open hint for the optimistic bar (matches professional "continuation" candle).
+    const lastRendered = renderedCandlesRef.current.length > 0
+      ? renderedCandlesRef.current[renderedCandlesRef.current.length - 1]!.close
+      : undefined;
+
+    const opt = createOptimisticCandleBar(
+      actorOptimisticSpot,
+      timeInterval,
+      lastRendered,
+      candleUnitScale
+    );
+    if (!opt) return;
+
+    const candleSeries = candleSeriesRef.current;
+    const volumeSeries = volumeSeriesRef.current;
+
+    candleSeries.update(candleToChartData(opt.candle));
+    if (volumeSeries && opt.volume) {
+      volumeSeries.update(volumeToChartData(opt.volume));
+    }
+
+    // Keep our incremental tracking in sync so a subsequent derive doesn't force a disruptive setData.
+    const prevC = renderedCandlesRef.current;
+    const newLast = opt.candle;
+    renderedCandlesRef.current = prevC.length === 0 || prevC[prevC.length-1]!.time < newLast.time
+      ? [...prevC, newLast]
+      : [...prevC.slice(0, -1), newLast];
+
+    if (opt.volume) {
+      const prevV = renderedVolumesRef.current;
+      renderedVolumesRef.current = prevV.length === 0 || prevV[prevV.length-1]!.time < opt.volume.time
+        ? [...prevV, opt.volume]
+        : [...prevV.slice(0, -1), opt.volume];
+    }
+
+    // Scroll the live edge into view for the trader
+    const ts = chartRef.current?.timeScale();
+    if (ts) ts.scrollToRealTime();
+  }, [actorOptimisticSpot, ready, timeInterval, candleUnitScale]);
 
   useEffect(() => {
     if (frozen) return;

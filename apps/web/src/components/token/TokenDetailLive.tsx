@@ -218,10 +218,24 @@ export function TokenDetailLive({
   useEffect(() => {
     setLiveCandleUpdates([]);
   }, [tokenAddress]);
+
+  // Reconcile: if real candle data from indexer arrives covering the optimistic trade time, drop the transient actor view.
+  // This ensures the trader sees authoritative data once it lands, and other viewers were never seeing the actor patch.
   const [holdersRefreshKey, setHoldersRefreshKey] = useState(0);
   const [optimisticTrades, setOptimisticTrades] = useState<TradeItem[]>([]);
   const [actorChartSpot, setActorChartSpot] = useState<ActorOptimisticChartSpot | null>(null);
   const [indexerSyncing, setIndexerSyncing] = useState(false);
+
+  // Reconcile: if real candle data from indexer arrives covering the optimistic trade time, drop the transient actor view.
+  // Trader sees authoritative once it lands; other viewers never saw the client-only patch.
+  useEffect(() => {
+    if (!actorChartSpot || liveCandleUpdates.length === 0) return;
+    const latest = [...liveCandleUpdates].sort((a, b) => b.time - a.time)[0];
+    if (latest && latest.time * 1000 >= actorChartSpot.blockTimeMs - 30_000) {
+      setActorChartSpot(null);
+      setIndexerSyncing(false);
+    }
+  }, [liveCandleUpdates, actorChartSpot]);
   const [latestWsBonding, setLatestWsBonding] = useState<
     TokenTradeWsPayload["bonding"] | null
   >(null);

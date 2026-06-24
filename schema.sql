@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict v9UMsKzwqNyQWq0XAHdgbBa08qDTrJ5XqMI8UAJmfHZWoU1xALncXRHierqSRdf
+\restrict QsF48Ny3bzSjMXglF55TE4TencCmYRmAgrhLQPjyEVjZ4jm4nDQLvL8EZGv670d
 
 -- Dumped from database version 16.14 (Ubuntu 16.14-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.14 (Ubuntu 16.14-0ubuntu0.24.04.1)
@@ -30,6 +30,117 @@ CREATE EXTENSION IF NOT EXISTS pg_stat_statements WITH SCHEMA public;
 --
 
 COMMENT ON EXTENSION pg_stat_statements IS 'track planning and execution statistics of all SQL statements executed';
+
+
+--
+-- Name: gap_fill_candles(text, text, integer, timestamp with time zone); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.gap_fill_candles(p_token_address text, p_interval text, p_limit integer DEFAULT 1000, p_end_ts timestamp with time zone DEFAULT now()) RETURNS TABLE(bucket_sec bigint, open_zug numeric, high_zug numeric, low_zug numeric, close_zug numeric, volume_zug numeric, buy_volume_zug numeric, trade_count integer)
+    LANGUAGE sql STABLE
+    AS $$
+  WITH interval_secs AS (
+    SELECT CASE p_interval
+      WHEN '15s' THEN 15
+      WHEN '1m' THEN 60
+      WHEN '5m' THEN 300
+      WHEN '15m' THEN 900
+      WHEN '1h' THEN 3600
+      WHEN '4h' THEN 14400
+      ELSE 60
+    END AS secs
+  ),
+  stored AS (
+    SELECT
+      (EXTRACT(EPOCH FROM tc.bucket_ts))::bigint AS bucket_sec,
+      tc.open_zug,
+      tc.high_zug,
+      tc.low_zug,
+      tc.close_zug,
+      tc.volume_zug,
+      tc.buy_volume_zug,
+      tc.trade_count
+    FROM token_candles tc
+    WHERE tc.token_address = lower(p_token_address)
+      AND tc.candle_interval = p_interval
+    ORDER BY tc.bucket_ts DESC
+    LIMIT GREATEST(1, LEAST(p_limit, 4000))
+  ),
+  stored_asc AS (
+    SELECT * FROM stored ORDER BY bucket_sec ASC
+  ),
+  bounds AS (
+    SELECT
+      (SELECT MIN(s.bucket_sec) FROM stored_asc s) AS start_sec,
+      (SELECT MAX(s.bucket_sec) FROM stored_asc s) AS last_trade_sec,
+      (SELECT secs FROM interval_secs) AS interval_sec
+  ),
+  end_bound AS (
+    SELECT
+      GREATEST(
+        b.last_trade_sec,
+        (EXTRACT(EPOCH FROM date_trunc('second', p_end_ts))::bigint / b.interval_sec) * b.interval_sec
+      ) AS end_sec,
+      b.start_sec,
+      b.interval_sec
+    FROM bounds b
+  ),
+  windowed AS (
+    SELECT
+      eb.start_sec,
+      eb.end_sec,
+      eb.interval_sec,
+      GREATEST(
+        eb.start_sec,
+        eb.end_sec - (GREATEST(1, LEAST(p_limit, 4000)) - 1) * eb.interval_sec
+      ) AS series_start_sec
+    FROM end_bound eb
+    WHERE eb.start_sec IS NOT NULL
+  ),
+  series AS (
+    SELECT generate_series(w.series_start_sec, w.end_sec, w.interval_sec) AS bucket_sec
+    FROM windowed w
+  ),
+  joined AS (
+    SELECT
+      s.bucket_sec,
+      sa.open_zug AS raw_open,
+      sa.high_zug AS raw_high,
+      sa.low_zug AS raw_low,
+      sa.close_zug AS raw_close,
+      sa.volume_zug AS raw_volume,
+      sa.buy_volume_zug AS raw_buy_volume,
+      sa.trade_count AS raw_trade_count
+    FROM series s
+    LEFT JOIN stored_asc sa ON sa.bucket_sec = s.bucket_sec
+  ),
+  carried AS (
+    SELECT
+      j.bucket_sec,
+      j.raw_open,
+      j.raw_high,
+      j.raw_low,
+      j.raw_close,
+      j.raw_volume,
+      j.raw_buy_volume,
+      j.raw_trade_count,
+      MAX(j.raw_close) FILTER (WHERE j.raw_close IS NOT NULL AND j.raw_close > 0)
+        OVER (ORDER BY j.bucket_sec ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS last_close
+    FROM joined j
+  )
+  SELECT
+    c.bucket_sec,
+    COALESCE(c.raw_open, c.last_close) AS open_zug,
+    COALESCE(c.raw_high, c.last_close) AS high_zug,
+    COALESCE(c.raw_low, c.last_close) AS low_zug,
+    COALESCE(c.raw_close, c.last_close) AS close_zug,
+    COALESCE(c.raw_volume, 0) AS volume_zug,
+    COALESCE(c.raw_buy_volume, 0) AS buy_volume_zug,
+    COALESCE(c.raw_trade_count, 0)::integer AS trade_count
+  FROM carried c
+  WHERE c.last_close IS NOT NULL AND c.last_close > 0
+  ORDER BY c.bucket_sec ASC;
+$$;
 
 
 --
@@ -476,13 +587,27 @@ CREATE TABLE public.bonding_states (
     progress_bps integer DEFAULT 0 NOT NULL,
     last_price_zug numeric(78,18) DEFAULT 0 NOT NULL,
     market_cap_zug numeric(78,18) DEFAULT 0 NOT NULL,
-    virtual_zug_reserve numeric(78,18) DEFAULT 5 NOT NULL,
-    virtual_token_reserve numeric(78,18) DEFAULT 1000000000 NOT NULL,
     holder_count integer DEFAULT 0 NOT NULL,
     trade_count integer DEFAULT 0 NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    virtual_zug_reserve numeric(78,18) DEFAULT 5 NOT NULL,
+    virtual_token_reserve numeric(78,18) DEFAULT 1000000000 NOT NULL,
     CONSTRAINT bonding_states_progress_bps_check CHECK (((progress_bps >= 0) AND (progress_bps <= 10000)))
 );
+
+
+--
+-- Name: COLUMN bonding_states.virtual_zug_reserve; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.bonding_states.virtual_zug_reserve IS 'Virtual BNB reserve (human units) at token registration';
+
+
+--
+-- Name: COLUMN bonding_states.virtual_token_reserve; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.bonding_states.virtual_token_reserve IS 'Virtual token reserve (human units) at token registration';
 
 
 --
@@ -839,7 +964,6 @@ CREATE TABLE public.trades (
     zug_amount numeric(78,18) NOT NULL,
     token_amount numeric(78,18) NOT NULL,
     price_zug numeric(78,18) NOT NULL,
-    spot_price_zug numeric(78,18),
     fee_zug numeric(78,18) DEFAULT 0 NOT NULL,
     creator_fee_zug numeric(78,18) DEFAULT 0 NOT NULL,
     treasury_fee_zug numeric(78,18) DEFAULT 0 NOT NULL,
@@ -849,6 +973,7 @@ CREATE TABLE public.trades (
     block_time timestamp with time zone NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     referrer_fee_zug numeric(78,18) DEFAULT 0 NOT NULL,
+    spot_price_zug numeric(78,18),
     CONSTRAINT trades_creator_fee_zug_check CHECK ((creator_fee_zug >= (0)::numeric)),
     CONSTRAINT trades_fee_zug_check CHECK ((fee_zug >= (0)::numeric)),
     CONSTRAINT trades_price_zug_check CHECK ((price_zug >= (0)::numeric)),
@@ -858,6 +983,13 @@ CREATE TABLE public.trades (
     CONSTRAINT trades_treasury_fee_zug_check CHECK ((treasury_fee_zug >= (0)::numeric)),
     CONSTRAINT trades_zug_amount_check CHECK ((zug_amount >= (0)::numeric))
 );
+
+
+--
+-- Name: COLUMN trades.spot_price_zug; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.trades.spot_price_zug IS 'Bonding-curve marginal spot after trade (BNB per token); price_zug remains execution fill';
 
 
 --
@@ -2269,5 +2401,5 @@ ALTER TABLE ONLY public.user_positions
 -- PostgreSQL database dump complete
 --
 
-\unrestrict v9UMsKzwqNyQWq0XAHdgbBa08qDTrJ5XqMI8UAJmfHZWoU1xALncXRHierqSRdf
+\unrestrict QsF48Ny3bzSjMXglF55TE4TencCmYRmAgrhLQPjyEVjZ4jm4nDQLvL8EZGv670d
 
