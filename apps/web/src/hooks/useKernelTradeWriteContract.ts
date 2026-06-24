@@ -135,7 +135,13 @@ export function useKernelTradeWriteContract() {
             publicClient,
             submitResult.userOpHash,
             submitResult.fromBlock,
-            { flashblocks }
+            {
+              flashblocks,
+              onIncluded: (includedTxHash) => {
+                setTxHash(includedTxHash);
+                tradeTraceStep("ux.txHash_early", { txHash: includedTxHash });
+              },
+            }
           );
 
           tradeTraceStep("chain.trade_write.returned", {

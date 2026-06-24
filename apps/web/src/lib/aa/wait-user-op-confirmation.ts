@@ -19,6 +19,8 @@ const LEGACY_POLL_MS = 2_000;
 export type UserOpConfirmationOptions = {
   /** Base Flashblocks fast path — trade buy/sell only. */
   flashblocks?: boolean;
+  /** Fires when bundler reports inclusion — before Flashblocks receipt fetch. */
+  onIncluded?: (txHash: Hash) => void;
 };
 
 export type UserOpConfirmationResult = {
@@ -83,10 +85,12 @@ async function fetchFlashblocksReceipt(
 async function waitViaFlashblocksTradeConfirm(
   client: KernelAccountClient,
   userOpHash: Hash,
-  deadline: number
+  deadline: number,
+  options?: UserOpConfirmationOptions
 ): Promise<UserOpConfirmationResult> {
   const wsClient = createTradeWebSocketPublicClient();
   let settled = false;
+  let resolveInflight = false;
   let unwatch: (() => void) | undefined;
   let pollTimer: ReturnType<typeof setInterval> | undefined;
 
@@ -113,8 +117,9 @@ async function waitViaFlashblocksTradeConfirm(
 
     const txHash = opReceipt.receipt.transactionHash;
     tradeTraceStep("bundler.user_op_included", { userOpHash, txHash });
+    options?.onIncluded?.(txHash);
 
-    const fbReceipt = await fetchFlashblocksReceipt(txHash, deadline, { flashblocks: true });
+    const fbReceipt = await fetchFlashblocksReceipt(txHash, deadline, options);
     if (!fbReceipt) {
       throw new Error(`Flashblocks receipt missing for ${txHash}`);
     }
@@ -130,10 +135,14 @@ async function waitViaFlashblocksTradeConfirm(
     };
 
     const attempt = async () => {
-      if (settled) return;
+      if (settled || resolveInflight) return;
+      resolveInflight = true;
       try {
         const result = await tryResolve();
-        if (!result) return;
+        if (!result) {
+          resolveInflight = false;
+          return;
+        }
         cleanup();
         tradeBundlerLog("confirmed via Flashblocks trade", {
           userOpHash,
@@ -141,6 +150,7 @@ async function waitViaFlashblocksTradeConfirm(
         });
         resolve(result);
       } catch (error) {
+        resolveInflight = false;
         if (settled) return;
         const message = error instanceof Error ? error.message : String(error);
         if (message.includes("UserOperation failed")) {
@@ -261,7 +271,7 @@ export async function waitForUserOpConfirmation(
   });
 
   if (fastConfirmEnabled(options)) {
-    return waitViaFlashblocksTradeConfirm(client, userOpHash, deadline);
+    return waitViaFlashblocksTradeConfirm(client, userOpHash, deadline, options);
   }
 
   return waitViaBundlerReceipt(client, userOpHash, deadline, options);

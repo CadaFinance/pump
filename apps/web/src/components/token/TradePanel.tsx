@@ -241,6 +241,8 @@ export function TradePanel({
   const [error, setError] = useState<string | null>(null);
   const [receiveExpanded, setReceiveExpanded] = useState(false);
   const [pendingAction, setPendingAction] = useState<"buy" | "sell" | "approve" | null>(null);
+  /** Sync side for callbacks — setState(pendingAction) may lag behind userOp submitted. */
+  const pendingTradeSideRef = useRef<"buy" | "sell" | null>(null);
   const pendingSellRef = useRef<{ amountWei: bigint; minBnbOut: bigint } | null>(null);
   const handledReceiptHashRef = useRef<`0x${string}` | null>(null);
   const pendingTradeReferrerRef = useRef<`0x${string}` | null>(null);
@@ -483,7 +485,7 @@ export function TradePanel({
   const { data: fallbackReceipt, isLoading: isFallbackReceiptLoading } =
     useFlashblocksTransactionReceipt({
       hash: txHash,
-      query: { enabled: Boolean(txHash && !kernelReceipt) },
+      query: { enabled: Boolean(txHash && !kernelReceipt && !isPending) },
     });
   const activeReceipt = kernelReceipt ?? fallbackReceipt;
   const isConfirming = Boolean(txHash && !activeReceipt && isFallbackReceiptLoading);
@@ -497,12 +499,13 @@ export function TradePanel({
 
   useEffect(() => {
     if (tradePhase !== "submitted" || !userOpHash || !onTradeSubmitted) return;
-    if (!pendingAction || (pendingAction !== "buy" && pendingAction !== "sell")) return;
+    const side = pendingTradeSideRef.current;
+    if (!side) return;
     if (uxTraceRef.current.lastSubmittedUserOp === userOpHash) return;
     uxTraceRef.current.lastSubmittedUserOp = userOpHash;
-    tradeTraceStep("ux.on_trade_submitted", { userOpHash, side: pendingAction });
-    onTradeSubmitted({ userOpHash, side: pendingAction });
-  }, [tradePhase, userOpHash, pendingAction, onTradeSubmitted]);
+    tradeTraceStep("ux.on_trade_submitted", { userOpHash, side });
+    onTradeSubmitted({ userOpHash, side });
+  }, [tradePhase, userOpHash, onTradeSubmitted]);
 
   useEffect(() => {
     if (isPending && !uxTraceRef.current.pending) {
@@ -541,6 +544,7 @@ export function TradePanel({
 
   useEffect(() => {
     if (!writeError) return;
+    pendingTradeSideRef.current = null;
     setPendingAction(null);
     pendingSellRef.current = null;
     handledReceiptHashRef.current = null;
@@ -976,6 +980,7 @@ export function TradePanel({
       pendingTradeReferrerRef.current = null;
     }
     const confirmedSide = pendingAction;
+    pendingTradeSideRef.current = null;
     setPendingAction(null);
     pendingSellRef.current = null;
 
@@ -1204,6 +1209,7 @@ export function TradePanel({
     if (address) {
       await assertScwForTrade(address, buyParams.value);
     }
+    pendingTradeSideRef.current = "buy";
     setPendingAction("buy");
     tradeWrite({
       address: contracts.bondingCurveManager,
@@ -1225,6 +1231,7 @@ export function TradePanel({
       await assertScwForTrade(address, 0n);
     }
     const params = usePermit ? await buildSellParamsWithPermit(sellParams, true) : sellParams;
+    pendingTradeSideRef.current = "sell";
     setPendingAction("sell");
     if (params.permit) {
       const { deadline, v, r, s } = params.permit;
