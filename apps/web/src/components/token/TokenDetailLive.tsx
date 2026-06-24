@@ -9,7 +9,7 @@ import {
   bondingCurveManagerAbi,
   bondingCurveSnapshotFromTuple,
 } from "@/lib/bonding-curve";
-import type { CandleWsUpdate } from "@/lib/candles";
+import type { ActorOptimisticChartSpot, CandleWsUpdate } from "@/lib/candles";
 import { resolveLatestSpotPriceBnb, sortTradesChronologically } from "@/lib/candles";
 import { resolveMarkPriceBnb } from "@/lib/mark-price";
 import {
@@ -211,10 +211,7 @@ export function TokenDetailLive({
   const [liveCandleUpdates, setLiveCandleUpdates] = useState<CandleWsUpdate[]>([]);
   const [holdersRefreshKey, setHoldersRefreshKey] = useState(0);
   const [optimisticTrades, setOptimisticTrades] = useState<TradeItem[]>([]);
-  const [actorChartSpot, setActorChartSpot] = useState<{
-    spotAfterBnb: number;
-    side: "buy" | "sell";
-  } | null>(null);
+  const [actorChartSpot, setActorChartSpot] = useState<ActorOptimisticChartSpot | null>(null);
   const [indexerSyncing, setIndexerSyncing] = useState(false);
   const [latestWsBonding, setLatestWsBonding] = useState<
     TokenTradeWsPayload["bonding"] | null
@@ -445,8 +442,11 @@ export function TokenDetailLive({
       setIndexerSyncing(true);
       optimisticTokenSnapshotRef.current = token;
       setActorChartSpot({
+        spotBeforeBnb: payload.spotBeforeBnb,
         spotAfterBnb: payload.spotAfterBnb,
         side: payload.side,
+        volumeBnb: Number(payload.tradeItem.netBnb ?? payload.tradeItem.nativeAmount ?? 0),
+        blockTimeMs: Date.now(),
       });
       setOptimisticTrades((prev) => [
         payload.tradeItem,
@@ -489,7 +489,6 @@ export function TokenDetailLive({
       burstUntilRef.current = Date.now() + BURST_DURATION_MS;
       setIndexerSyncing(true);
       optimisticTokenSnapshotRef.current = null;
-      setActorChartSpot(null);
       setOptimisticTrades((prev) =>
         prev.filter((t) => !t.txHash.toLowerCase().startsWith("pending:"))
       );

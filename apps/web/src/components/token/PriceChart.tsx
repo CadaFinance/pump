@@ -16,12 +16,13 @@ import {
 } from "lightweight-charts";
 import type { TradeItem } from "@/lib/db/launchpad";
 import {
-  applyActorOptimisticSpotToCandles,
+  applyActorOptimisticCandleBucket,
   CANDLE_INTERVALS,
   fillGapsForStoredCandles,
   formatPumpSubscriptPrice,
   mergeWsCandleUpdate,
   resolveChartPriceFormat,
+  type ActorOptimisticChartSpot,
   type CandleBar,
   type CandleInterval,
   type CandleWsUpdate,
@@ -43,8 +44,8 @@ type PriceChartProps = {
   symbol: string;
   status: string;
   optimisticTrades?: TradeItem[];
-  /** Trader-only optimistic spot pin (other viewers rely on WS). */
-  actorOptimisticSpot?: { spotAfterBnb: number; side: "buy" | "sell" } | null;
+  /** Trader-only optimistic bucket (other viewers rely on WS). */
+  actorOptimisticSpot?: ActorOptimisticChartSpot | null;
   /** On-chain virtual reserves for spot replay fallback (pre-backfill). */
   curveSnapshot?: BondingCurveSnapshot;
   /** WS candle buckets from indexer (db source). */
@@ -242,9 +243,10 @@ export function PriceChart({
 
   useEffect(() => {
     if (frozen) return;
-    const timer = setInterval(() => setNowMs(Date.now()), 15_000);
+    const tickMs = actorOptimisticSpot ? 1_000 : 15_000;
+    const timer = setInterval(() => setNowMs(Date.now()), tickMs);
     return () => clearInterval(timer);
-  }, [frozen]);
+  }, [frozen, actorOptimisticSpot]);
 
   const chartEndTimeMs = useMemo(() => {
     if (frozen && storedCandles.length > 0) {
@@ -266,18 +268,35 @@ export function PriceChart({
   }, [liveCandleUpdates, timeInterval, candleSource]);
 
   const { candles, volumes } = useMemo(() => {
+    let baseCandles: CandleBar[] = [];
+    let baseVolumes: VolumeBar[] = [];
+
     if (storedCandles.length > 0) {
       const scaledCandles = scaleCandleBars(storedCandles, priceScale);
       const scaledVolumes = scaleVolumeBars(storedVolumes, priceScale);
       if (candleSource === "db") {
-        return fillGapsForStoredCandles(scaledCandles, scaledVolumes, timeInterval, {
+        const filled = fillGapsForStoredCandles(scaledCandles, scaledVolumes, timeInterval, {
           endTimeMs: chartEndTimeMs,
         });
+        baseCandles = filled.candles;
+        baseVolumes = filled.volumes;
+      } else {
+        baseCandles = scaledCandles;
+        baseVolumes = scaledVolumes;
       }
-      return { candles: scaledCandles, volumes: scaledVolumes };
     }
 
-    return { candles: [], volumes: [] };
+    if (actorOptimisticSpot) {
+      return applyActorOptimisticCandleBucket(
+        baseCandles,
+        baseVolumes,
+        timeInterval,
+        actorOptimisticSpot,
+        1
+      );
+    }
+
+    return { candles: baseCandles, volumes: baseVolumes };
   }, [
     candleSource,
     storedCandles,
@@ -285,39 +304,11 @@ export function PriceChart({
     timeInterval,
     priceScale,
     chartEndTimeMs,
+    actorOptimisticSpot,
   ]);
 
-  const candlesForChart = useMemo(() => {
-    if (
-      candles.length === 0 ||
-      !actorOptimisticSpot ||
-      optimisticTrades.length === 0
-    ) {
-      return candles;
-    }
-    return applyActorOptimisticSpotToCandles(
-      candles,
-      volumes,
-      actorOptimisticSpot.spotAfterBnb * priceScale,
-      actorOptimisticSpot.side
-    ).candles;
-  }, [candles, volumes, actorOptimisticSpot, optimisticTrades.length, priceScale]);
-
-  const volumesForChart = useMemo(() => {
-    if (
-      candles.length === 0 ||
-      !actorOptimisticSpot ||
-      optimisticTrades.length === 0
-    ) {
-      return volumes;
-    }
-    return applyActorOptimisticSpotToCandles(
-      candles,
-      volumes,
-      actorOptimisticSpot.spotAfterBnb * priceScale,
-      actorOptimisticSpot.side
-    ).volumes;
-  }, [candles, volumes, actorOptimisticSpot, optimisticTrades.length, priceScale]);
+  const candlesForChart = candles;
+  const volumesForChart = volumes;
 
   const lastCandle = candlesForChart[candlesForChart.length - 1] ?? null;
   const displayTimeUtc = hoverTimeUtc ?? (frozen ? null : formatUtcMs(nowMs));

@@ -581,6 +581,99 @@ export function mergeWsCandleUpdate(
   return { candles, volumes };
 }
 
+/** Trader-only optimistic candle patch (client-side; not broadcast on WS). */
+export type ActorOptimisticChartSpot = {
+  spotBeforeBnb: number;
+  spotAfterBnb: number;
+  side: "buy" | "sell";
+  volumeBnb: number;
+  blockTimeMs: number;
+};
+
+/**
+ * Upsert the actor's in-flight trade into the active interval bucket.
+ * Works with DB-backed candles — does not require trade replay.
+ */
+export function applyActorOptimisticCandleBucket(
+  candles: CandleBar[],
+  volumes: VolumeBar[],
+  interval: CandleInterval,
+  actor: ActorOptimisticChartSpot,
+  priceScale = 1
+): { candles: CandleBar[]; volumes: VolumeBar[] } {
+  const after = actor.spotAfterBnb * priceScale;
+  const before = actor.spotBeforeBnb * priceScale;
+  const tradeVol = Math.max(0, actor.volumeBnb * priceScale);
+  if (!Number.isFinite(after) || after <= 0) {
+    return { candles, volumes };
+  }
+
+  const intervalMs = CANDLE_INTERVALS.find((i) => i.id === interval)?.ms ?? 60_000;
+  const bucketSec = Math.floor(actor.blockTimeMs / intervalMs) * (intervalMs / 1000);
+  const idx = candles.findIndex((c) => c.time === bucketSec);
+  const last = candles[candles.length - 1];
+
+  let open = before > 0 ? before : after;
+  if (idx >= 0) {
+    open = candles[idx]!.open;
+  } else if (last) {
+    open = last.close;
+  }
+  if (actor.side === "buy" && after < open) open = after;
+  if (actor.side === "sell" && after > open) open = after;
+
+  const touch = [open, before > 0 ? before : open, after];
+  const high = Math.max(...touch);
+  const low = Math.min(...touch);
+  const patched: CandleBar = { time: bucketSec, open, high, low, close: after };
+
+  const prevVol = idx >= 0 ? (volumes[idx]?.value ?? 0) : 0;
+  const nextVol = prevVol + tradeVol;
+  const volBar: VolumeBar = {
+    time: bucketSec,
+    value: nextVol,
+    color: volumeBarColor(nextVol, actor.side === "buy" ? nextVol : 0),
+  };
+
+  if (idx >= 0) {
+    const existing = candles[idx]!;
+    const merged: CandleBar = {
+      time: bucketSec,
+      open: existing.open,
+      high: Math.max(existing.high, high),
+      low: Math.min(existing.low, low),
+      close: after,
+    };
+    const nextCandles = candles.slice();
+    const nextVolumes = volumes.slice();
+    nextCandles[idx] = merged;
+    nextVolumes[idx] = volBar;
+    return { candles: nextCandles, volumes: nextVolumes };
+  }
+
+  if (!last || bucketSec > last.time) {
+    return {
+      candles: [...candles, patched],
+      volumes: [...volumes, volBar],
+    };
+  }
+
+  if (bucketSec === last.time) {
+    const nextCandles = candles.slice();
+    const nextVolumes = volumes.slice();
+    nextCandles[nextCandles.length - 1] = {
+      ...patched,
+      open: last.open,
+      high: Math.max(last.high, high),
+      low: Math.min(last.low, low),
+    };
+    nextVolumes[nextVolumes.length - 1] = volBar;
+    return { candles: nextCandles, volumes: nextVolumes };
+  }
+
+  return { candles, volumes };
+}
+
 /**
  * Pin the actor's optimistic spot on the live candle (trader-only).
  * Never pulls close below open on buys or above open on sells.
