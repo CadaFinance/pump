@@ -433,6 +433,8 @@ export function fillGapsForStoredCandles(
   options: {
     endTimeMs?: number;
     maxGapBarsAfterLastTrade?: number;
+    /** Live bonding mark — gap-fill forward close is validated against this. */
+    anchorPrice?: number;
   } = {}
 ): { candles: CandleBar[]; volumes: VolumeBar[] } {
   if (candles.length === 0) return { candles, volumes };
@@ -440,6 +442,7 @@ export function fillGapsForStoredCandles(
   const intervalMs = CANDLE_INTERVALS.find((i) => i.id === interval)?.ms ?? 5 * 60_000;
   const intervalSec = intervalMs / 1000;
   const endTimeMs = options.endTimeMs ?? Date.now();
+  const anchorPrice = options.anchorPrice;
 
   const volumeByTime = new Map(volumes.map((v) => [v.time, v]));
   const sortedTimes = candles.map((c) => c.time).sort((a, b) => a - b);
@@ -461,14 +464,18 @@ export function fillGapsForStoredCandles(
 
   for (const t of sortedTimes) {
     if (t < startSec) {
-      lastClose = bucketByTime.get(t)!.close;
+      lastClose = coherentGapClose(bucketByTime.get(t)!.close, anchorPrice);
     }
   }
 
   for (let t = startSec; t <= endSec; t += intervalSec) {
     const existing = bucketByTime.get(t);
     if (existing) {
-      nextCandles.push(existing);
+      const bar =
+        anchorPrice != null
+          ? sanitizeCandleOhlc(existing, anchorPrice)
+          : existing;
+      nextCandles.push(bar);
       nextVolumes.push(
         volumeByTime.get(t) ?? {
           time: t,
@@ -476,16 +483,17 @@ export function fillGapsForStoredCandles(
           color: volumeBarColor(0, 0),
         }
       );
-      lastClose = existing.close;
+      lastClose = bar.close;
       continue;
     }
     if (lastClose == null) continue;
+    const flat = coherentGapClose(lastClose, anchorPrice);
     nextCandles.push({
       time: t,
-      open: lastClose,
-      high: lastClose,
-      low: lastClose,
-      close: lastClose,
+      open: flat,
+      high: flat,
+      low: flat,
+      close: flat,
     });
     nextVolumes.push({
       time: t,
@@ -738,6 +746,7 @@ export function applyActorOptimisticCandleBucket(
 }
 
 const OHLC_MAGNITUDE_LOG_EPS = 0.35;
+const DECADE_RESCALE_LOG_EPS = OHLC_MAGNITUDE_LOG_EPS + 0.1;
 
 /** Whether two spot prices are on the same decade scale (guards stale 1000× DB OHLC). */
 export function pricesSameMagnitude(a: number, b: number): boolean {
@@ -762,6 +771,27 @@ function coherentOpenForBar(
     return fallback;
   }
   return anchor;
+}
+
+/** Snap a price onto the anchor decade when it is ~10^n off (stale fill vs spot rows). */
+export function rescalePriceToAnchor(price: number, anchor: number): number {
+  if (!Number.isFinite(price) || price <= 0) return price;
+  if (!Number.isFinite(anchor) || anchor <= 0) return price;
+  if (pricesSameMagnitude(price, anchor)) return price;
+
+  const logRatio = Math.log10(price / anchor);
+  const decade = Math.round(logRatio);
+  if (Math.abs(decade) < 1 || Math.abs(logRatio - decade) > DECADE_RESCALE_LOG_EPS) {
+    return price;
+  }
+
+  const scaled = price / Math.pow(10, decade);
+  return Number.isFinite(scaled) && scaled > 0 ? scaled : price;
+}
+
+function coherentGapClose(price: number, anchor?: number): number {
+  if (anchor == null || !Number.isFinite(anchor) || anchor <= 0) return price;
+  return rescalePriceToAnchor(price, anchor);
 }
 
 /** Drop OHLC legs on a different magnitude than anchor (prevents giant bear wicks). */
@@ -804,7 +834,7 @@ export function scaleCandleBars(candles: CandleBar[], scale: number): CandleBar[
 
 /**
  * Correct decade-scale drift between stored candles and live bonding mark (e.g. 1000×).
- * Only rescales when tail close is ~10^n off the header mark price.
+ * Per-bar rescale keeps already-correct tail buckets while fixing stale DB / gap-fill rows.
  */
 export function reconcileCandleSeriesToLiveMark(
   candles: CandleBar[],
@@ -815,32 +845,23 @@ export function reconcileCandleSeriesToLiveMark(
     return { candles, volumes };
   }
 
-  const tailClose = candles[candles.length - 1]!.close;
-  if (!Number.isFinite(tailClose) || tailClose <= 0) return { candles, volumes };
+  let changed = false;
+  const nextCandles = candles.map((bar) => {
+    const open = rescalePriceToAnchor(bar.open, liveMarkBnb);
+    const high = rescalePriceToAnchor(bar.high, liveMarkBnb);
+    const low = rescalePriceToAnchor(bar.low, liveMarkBnb);
+    const close = rescalePriceToAnchor(bar.close, liveMarkBnb);
+    if (open === bar.open && high === bar.high && low === bar.low && close === bar.close) {
+      return bar;
+    }
+    changed = true;
+    return sanitizeCandleOhlc(
+      { time: bar.time, open, high, low, close },
+      liveMarkBnb
+    );
+  });
 
-  let seriesPeak = tailClose;
-  for (const c of candles) {
-    if (Number.isFinite(c.high) && c.high > 0) seriesPeak = Math.max(seriesPeak, c.high);
-    if (Number.isFinite(c.open) && c.open > 0) seriesPeak = Math.max(seriesPeak, c.open);
-  }
-
-  const ratio = seriesPeak / liveMarkBnb;
-  if (!Number.isFinite(ratio) || ratio <= 0) return { candles, volumes };
-
-  const log10 = Math.log10(ratio);
-  if (Math.abs(log10) < 1.5) return { candles, volumes };
-
-  const decade = Math.round(log10);
-  const factor = Math.pow(10, decade);
-  if (factor < 10 || factor > 1_000_000) return { candles, volumes };
-
-  const tolerance = Math.max(factor * 0.12, 1);
-  const matchesHigh = Math.abs(ratio - factor) <= tolerance;
-  const matchesLow = Math.abs(ratio - 1 / factor) <= tolerance / (factor * factor);
-  if (!matchesHigh && !matchesLow) return { candles, volumes };
-
-  const scale = ratio > 1 ? 1 / factor : factor;
-  return { candles: scaleCandleBars(candles, scale), volumes };
+  return changed ? { candles: nextCandles, volumes } : { candles, volumes };
 }
 
 /** Keep the live interval bucket aligned with header / tape mark price. */

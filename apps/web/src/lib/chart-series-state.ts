@@ -5,6 +5,7 @@ import {
   fillGapsForStoredCandles,
   mergeWsCandleUpdate,
   pinTailCandleToLiveMark,
+  reconcileCandleSeriesToLiveMark,
   sanitizeCandleSeries,
   sanitizeTailCandleSeries,
   scaleCandleBars,
@@ -97,11 +98,15 @@ function gapFillChartSeries(
   volumes: VolumeBar[],
   interval: CandleInterval,
   endTimeMs: number,
-  gapFilledByApi: boolean
+  gapFilledByApi: boolean,
+  anchorPrice?: number
 ): { candles: CandleBar[]; volumes: VolumeBar[] } {
   if (candles.length === 0) return { candles, volumes };
   if (!gapFilledByApi || seriesHasTemporalGaps(candles, interval)) {
-    return fillGapsForStoredCandles(candles, volumes, interval, { endTimeMs });
+    return fillGapsForStoredCandles(candles, volumes, interval, {
+      endTimeMs,
+      anchorPrice,
+    });
   }
   return extendLiveTailBucket(candles, volumes, interval, endTimeMs);
 }
@@ -210,12 +215,24 @@ export function deriveChartSeries(input: DeriveChartSeriesInput): {
       ? state.volumes
       : state.volumes.map((v) => ({ ...v, value: v.value * priceScale }));
 
+  const scaledMark =
+    liveMarkPriceBnb != null && liveMarkPriceBnb > 0
+      ? liveMarkPriceBnb * priceScale
+      : null;
+
+  if (scaledMark != null) {
+    const reconciled = reconcileCandleSeriesToLiveMark(candles, volumes, scaledMark);
+    candles = reconciled.candles;
+    volumes = reconciled.volumes;
+  }
+
   const gapFilled = gapFillChartSeries(
     candles,
     volumes,
     displayInterval,
     endTimeMs,
-    state.gapFilledByApi
+    state.gapFilledByApi,
+    scaledMark ?? undefined
   );
   candles = gapFilled.candles;
   volumes = gapFilled.volumes;
@@ -243,17 +260,17 @@ export function deriveChartSeries(input: DeriveChartSeriesInput): {
     const anchor = actorOptimisticSpot.spotAfterBnb * priceScale;
     return {
       candles: ensureVisibleCandleBodies(
-        sanitizeTailCandleSeries(patched.candles, anchor)
+        scaledMark != null
+          ? sanitizeCandleSeries(patched.candles, anchor)
+          : sanitizeTailCandleSeries(patched.candles, anchor)
       ),
       volumes: patched.volumes,
     };
   }
 
-  if (liveMarkPriceBnb != null && liveMarkPriceBnb > 0) {
+  if (scaledMark != null) {
     return {
-      candles: ensureVisibleCandleBodies(
-        sanitizeTailCandleSeries(candles, liveMarkPriceBnb * priceScale)
-      ),
+      candles: ensureVisibleCandleBodies(sanitizeCandleSeries(candles, scaledMark)),
       volumes,
     };
   }
