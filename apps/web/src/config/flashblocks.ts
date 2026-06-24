@@ -4,6 +4,7 @@ import {
   webSocket,
   type Hash,
   type PublicClient,
+  type TransactionReceipt,
 } from "viem";
 import { pumpChain, rpcUrl } from "@/config/chain";
 
@@ -40,11 +41,18 @@ function readTradeWsFromEnv(): string | undefined {
   return undefined;
 }
 
-/** Alchemy (or other Flashblocks provider) — trade confirm only (buy/sell). */
+/**
+ * HTTPS Alchemy (Flashblocks-capable) — buy/sell UserOp prepare, simulate, HTTP receipt fallback.
+ * Separate from NEXT_PUBLIC_RPC_URL (balances, arena, SSR).
+ */
 export function tradeRpcUrl(): string {
   return readTradeRpcFromEnv() ?? rpcUrl;
 }
 
+/**
+ * WSS Alchemy — Flashblocks `newHeads` (~200ms) for trade confirm only.
+ * Set NEXT_PUBLIC_TRADE_WSS_URL explicitly (do not rely on auto https→wss in production).
+ */
 export function tradeWsRpcUrl(): string {
   const explicit = readTradeWsFromEnv();
   if (explicit) return explicit;
@@ -65,6 +73,11 @@ export function isTradeRpcConfigured(): boolean {
   return Boolean(readTradeRpcFromEnv());
 }
 
+export function isTradeWssConfigured(): boolean {
+  return Boolean(readTradeWsFromEnv());
+}
+
+/** Fast buy/sell path: Base chain + dedicated TRADE_RPC_URL. */
 export function isTradeFlashblocksActive(): boolean {
   return isPumpFlashblocksEnabled() && isTradeRpcConfigured();
 }
@@ -80,6 +93,7 @@ export function getFlashblocksReceiptQueryConfig(): {
   };
 }
 
+/** HTTPS trade client — UserOp gas reads + receipt HTTP fallback. */
 export function createTradeHttpPublicClient(): PublicClient {
   return createPublicClient({
     chain: pumpChain,
@@ -88,11 +102,16 @@ export function createTradeHttpPublicClient(): PublicClient {
   });
 }
 
+/** WSS trade client — Flashblocks block stream (browser only). */
 export function createTradeWebSocketPublicClient(): PublicClient {
-  const transport =
-    typeof window !== "undefined" && isTradeFlashblocksActive()
-      ? webSocket(tradeWsRpcUrl(), { reconnect: true, timeout: 30_000 })
-      : http(tradeRpcUrl(), { timeout: 30_000 });
+  const useWs =
+    typeof window !== "undefined" &&
+    isTradeFlashblocksActive() &&
+    isTradeWssConfigured();
+
+  const transport = useWs
+    ? webSocket(tradeWsRpcUrl(), { reconnect: true, timeout: 30_000 })
+    : http(tradeRpcUrl(), { timeout: 30_000 });
 
   return createPublicClient({
     chain: pumpChain,
@@ -101,15 +120,48 @@ export function createTradeWebSocketPublicClient(): PublicClient {
   });
 }
 
-export async function waitForFlashblocksTransactionReceiptWs(
+/**
+ * Wait for preconfirmed receipt via WSS newHeads (fast) or HTTP poll (fallback).
+ * Returns the receipt so the UI does not need a second waiter.
+ */
+export async function waitForFlashblocksTransactionReceipt(
   hash: Hash,
-  options?: { timeout?: number; client?: PublicClient }
-): Promise<void> {
-  const client = options?.client ?? createTradeWebSocketPublicClient();
+  options?: { timeout?: number; client?: PublicClient; preferWs?: boolean }
+): Promise<TransactionReceipt> {
   const timeout = options?.timeout ?? 60_000;
+  const preferWs =
+    options?.preferWs !== false &&
+    typeof window !== "undefined" &&
+    isTradeWssConfigured();
+
+  if (preferWs) {
+    try {
+      return await waitForFlashblocksTransactionReceiptWs(hash, {
+        timeout,
+        client: options?.client ?? createTradeWebSocketPublicClient(),
+      });
+    } catch {
+      // fall through to HTTP
+    }
+  }
+
+  const client = options?.client ?? createTradeHttpPublicClient();
+  return client.waitForTransactionReceipt({
+    hash,
+    confirmations: FLASHBLOCKS_CONFIRMATIONS,
+    pollingInterval: FLASHBLOCKS_POLL_MS,
+    timeout,
+  });
+}
+
+async function waitForFlashblocksTransactionReceiptWs(
+  hash: Hash,
+  options: { timeout: number; client: PublicClient }
+): Promise<TransactionReceipt> {
+  const { client, timeout } = options;
   const deadline = Date.now() + timeout;
 
-  await new Promise<void>((resolve, reject) => {
+  return new Promise<TransactionReceipt>((resolve, reject) => {
     let settled = false;
     let unwatch: (() => void) | undefined;
 
@@ -130,7 +182,7 @@ export async function waitForFlashblocksTransactionReceiptWs(
       try {
         const receipt = await client.getTransactionReceipt({ hash });
         if (receipt) {
-          finish(() => resolve());
+          finish(() => resolve(receipt));
         }
       } catch {
         // receipt not available yet

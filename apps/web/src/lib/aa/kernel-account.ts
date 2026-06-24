@@ -85,14 +85,15 @@ export function createPumpPublicClient(): PublicClient {
 
 export function createKernelClientFromAccount(
   account: NonNullable<KernelAccountClient["account"]>,
-  publicClient: PublicClient
+  publicClient: PublicClient,
+  options?: { fastPolling?: boolean }
 ): KernelAccountClient {
   return createKernelAccountClient({
     account,
     chain: pumpChain,
     bundlerTransport: createBundlerTransport(),
     client: publicClient,
-    pollingInterval: 2_000,
+    pollingInterval: options?.fastPolling ? 200 : 2_000,
     userOperation: createKernelUserOperationConfig(publicClient),
   });
 }
@@ -112,5 +113,5 @@ export async function withdrawFromKernelClient(
     to,
     value,
     data: "0x",
-  });
+  }).then((r) => r.hash);
 }

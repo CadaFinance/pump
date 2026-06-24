@@ -5,14 +5,14 @@ import {
   waitForUserOperationReceipt,
 } from "viem/account-abstraction";
 import { getAction } from "viem/utils";
-import type { Hash, PublicClient } from "viem";
+import type { Hash, PublicClient, TransactionReceipt } from "viem";
 import { bundlerDebug, tradeBundlerLog } from "@/lib/aa/bundler-debug";
 import { entryPoint } from "@/lib/aa/kernel-account";
 import {
   createTradeWebSocketPublicClient,
   FLASHBLOCKS_POLL_MS,
   isTradeFlashblocksActive,
-  waitForFlashblocksTransactionReceiptWs,
+  waitForFlashblocksTransactionReceipt,
 } from "@/config/flashblocks";
 
 const CONFIRM_TIMEOUT_MS = 180_000;
@@ -21,6 +21,11 @@ const LEGACY_POLL_MS = 2_000;
 export type UserOpConfirmationOptions = {
   /** Base Flashblocks fast path — trade buy/sell only. */
   flashblocks?: boolean;
+};
+
+export type UserOpConfirmationResult = {
+  txHash: Hash;
+  receipt?: TransactionReceipt;
 };
 
 function fastConfirmEnabled(options?: UserOpConfirmationOptions): boolean {
@@ -33,6 +38,20 @@ function pollIntervalMs(options?: UserOpConfirmationOptions): number {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function attachFlashblocksReceipt(
+  txHash: Hash,
+  deadline: number,
+  options?: UserOpConfirmationOptions
+): Promise<TransactionReceipt | undefined> {
+  if (!fastConfirmEnabled(options)) return undefined;
+  const remaining = deadline - Date.now();
+  if (remaining <= 0) return undefined;
+  return waitForFlashblocksTransactionReceipt(txHash, {
+    timeout: Math.min(remaining, 15_000),
+    client: createTradeWebSocketPublicClient(),
+  });
 }
 
 async function getUserOpEventChunked(
@@ -67,7 +86,7 @@ async function waitViaEntryPointLogs(
   fromBlock: bigint,
   deadline: number,
   options?: UserOpConfirmationOptions
-): Promise<Hash> {
+): Promise<UserOpConfirmationResult> {
   const pollMs = pollIntervalMs(options);
 
   while (Date.now() < deadline) {
@@ -84,13 +103,8 @@ async function waitViaEntryPointLogs(
         if (!log.args.success) {
           throw new Error(`UserOperation reverted on-chain (${userOpHash})`);
         }
-        if (fastConfirmEnabled(options)) {
-          await waitForFlashblocksTransactionReceiptWs(txHash, {
-            timeout: Math.min(deadline - Date.now(), 15_000),
-            client: createTradeWebSocketPublicClient(),
-          });
-        }
-        return txHash;
+        const receipt = await attachFlashblocksReceipt(txHash, deadline, options);
+        return { txHash, receipt };
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -111,7 +125,7 @@ async function waitViaBundlerReceipt(
   userOpHash: Hash,
   deadline: number,
   options?: UserOpConfirmationOptions
-): Promise<Hash> {
+): Promise<UserOpConfirmationResult> {
   const pollMs = pollIntervalMs(options);
 
   while (Date.now() < deadline) {
@@ -143,13 +157,8 @@ async function waitViaBundlerReceipt(
       }
 
       const txHash = receipt.receipt.transactionHash;
-      if (fastConfirmEnabled(options)) {
-        await waitForFlashblocksTransactionReceiptWs(txHash, {
-          timeout: Math.min(remaining, 15_000),
-          client: createTradeWebSocketPublicClient(),
-        });
-      }
-      return txHash;
+      const fbReceipt = await attachFlashblocksReceipt(txHash, deadline, options);
+      return { txHash, receipt: fbReceipt };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       const lower = message.toLowerCase();
@@ -173,9 +182,7 @@ async function waitViaFlashblocksBundlerPoll(
   client: KernelAccountClient,
   userOpHash: Hash,
   deadline: number
-): Promise<Hash> {
-  const fbClient = createTradeWebSocketPublicClient();
-
+): Promise<UserOpConfirmationResult> {
   while (Date.now() < deadline) {
     try {
       const receipt = await getAction(
@@ -194,13 +201,13 @@ async function waitViaFlashblocksBundlerPoll(
         }
 
         const txHash = receipt.receipt.transactionHash;
-        await waitForFlashblocksTransactionReceiptWs(txHash, {
+        const fbReceipt = await waitForFlashblocksTransactionReceipt(txHash, {
           timeout: Math.min(deadline - Date.now(), 15_000),
-          client: fbClient,
+          client: createTradeWebSocketPublicClient(),
         });
 
         tradeBundlerLog("confirmed via Flashblocks WSS", { userOpHash, txHash });
-        return txHash;
+        return { txHash, receipt: fbReceipt };
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -216,14 +223,14 @@ async function waitViaFlashblocksBundlerPoll(
   throw new Error(`Timed out waiting for Flashblocks UserOperation receipt (${userOpHash})`);
 }
 
-/** Bundler receipt OR EntryPoint logs — whichever confirms first (Skandha receipt often lags on BSC). */
+/** Bundler receipt OR EntryPoint logs OR Flashblocks poll — whichever confirms first. */
 export async function waitForUserOpConfirmation(
   client: KernelAccountClient,
   publicClient: PublicClient,
   userOpHash: Hash,
   fromBlock: bigint,
   options?: UserOpConfirmationOptions
-): Promise<Hash> {
+): Promise<UserOpConfirmationResult> {
   const deadline = Date.now() + CONFIRM_TIMEOUT_MS;
   tradeBundlerLog("waiting confirmation", {
     userOpHash,
@@ -232,14 +239,15 @@ export async function waitForUserOpConfirmation(
     flashblocks: fastConfirmEnabled(options),
   });
 
-  const racers: Promise<Hash>[] = [
-    waitViaBundlerReceipt(client, userOpHash, deadline, options),
-    waitViaEntryPointLogs(publicClient, userOpHash, fromBlock, deadline, options),
-  ];
-
-  if (fastConfirmEnabled(options)) {
-    racers.push(waitViaFlashblocksBundlerPoll(client, userOpHash, deadline));
-  }
+  const racers: Promise<UserOpConfirmationResult>[] = fastConfirmEnabled(options)
+    ? [
+        waitViaFlashblocksBundlerPoll(client, userOpHash, deadline),
+        waitViaEntryPointLogs(publicClient, userOpHash, fromBlock, deadline, options),
+      ]
+    : [
+        waitViaBundlerReceipt(client, userOpHash, deadline, options),
+        waitViaEntryPointLogs(publicClient, userOpHash, fromBlock, deadline, options),
+      ];
 
   try {
     return await Promise.any(racers);

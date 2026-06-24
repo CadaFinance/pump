@@ -14,11 +14,12 @@ export async function getScwNativeBalance(
 
 export async function assertScwReadyForUserOp(
   scwAddress: Address,
-  callValueWei: bigint
+  callValueWei: bigint,
+  publicClient?: PublicClient
 ): Promise<void> {
-  const publicClient = createPumpPublicClient();
-  const balance = await getScwNativeBalance(scwAddress, publicClient);
-  const gasPrice = await publicClient.getGasPrice();
+  const client = publicClient ?? createPumpPublicClient();
+  const balance = await getScwNativeBalance(scwAddress, client);
+  const gasPrice = await client.getGasPrice();
   const gasReserve = bufferedGasCostWei(MIN_USER_OP_GAS_UNITS, gasPrice);
   const required = callValueWei + gasReserve;
 

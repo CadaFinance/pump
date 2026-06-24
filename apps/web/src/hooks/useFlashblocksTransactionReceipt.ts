@@ -15,7 +15,7 @@ type Params = {
   query?: { enabled?: boolean };
 };
 
-/** Trade-only receipt waiter on Alchemy Flashblocks RPC (~200ms, 0 confirmations). */
+/** Fallback receipt waiter when kernel hook did not return receipt inline. */
 export function useFlashblocksTransactionReceipt({ hash, query }: Params) {
   const enabled = query?.enabled !== false && Boolean(hash);
   const useFast = isTradeFlashblocksActive();

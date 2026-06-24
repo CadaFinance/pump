@@ -4,15 +4,15 @@ import { useCallback, useState } from "react";
 import type { Abi, Address, Hash, TransactionReceipt } from "viem";
 import { encodeFunctionData } from "viem";
 import { usePumpWallet } from "@/components/wallet/PumpWalletProvider";
+import { isTradeFlashblocksActive } from "@/config/flashblocks";
 import { tradeBundlerLog } from "@/lib/aa/bundler-debug";
 import { resolveTradeKernelClients } from "@/lib/aa/kernel-trade-clients";
 import {
   sendKernelTransaction,
   type KernelTransactionResult,
 } from "@/lib/aa/send-kernel-transaction";
-import type { UserOpConfirmationOptions } from "@/lib/aa/wait-user-op-confirmation";
 
-export type KernelWriteContractParams = {
+export type KernelTradeWriteParams = {
   address: Address;
   abi: Abi;
   functionName: string;
@@ -21,21 +21,26 @@ export type KernelWriteContractParams = {
   chainId?: number;
 };
 
-/** Kernel SCW writes — bypasses wagmi eth_sendTransaction (invalid UserOp fields). */
-export function useKernelWriteContract() {
+/**
+ * Buy/sell only — trade HTTPS RPC for UserOp prepare + WSS Flashblocks confirm.
+ * Returns receipt in the same tick as txHash (no second wagmi waiter).
+ */
+export function useKernelTradeWriteContract() {
   const { kernelClient } = usePumpWallet();
-  const [data, setData] = useState<Hash | undefined>();
+  const [txHash, setTxHash] = useState<Hash | undefined>();
+  const [receipt, setReceipt] = useState<TransactionReceipt | undefined>();
   const [isPending, setIsPending] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
   const reset = useCallback(() => {
-    setData(undefined);
+    setTxHash(undefined);
+    setReceipt(undefined);
     setError(null);
     setIsPending(false);
   }, []);
 
-  const writeContract = useCallback(
-    (params: KernelWriteContractParams, options?: UserOpConfirmationOptions) => {
+  const tradeWrite = useCallback(
+    (params: KernelTradeWriteParams) => {
       if (!kernelClient) {
         setError(new Error("Sign in to trade."));
         return;
@@ -43,6 +48,7 @@ export function useKernelWriteContract() {
 
       setIsPending(true);
       setError(null);
+      setReceipt(undefined);
 
       void (async () => {
         const t0 = performance.now();
@@ -50,19 +56,18 @@ export function useKernelWriteContract() {
           if (!kernelClient.account) {
             throw new Error("Smart account not ready.");
           }
-          const flashblocks = Boolean(options?.flashblocks);
+
+          const flashblocks = isTradeFlashblocksActive();
           const { kernelClient: activeClient, publicClient } = resolveTradeKernelClients(
             kernelClient,
             flashblocks
           );
 
-          tradeBundlerLog("sendTransaction start", {
+          tradeBundlerLog("tradeWrite start", {
             scw: activeClient.account!.address,
             to: params.address,
             fn: params.functionName,
-            value: params.value?.toString() ?? "0",
             flashblocks,
-            tradeRpc: flashblocks,
           });
 
           const result: KernelTransactionResult = await sendKernelTransaction(
@@ -77,18 +82,22 @@ export function useKernelWriteContract() {
               }),
               value: params.value ?? 0n,
             },
-            options
+            { flashblocks }
           );
 
-          tradeBundlerLog("sendTransaction done", {
+          tradeBundlerLog("tradeWrite done", {
             txHash: result.hash,
             hasReceipt: Boolean(result.receipt),
             ms: Math.round(performance.now() - t0),
           });
-          setData(result.hash);
+
+          setTxHash(result.hash);
+          if (result.receipt) {
+            setReceipt(result.receipt);
+          }
         } catch (err) {
           const error = err instanceof Error ? err : new Error(String(err));
-          tradeBundlerLog("sendTransaction failed", {
+          tradeBundlerLog("tradeWrite failed", {
             message: error.message,
             ms: Math.round(performance.now() - t0),
           });
@@ -101,5 +110,5 @@ export function useKernelWriteContract() {
     [kernelClient]
   );
 
-  return { writeContract, data, isPending, reset, error };
+  return { tradeWrite, txHash, receipt, isPending, reset, error };
 }

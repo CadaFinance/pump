@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { formatEther, formatUnits, parseEther, parseSignature, parseUnits } from "viem";
 import type { TransactionReceipt } from "viem";
 import { useOpenConnectModal } from "@/hooks/useOpenConnectModal";
@@ -18,11 +18,11 @@ import {
   useSignTypedData,
 } from "wagmi";
 import { useFlashblocksTransactionReceipt } from "@/hooks/useFlashblocksTransactionReceipt";
+import { useKernelTradeWriteContract } from "@/hooks/useKernelTradeWriteContract";
 import {
-  useKernelWriteContract,
-  type KernelWriteContractParams,
-} from "@/hooks/useKernelWriteContract";
-import { isTradeFlashblocksActive } from "@/config/flashblocks";
+  createTradeHttpPublicClient,
+  isTradeFlashblocksActive,
+} from "@/config/flashblocks";
 import { usePumpWallet } from "@/components/wallet/PumpWalletProvider";
 import { contracts, pumpChain } from "@/config/chain";
 import { erc20Abi, maxUint256 } from "@/lib/abis/erc20";
@@ -443,18 +443,22 @@ export function TradePanel({
   const buyQuoteOut = localBuyQuoteOut;
   const sellQuoteOut = localSellQuoteOut;
 
-  const { writeContract, data: txHash, isPending, reset, error: writeError } =
-    useKernelWriteContract();
-  const tradeWrite = useCallback(
-    (params: KernelWriteContractParams) => writeContract(params, { flashblocks: true }),
-    [writeContract]
-  );
-  const { data: receipt, isLoading: isConfirming } = useFlashblocksTransactionReceipt({
-    hash: txHash,
-    query: { enabled: Boolean(txHash) },
-  });
-  const activeReceipt = receipt;
+  const {
+    tradeWrite,
+    txHash,
+    receipt: kernelReceipt,
+    isPending,
+    reset,
+    error: writeError,
+  } = useKernelTradeWriteContract();
   const fastTradeConfirm = isTradeFlashblocksActive();
+  const { data: fallbackReceipt, isLoading: isFallbackReceiptLoading } =
+    useFlashblocksTransactionReceipt({
+      hash: txHash,
+      query: { enabled: Boolean(txHash && !kernelReceipt) },
+    });
+  const activeReceipt = kernelReceipt ?? fallbackReceipt;
+  const isConfirming = Boolean(txHash && !activeReceipt && isFallbackReceiptLoading);
 
   useEffect(() => {
     if (!writeError) return;
@@ -1088,9 +1092,14 @@ export function TradePanel({
     });
   }
 
+  async function assertScwForTrade(scw: Address, callValueWei: bigint) {
+    const client = fastTradeConfirm ? createTradeHttpPublicClient() : undefined;
+    await assertScwReadyForUserOp(scw, callValueWei, client);
+  }
+
   async function submitBuyWriteContract(buyParams: SessionBuyParams) {
     if (address) {
-      await assertScwReadyForUserOp(address, buyParams.value);
+      await assertScwForTrade(address, buyParams.value);
     }
     setPendingAction("buy");
     tradeWrite({
@@ -1110,7 +1119,7 @@ export function TradePanel({
     usePermit: boolean
   ) {
     if (address) {
-      await assertScwReadyForUserOp(address, 0n);
+      await assertScwForTrade(address, 0n);
     }
     const params = usePermit ? await buildSellParamsWithPermit(sellParams, true) : sellParams;
     setPendingAction("sell");

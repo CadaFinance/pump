@@ -58,21 +58,14 @@ function feesFromChainGasPrice(gasPrice: bigint) {
 export async function resolveUserOpGasPrice(
   chainGasPrice: () => Promise<bigint>
 ): Promise<{ maxFeePerGas: bigint; maxPriorityFeePerGas: bigint }> {
-  let chainFees: { maxFeePerGas: bigint; maxPriorityFeePerGas: bigint } | null = null;
-
-  try {
-    const gasPrice = await chainGasPrice();
-    if (gasPrice > 0n) {
-      chainFees = feesFromChainGasPrice(gasPrice);
-    }
-  } catch {
-    // fall through to bundler tiers
-  }
-
-  const bundler = await fetchPimlicoUserOpGasPrice().catch(() => null);
+  const [chainFees, bundler] = await Promise.all([
+    chainGasPrice()
+      .then((gasPrice) => (gasPrice > 0n ? feesFromChainGasPrice(gasPrice) : null))
+      .catch(() => null),
+    fetchPimlicoUserOpGasPrice().catch(() => null),
+  ]);
 
   if (chainFees && bundler) {
-    // Bundler enforces a floor (e.g. Alto min 1.2 gwei); chain RPC can be lower — take the higher.
     return clampUserOpFees(
       maxBigInt(chainFees.maxFeePerGas, bundler.maxFeePerGas),
       maxBigInt(chainFees.maxPriorityFeePerGas, bundler.maxPriorityFeePerGas)
