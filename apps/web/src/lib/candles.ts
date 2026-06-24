@@ -883,6 +883,12 @@ export function pinTailCandleToLiveMark(
   const existing = candles[targetIdx];
   if (!existing) return { candles, volumes };
 
+  const bucketVolume = volumes[targetIdx]?.value ?? 0;
+  // Never paint ghost candles on idle gap-fill buckets — only sync buckets with trades.
+  if (bucketVolume <= 0) {
+    return { candles, volumes };
+  }
+
   const priorClose = targetIdx > 0 ? candles[targetIdx - 1]!.close : undefined;
   const close = liveMarkBnb;
   const open = coherentOpenForBar(existing.open, close, priorClose);
