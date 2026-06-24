@@ -568,10 +568,14 @@ export function TradePanel({
 
   useEffect(() => {
     if (!writeError) return;
-    if (isBackgroundConfirming) return;
+    if (optimisticPendingRef.current) {
+      rollbackInstantOptimistic();
+      pendingSellRef.current = null;
+    } else if (isBackgroundConfirming) {
+      return;
+    }
     pendingTradeSideRef.current = null;
     setPendingAction(null);
-    pendingSellRef.current = null;
     handledReceiptHashRef.current = null;
     setSubmitSuccess(null);
     setError(formatTradeError(writeError));
@@ -723,6 +727,11 @@ export function TradePanel({
   const buyGasReserveWei = side === "buy" ? gasReserveWei : 0n;
   const sellGasReserveWei = side === "sell" ? gasReserveWei : 0n;
 
+  const legacyApproveGasReserveWei = useMemo(() => {
+    if (!needsLegacyApproval || gasPrice == null || gasPrice <= 0n) return 0n;
+    return bufferCostWei(APPROVE_GAS_FALLBACK * gasPrice);
+  }, [needsLegacyApproval, gasPrice]);
+
   const maxBuySpendWei = useMemo(() => {
     if (!isConnected || bnbBalance === undefined || bnbBalance.value <= buyGasReserveWei) {
       return 0n;
@@ -800,6 +809,7 @@ export function TradePanel({
       tokenBalance,
       buyGasReserveWei,
       sellGasReserveWei,
+      legacyApproveGasReserveWei,
       maxBuySpendWei,
       gasPriceWei: gasPrice,
     });
@@ -820,6 +830,7 @@ export function TradePanel({
     tokenBalance,
     buyGasReserveWei,
     sellGasReserveWei,
+    legacyApproveGasReserveWei,
     maxBuySpendWei,
     gasPrice,
   ]);
@@ -1327,7 +1338,8 @@ export function TradePanel({
   async function hardValidateBeforeSend(
     tradeSide: "buy" | "sell",
     callValueWei: bigint,
-    sellAmountWei?: bigint
+    sellAmountWei?: bigint,
+    extraGasReserveWei = 0n
   ) {
     if (!address || bnbBalance === undefined) {
       throw new Error("Wallet balance not ready.");
@@ -1340,7 +1352,7 @@ export function TradePanel({
     const tokenWei =
       tradeSide === "sell" ? (tokenFresh?.data ?? tokenBalance) : tokenBalance;
     const gasReserve =
-      tradeSide === "buy" ? buyGasReserveWei : sellGasReserveWei;
+      (tradeSide === "buy" ? buyGasReserveWei : sellGasReserveWei) + extraGasReserveWei;
 
     await hardValidateInstantTrade({
       scwAddress: address,
@@ -1410,6 +1422,54 @@ export function TradePanel({
     });
   }
 
+  function dispatchInstantLegacyApproveSell(
+    sellParams: SessionSellParams,
+    gate: InstantTradeGateSell
+  ) {
+    if (!address || !bondingCurve) return;
+    const pendingId = createOptimisticPendingId();
+    optimisticPendingRef.current = { id: pendingId, side: "sell" };
+    pendingSellRef.current = {
+      amountWei: sellParams.amountWei,
+      minBnbOut: sellParams.minBnbOut,
+    };
+    const preview = buildOptimisticSellPreview({
+      pendingId,
+      tokenAddress,
+      traderAddress: address,
+      sellTokenWei: gate.sellTokenWei,
+      zugOutWei: gate.zugOut,
+      feeZug: gate.feeZug,
+      curve: bondingCurve,
+    });
+    applyInstantOptimisticUi(preview, "sell");
+    queueMicrotask(() => {
+      void (async () => {
+        try {
+          await hardValidateBeforeSend(
+            "sell",
+            0n,
+            sellParams.amountWei,
+            legacyApproveGasReserveWei
+          );
+          setPendingAction("approve");
+          tradeTraceStep("ux.legacy_approve.start");
+          tradeWrite({
+            address: tokenAddress,
+            abi: erc20Abi,
+            functionName: "approve",
+            args: [contracts.bondingCurveManager, maxUint256],
+            chainId: pumpChain.id,
+          });
+        } catch (err) {
+          pendingSellRef.current = null;
+          setPendingAction(null);
+          handleInstantTradeFailure(err);
+        }
+      })();
+    });
+  }
+
   function tryDispatchInstantTrade(
     buyParams?: SessionBuyParams,
     sellParams?: SessionSellParams,
@@ -1424,7 +1484,11 @@ export function TradePanel({
       return true;
     }
     if (instantTradeGate.side === "sell" && sellParams) {
-      dispatchInstantSell(sellParams, instantTradeGate, usePermit);
+      if (needsLegacyApproval) {
+        dispatchInstantLegacyApproveSell(sellParams, instantTradeGate);
+      } else {
+        dispatchInstantSell(sellParams, instantTradeGate, usePermit);
+      }
       return true;
     }
     return false;
@@ -1696,6 +1760,25 @@ export function TradePanel({
           amountWei: sellTokenWei,
           minBnbOut,
         };
+        pendingTradeReferrerRef.current = tradeReferrer;
+        quoteUsdAtSubmitRef.current = estimatedQuotePriceUsd;
+
+        if (!loadTradeAutoConfirm()) {
+          tradeTraceStep("ux.confirm_modal.open");
+          setPendingTrade({
+            side: "sell",
+            spendLabel: `${formatReceiveAmount(formatUnits(sellTokenWei, 18))} ${symbol}`,
+            receiveLabel: `${formatBnbReadable(Number(formatEther(sellQuoteOut)))} BNB`,
+            sellParams: baseSellParams,
+            usePermit: false,
+          });
+          setTradeConfirmError(null);
+          setTradeConfirmOpen(true);
+          return;
+        }
+
+        if (tryDispatchInstantTrade(undefined, baseSellParams, false)) return;
+
         setPendingAction("approve");
         tradeWrite({
           address: tokenAddress,
@@ -1790,6 +1873,11 @@ export function TradePanel({
           };
           pendingTradeReferrerRef.current = sellParams.referrer ?? null;
           quoteUsdAtSubmitRef.current = estimatedQuotePriceUsd;
+          if (tryDispatchInstantTrade(undefined, sellParams, false)) {
+            setTradeConfirmOpen(false);
+            setPendingTrade(null);
+            return;
+          }
           setPendingAction("approve");
           tradeWrite({
             address: tokenAddress,

@@ -31,6 +31,8 @@ export type InstantTradeGateInput = {
   tokenBalance?: bigint;
   buyGasReserveWei: bigint;
   sellGasReserveWei: bigint;
+  /** Extra gas when sell requires a separate ERC20 approve tx (SCW path). */
+  legacyApproveGasReserveWei?: bigint;
   maxBuySpendWei: bigint;
   gasPriceWei?: bigint;
 };
@@ -72,11 +74,18 @@ function scwGasFloor(gasPriceWei?: bigint): bigint {
   return bufferedGasCostWei(SCW_MIN_GAS_UNITS, price);
 }
 
-function conservativeGasReserve(side: "buy" | "sell", input: InstantTradeGateInput): bigint {
+function conservativeGasReserve(
+  side: "buy" | "sell",
+  input: InstantTradeGateInput
+): bigint {
   const panelReserve =
     side === "buy" ? input.buyGasReserveWei : input.sellGasReserveWei;
+  const legacyApprove =
+    side === "sell" && input.needsLegacyApproval
+      ? (input.legacyApproveGasReserveWei ?? 0n)
+      : 0n;
   const floor = scwGasFloor(input.gasPriceWei);
-  const base = panelReserve > floor ? panelReserve : floor;
+  const base = panelReserve + legacyApprove > floor ? panelReserve + legacyApprove : floor;
   return gasReserveWithHeadroom(base);
 }
 
@@ -118,9 +127,6 @@ export function evaluateInstantTradeGate(
     return { ok: true, side: "buy", submitValue, tokenOut, feeZug };
   }
 
-  if (input.needsLegacyApproval) {
-    return { ok: false, reason: "needs_approve" };
-  }
   if (input.sellTokenWei <= 0n) return { ok: false, reason: "zero_amount" };
   if (input.tokenBalance === undefined) return { ok: false, reason: "token_unknown" };
   if (input.sellTokenWei > input.tokenBalance) {
@@ -129,9 +135,12 @@ export function evaluateInstantTradeGate(
   if (input.bnbBalance < gasReserve) {
     return { ok: false, reason: "insufficient_gas" };
   }
-  if (input.sellUsesPermit && !input.allowanceSufficient) {
-    // Permit path signs in background — allowance not required.
-  } else if (!input.sellUsesPermit && !input.allowanceSufficient) {
+
+  if (input.needsLegacyApproval) {
+    // SCW cannot EIP-2612 permit — approve + sell; gas reserve includes both txs.
+  } else if (input.sellUsesPermit) {
+    // Permit signs in background — allowance not required on-chain yet.
+  } else if (!input.allowanceSufficient) {
     return { ok: false, reason: "allowance" };
   }
 
