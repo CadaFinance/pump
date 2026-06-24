@@ -154,6 +154,45 @@ function scaleVolumeBars(volumes: VolumeBar[], scale: number): VolumeBar[] {
   return volumes.map((v) => ({ ...v, value: v.value * scale }));
 }
 
+function commonCandlePrefixByTime(a: CandleBar[], b: CandleBar[]): number {
+  const n = Math.min(a.length, b.length);
+  let i = 0;
+  while (i < n && a[i]!.time === b[i]!.time) i++;
+  return i;
+}
+
+function candleToChartData(c: CandleBar): CandlestickData {
+  return {
+    time: c.time as CandlestickData["time"],
+    open: c.open,
+    high: c.high,
+    low: c.low,
+    close: c.close,
+  };
+}
+
+function volumeToChartData(v: VolumeBar): HistogramData {
+  return {
+    time: v.time as HistogramData["time"],
+    value: v.value,
+    color: v.color,
+  };
+}
+
+/** True when we can patch tail buckets with series.update() instead of setData(). */
+function canIncrementalChartPatch(prev: CandleBar[], next: CandleBar[]): boolean {
+  if (prev.length === 0 || next.length === 0) return false;
+  if (next.length < prev.length) return false;
+  const prefix = commonCandlePrefixByTime(prev, next);
+  return prefix >= prev.length - 1;
+}
+
+function incrementalPatchStartIndex(prev: CandleBar[], next: CandleBar[]): number {
+  const prefix = commonCandlePrefixByTime(prev, next);
+  if (prefix === 0 && prev.length > 0 && next.length > 0) return 0;
+  return Math.max(0, Math.min(prefix, prev.length) - 1);
+}
+
 export function PriceChart({
   tokenAddress,
   symbol,
@@ -178,6 +217,9 @@ export function PriceChart({
   const shouldFitViewportRef = useRef(true);
   const lastTradeBucketCountRef = useRef(0);
   const prevPriceScaleRef = useRef<number | null>(null);
+  const renderedCandlesRef = useRef<CandleBar[]>([]);
+  const renderedVolumesRef = useRef<VolumeBar[]>([]);
+  const renderedFingerprintRef = useRef("");
 
   const [timeInterval, setTimeInterval] = useState<CandleInterval>("1m");
   const [currency, setCurrency] = useState<"usd" | "mcap">("usd");
@@ -354,7 +396,15 @@ export function PriceChart({
   }, [scheduleFitViewport]);
 
   useEffect(() => {
-    if (storedCandles.length > 0 || candleSource === "db") {
+    renderedCandlesRef.current = [];
+    renderedVolumesRef.current = [];
+    renderedFingerprintRef.current = "";
+    lastTradeBucketCountRef.current = 0;
+    shouldFitViewportRef.current = true;
+  }, [tokenAddress]);
+
+  useEffect(() => {
+    if (storedCandles.length > 0 && renderedCandlesRef.current.length === 0) {
       shouldFitViewportRef.current = true;
     }
   }, [storedCandles.length, candleSource, tokenAddress]);
@@ -578,35 +628,63 @@ export function PriceChart({
     });
   }, [candles, currency]);
 
-  // Push candle data — fit viewport only when needed, never on every poll.
+  // Push candle data — setData on structural changes; series.update() for live tail.
   useEffect(() => {
     if (!ready || !candleSeriesRef.current || !volumeSeriesRef.current) return;
 
-    candleSeriesRef.current.applyOptions({ priceFormat });
+    const candleSeries = candleSeriesRef.current;
+    const volumeSeries = volumeSeriesRef.current;
+    candleSeries.applyOptions({ priceFormat });
 
-    const candleData: CandlestickData[] = candlesForChart.map((c) => ({
-      time: c.time as CandlestickData["time"],
-      open: c.open,
-      high: c.high,
-      low: c.low,
-      close: c.close,
-    }));
+    const nextCandles = candlesForChart;
+    const nextVolumes = volumesForChart;
+    const fingerprint = `${tokenAddress}|${timeInterval}|${currency}|${priceScale}`;
+    const prevCandles = renderedCandlesRef.current;
 
-    const volumeData: HistogramData[] = volumesForChart.map((v) => ({
-      time: v.time as HistogramData["time"],
-      value: v.value,
-      color: v.color,
-    }));
+    const applyFullSeries = () => {
+      const candleData = nextCandles.map(candleToChartData);
+      const volumeData = nextVolumes.map(volumeToChartData);
+      candleSeries.setData(candleData);
+      volumeSeries.setData(volumeData);
+      renderedCandlesRef.current = nextCandles;
+      renderedVolumesRef.current = nextVolumes;
+      renderedFingerprintRef.current = fingerprint;
+    };
 
-    candleSeriesRef.current.setData(candleData);
-    volumeSeriesRef.current.setData(volumeData);
+    if (nextCandles.length === 0) {
+      candleSeries.setData([]);
+      volumeSeries.setData([]);
+      renderedCandlesRef.current = [];
+      renderedVolumesRef.current = [];
+      renderedFingerprintRef.current = fingerprint;
+      return;
+    }
 
-    if (candleData.length === 0) return;
+    const needsFullSet =
+      shouldFitViewportRef.current ||
+      fingerprint !== renderedFingerprintRef.current ||
+      prevCandles.length === 0 ||
+      !canIncrementalChartPatch(prevCandles, nextCandles);
+
+    if (needsFullSet) {
+      applyFullSeries();
+    } else {
+      const startIdx = incrementalPatchStartIndex(prevCandles, nextCandles);
+      for (let i = startIdx; i < nextCandles.length; i++) {
+        const candle = nextCandles[i];
+        const volume = nextVolumes[i];
+        if (!candle) continue;
+        candleSeries.update(candleToChartData(candle));
+        if (volume) volumeSeries.update(volumeToChartData(volume));
+      }
+      renderedCandlesRef.current = nextCandles;
+      renderedVolumesRef.current = nextVolumes;
+    }
 
     const ts = chartRef.current?.timeScale();
     if (!ts) return;
 
-    const tradeBucketCount = volumesForChart.filter((v) => v.value > 0).length;
+    const tradeBucketCount = nextVolumes.filter((v) => v.value > 0).length;
 
     if (shouldFitViewportRef.current) {
       scheduleFitViewport();
@@ -615,12 +693,21 @@ export function PriceChart({
       return;
     }
 
-    // Only follow realtime when a new traded bucket appears — not on gap-fill ticks.
     if (tradeBucketCount > lastTradeBucketCountRef.current) {
       ts.scrollToRealTime();
       lastTradeBucketCountRef.current = tradeBucketCount;
     }
-  }, [candlesForChart, volumesForChart, priceFormat, ready, scheduleFitViewport]);
+  }, [
+    candlesForChart,
+    volumesForChart,
+    priceFormat,
+    ready,
+    scheduleFitViewport,
+    tokenAddress,
+    timeInterval,
+    currency,
+    priceScale,
+  ]);
 
   const summaryValue =
     currency === "usd"
