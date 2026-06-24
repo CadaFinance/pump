@@ -46,8 +46,8 @@ export function startTradeTrace(
     steps: [],
   };
 
-  pushStep("ui.button_click", detail);
   console.info(`${PREFIX} ▶ trace=${id} side=${side}`, detail ?? {});
+  pushStep("ui.button_click", detail);
   return id;
 }
 

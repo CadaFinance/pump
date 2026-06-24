@@ -10,7 +10,10 @@ import { pumpChain, rpcUrl } from "@/config/chain";
 
 /** Base Flashblocks preconfirmation target (~200ms). */
 export const FLASHBLOCKS_POLL_MS = 200;
+export const FLASHBLOCKS_INCLUSION_POLL_MS = 100;
 export const FLASHBLOCKS_CONFIRMATIONS = 0;
+
+const receiptWaitInflight = new Map<string, Promise<TransactionReceipt>>();
 
 const BASE_MAINNET_CHAIN_ID = 8453;
 const BASE_SEPOLIA_CHAIN_ID = 84532;
@@ -125,6 +128,24 @@ export function createTradeWebSocketPublicClient(): PublicClient {
  * Returns the receipt so the UI does not need a second waiter.
  */
 export async function waitForFlashblocksTransactionReceipt(
+  hash: Hash,
+  options?: { timeout?: number; client?: PublicClient; preferWs?: boolean }
+): Promise<TransactionReceipt> {
+  const key = hash.toLowerCase();
+  const existing = receiptWaitInflight.get(key);
+  if (existing) return existing;
+
+  const promise = waitForFlashblocksTransactionReceiptInner(hash, options);
+  receiptWaitInflight.set(key, promise);
+  void promise.finally(() => {
+    if (receiptWaitInflight.get(key) === promise) {
+      receiptWaitInflight.delete(key);
+    }
+  });
+  return promise;
+}
+
+async function waitForFlashblocksTransactionReceiptInner(
   hash: Hash,
   options?: { timeout?: number; client?: PublicClient; preferWs?: boolean }
 ): Promise<TransactionReceipt> {

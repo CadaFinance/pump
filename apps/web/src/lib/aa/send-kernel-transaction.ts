@@ -31,32 +31,34 @@ export async function sendKernelTransaction(
     throw new Error("Smart account not ready.");
   }
 
-  const submitT0 = performance.now();
-  tradeTraceStep("chain.get_block_number.start");
-  const fromBlock = await publicClient.getBlockNumber();
-  tradeTraceStep("chain.get_block_number.done", {
-    block: fromBlock.toString(),
-    ms: Math.round(performance.now() - submitT0),
-  });
-
-  const sendT0 = performance.now();
+  const parallelT0 = performance.now();
   tradeTraceStep("bundler.send_user_op.start", {
     to: call.to,
     value: call.value?.toString() ?? "0",
   });
+  tradeTraceStep("chain.get_block_number.start");
 
-  const userOpHash = await getAction(client, sendUserOperation, "sendUserOperation")({
-    account,
-    calls: [
-      {
-        to: call.to,
-        data: call.data ?? "0x",
-        value: call.value ?? 0n,
-      },
-    ],
-  });
+  const [fromBlock, userOpHash] = await Promise.all([
+    publicClient.getBlockNumber().then((block) => {
+      tradeTraceStep("chain.get_block_number.done", {
+        block: block.toString(),
+        ms: Math.round(performance.now() - parallelT0),
+      });
+      return block;
+    }),
+    getAction(client, sendUserOperation, "sendUserOperation")({
+      account,
+      calls: [
+        {
+          to: call.to,
+          data: call.data ?? "0x",
+          value: call.value ?? 0n,
+        },
+      ],
+    }),
+  ]);
 
-  const sendMs = Math.round(performance.now() - sendT0);
+  const sendMs = Math.round(performance.now() - parallelT0);
   tradeTraceStep("bundler.send_user_op.done", { userOpHash, ms: sendMs });
   tradeBundlerLog("userOp submitted", {
     userOpHash,
