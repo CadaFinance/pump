@@ -35,6 +35,7 @@ export type TradePublishPayload = {
     side: string;
     traderAddress: string;
     zugAmount: string;
+    feeZug?: string;
     tokenAmount: string;
     priceZug: string;
     txHash: string;

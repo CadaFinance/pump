@@ -12,6 +12,7 @@ export type TokenTradeWsPayload = {
     side: string;
     traderAddress: string;
     zugAmount: string;
+    feeZug?: string;
     tokenAmount: string;
     priceZug: string;
     txHash: string;
@@ -40,11 +41,17 @@ export function wsPayloadToTradeItem(payload: TokenTradeWsPayload): TradeItem | 
   const trade = payload.trade;
   if (!trade?.txHash || !trade.blockTime) return null;
 
+  const gross = Number(trade.zugAmount);
+  const fee = trade.feeZug != null ? Number(trade.feeZug) : 0;
+  const net = Math.max(0, gross - fee);
+
   return {
     id: trade.id || `${trade.txHash}:${trade.logIndex ?? 0}`,
     side: trade.side,
     traderAddress: trade.traderAddress.toLowerCase(),
     nativeAmount: trade.zugAmount,
+    feeBnb: trade.feeZug,
+    netBnb: String(net),
     tokenAmount: trade.tokenAmount,
     priceBnb: fillPriceBnbFromWsTrade(trade),
     txHash: trade.txHash.toLowerCase(),

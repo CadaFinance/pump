@@ -2,13 +2,16 @@ import { formatEther, formatUnits } from "viem";
 import type { Address } from "viem";
 import type { TradeItem } from "@/lib/db/launchpad";
 import type { ParsedTradeEvent } from "@/lib/launchpad-events";
-import type { BondingCurveState } from "@/lib/bonding-curve";
+import { spotPriceZugFromReserves, type BondingCurveState } from "@/lib/bonding-curve";
 
 export type OptimisticTradePreview = {
   pendingId: string;
   pendingTxHash: string;
   tradeItem: TradeItem;
   syntheticTrade: ParsedTradeEvent;
+  /** Bonding-curve spot (BNB/token) immediately before/after this trade. */
+  spotBeforeBnb: number;
+  spotAfterBnb: number;
 };
 
 function pendingTxHashFromId(pendingId: string): string {
@@ -28,6 +31,18 @@ export function buildOptimisticBuyPreview(params: {
   const reserveAfter = params.curve.reserveZug + netZug;
   const soldAfter = params.curve.soldTokens + params.tokenOutWei;
   const pendingTxHash = pendingTxHashFromId(params.pendingId);
+  const spotBeforeBnb = spotPriceZugFromReserves(
+    params.curve.reserveZug,
+    params.curve.soldTokens,
+    params.curve.virtualZugReserve,
+    params.curve.virtualTokenReserve
+  );
+  const spotAfterBnb = spotPriceZugFromReserves(
+    reserveAfter,
+    soldAfter,
+    params.curve.virtualZugReserve,
+    params.curve.virtualTokenReserve
+  );
 
   const syntheticTrade: ParsedTradeEvent = {
     token: params.tokenAddress,
@@ -66,6 +81,8 @@ export function buildOptimisticBuyPreview(params: {
     pendingTxHash,
     tradeItem,
     syntheticTrade,
+    spotBeforeBnb,
+    spotAfterBnb,
   };
 }
 
@@ -88,6 +105,18 @@ export function buildOptimisticSellPreview(params: {
       ? params.curve.soldTokens - params.sellTokenWei
       : 0n;
   const pendingTxHash = pendingTxHashFromId(params.pendingId);
+  const spotBeforeBnb = spotPriceZugFromReserves(
+    params.curve.reserveZug,
+    params.curve.soldTokens,
+    params.curve.virtualZugReserve,
+    params.curve.virtualTokenReserve
+  );
+  const spotAfterBnb = spotPriceZugFromReserves(
+    reserveAfter,
+    soldAfter,
+    params.curve.virtualZugReserve,
+    params.curve.virtualTokenReserve
+  );
 
   const syntheticTrade: ParsedTradeEvent = {
     token: params.tokenAddress,
@@ -126,5 +155,7 @@ export function buildOptimisticSellPreview(params: {
     pendingTxHash,
     tradeItem,
     syntheticTrade,
+    spotBeforeBnb,
+    spotAfterBnb,
   };
 }

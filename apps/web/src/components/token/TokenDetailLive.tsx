@@ -9,7 +9,7 @@ import {
   bondingCurveManagerAbi,
   bondingCurveSnapshotFromTuple,
 } from "@/lib/bonding-curve";
-import { resolveLatestSpotPriceBnb } from "@/lib/candles";
+import { resolveLatestSpotPriceBnb, sortTradesChronologically } from "@/lib/candles";
 import { resolveMarkPriceBnb } from "@/lib/mark-price";
 import {
   estimateFdvUsd,
@@ -178,14 +178,15 @@ function mergeLiveStats(
   let merged = chainCurve ? tokenFromCurve(base, chainCurve) : base;
 
   if (liveTrades.length > 0) {
-    const spotPrice = resolveLatestSpotPriceBnb(liveTrades);
+    const chronological = sortTradesChronologically(liveTrades);
+    const spotPrice = resolveLatestSpotPriceBnb(chronological);
     merged = {
       ...merged,
-      tradeCount: Math.max(merged.tradeCount, liveTrades.length),
+      tradeCount: Math.max(merged.tradeCount, chronological.length),
       lastPriceBnb:
         spotPrice != null && spotPrice > 0
           ? String(spotPrice)
-          : liveTrades[0].priceBnb || merged.lastPriceBnb,
+          : chronological[chronological.length - 1]?.priceBnb || merged.lastPriceBnb,
     };
   }
 
@@ -210,6 +211,10 @@ export function TokenDetailLive({
   const [chartTradePatches, setChartTradePatches] = useState<TradeItem[]>([]);
   const [holdersRefreshKey, setHoldersRefreshKey] = useState(0);
   const [optimisticTrades, setOptimisticTrades] = useState<TradeItem[]>([]);
+  const [actorChartSpot, setActorChartSpot] = useState<{
+    spotAfterBnb: number;
+    side: "buy" | "sell";
+  } | null>(null);
   const [indexerSyncing, setIndexerSyncing] = useState(false);
   const [latestWsBonding, setLatestWsBonding] = useState<
     TokenTradeWsPayload["bonding"] | null
@@ -353,6 +358,7 @@ export function TokenDetailLive({
           setOptimisticTrades((prev) =>
             prev.filter((t) => t.txHash.toLowerCase() !== tradeItem.txHash.toLowerCase())
           );
+          setActorChartSpot(null);
           setIndexerSyncing(false);
           setHoldersRefreshKey((k) => k + 1);
         }
@@ -439,6 +445,10 @@ export function TokenDetailLive({
       burstUntilRef.current = Date.now() + BURST_DURATION_MS;
       setIndexerSyncing(true);
       optimisticTokenSnapshotRef.current = token;
+      setActorChartSpot({
+        spotAfterBnb: payload.spotAfterBnb,
+        side: payload.side,
+      });
       setOptimisticTrades((prev) => [
         payload.tradeItem,
         ...prev.filter((t) => t.txHash !== payload.pendingTxHash),
@@ -452,6 +462,7 @@ export function TokenDetailLive({
   const handleTradeOptimisticRollback = useCallback(
     (payload: { pendingId: string }) => {
       const pendingTxHash = `pending:${payload.pendingId}`;
+      setActorChartSpot(null);
       setOptimisticTrades((prev) =>
         prev.filter((t) => t.txHash.toLowerCase() !== pendingTxHash.toLowerCase())
       );
@@ -479,6 +490,7 @@ export function TokenDetailLive({
       burstUntilRef.current = Date.now() + BURST_DURATION_MS;
       setIndexerSyncing(true);
       optimisticTokenSnapshotRef.current = null;
+      setActorChartSpot(null);
       setOptimisticTrades((prev) =>
         prev.filter((t) => !t.txHash.toLowerCase().startsWith("pending:"))
       );
@@ -734,6 +746,8 @@ export function TokenDetailLive({
             symbol={symbol}
             status={liveToken.status}
             optimisticTrades={optimisticTrades}
+            actorOptimisticSpot={actorChartSpot}
+            curveSnapshot={tradeCurveSnapshot}
             streamedTrades={chartTradePatches}
             wsConnected={wsConnected}
             bnbUsd={bnbUsd}

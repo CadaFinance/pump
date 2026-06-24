@@ -365,6 +365,7 @@ export class LaunchpadEventHandlers {
         side,
         traderAddress: trader,
         zugAmount: weiToDecimal(zugAmount),
+        feeZug: weiToDecimal(feeZug),
         tokenAmount: weiToDecimal(tokenAmount),
         priceZug: markPrice,
         txHash: txHash.toLowerCase(),

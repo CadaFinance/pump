@@ -6,6 +6,10 @@ import {
   spotPriceZugFromReserves,
 } from "@/lib/bonding-curve";
 
+/** Fallback when WS/indexer trade rows omit fee_zug (chart spot replay). */
+const CHART_FEE_ESTIMATE_BPS = 100n;
+const FEE_BPS_DENOMINATOR = 10_000n;
+
 export type CandleInterval = "15s" | "1m" | "5m" | "15m" | "1h" | "4h";
 
 export const CANDLE_INTERVALS: { id: CandleInterval; label: string; ms: number }[] = [
@@ -52,13 +56,14 @@ export type TradeSpotTick = {
 export function buildTradeSpotTicks(
   trades: TradeItem[],
   virtualZugReserve = DEFAULT_VIRTUAL_ZUG_RESERVE,
-  virtualTokenReserve = DEFAULT_VIRTUAL_TOKEN_RESERVE
+  virtualTokenReserve = DEFAULT_VIRTUAL_TOKEN_RESERVE,
+  protocolFeeBps = CHART_FEE_ESTIMATE_BPS
 ): Map<string, TradeSpotTick> {
   const ticks = new Map<string, TradeSpotTick>();
   let reserve = 0n;
   let sold = 0n;
 
-  for (const trade of trades) {
+  for (const trade of sortTradesChronologically(trades)) {
     const before = spotPriceZugFromReserves(
       reserve,
       sold,
@@ -67,7 +72,7 @@ export function buildTradeSpotTicks(
     );
 
     const zug = parseEther(trade.nativeAmount as `${number}`);
-    const fee = parseEther((trade.feeBnb ?? "0") as `${number}`);
+    const fee = resolveTradeFeeWei(trade, protocolFeeBps);
     const tokens = parseEther(trade.tokenAmount as `${number}`);
 
     if (trade.side === "BUY") {
@@ -155,7 +160,32 @@ export type BuildCandlesOptions = {
   useSpotPrice?: boolean;
   /** Max flat candles after the last trade when filling gaps (avoids long dead tails). */
   maxGapBarsAfterLastTrade?: number;
+  virtualZugReserve?: bigint;
+  virtualTokenReserve?: bigint;
+  protocolFeeBps?: bigint;
 };
+
+export function sortTradesChronologically(trades: TradeItem[]): TradeItem[] {
+  return [...trades].sort(
+    (a, b) => new Date(a.blockTime).getTime() - new Date(b.blockTime).getTime()
+  );
+}
+
+function resolveTradeFeeWei(trade: TradeItem, protocolFeeBps = CHART_FEE_ESTIMATE_BPS): bigint {
+  if (trade.feeBnb != null && trade.feeBnb !== "") {
+    try {
+      return parseEther(trade.feeBnb as `${number}`);
+    } catch {
+      // fall through to estimate
+    }
+  }
+  try {
+    const gross = parseEther(trade.nativeAmount as `${number}`);
+    return (gross * protocolFeeBps) / FEE_BPS_DENOMINATOR;
+  } catch {
+    return 0n;
+  }
+}
 
 const MAX_CANDLES = 4000;
 
@@ -183,9 +213,20 @@ export function buildCandlesFromTrades(
   const fillGaps = options.fillGaps !== false;
   const useSpotPrice = options.useSpotPrice !== false;
   const endTimeMs = options.endTimeMs ?? Date.now();
-  const spotTicks = useSpotPrice ? buildTradeSpotTicks(trades) : null;
+  const virtualZugReserve = options.virtualZugReserve ?? DEFAULT_VIRTUAL_ZUG_RESERVE;
+  const virtualTokenReserve = options.virtualTokenReserve ?? DEFAULT_VIRTUAL_TOKEN_RESERVE;
+  const protocolFeeBps = options.protocolFeeBps ?? CHART_FEE_ESTIMATE_BPS;
+  const chronological = sortTradesChronologically(trades);
+  const spotTicks = useSpotPrice
+    ? buildTradeSpotTicks(
+        chronological,
+        virtualZugReserve,
+        virtualTokenReserve,
+        protocolFeeBps
+      )
+    : null;
 
-  if (trades.length === 0) {
+  if (chronological.length === 0) {
     return { candles: [], volumes: [] };
   }
 
@@ -196,7 +237,7 @@ export function buildCandlesFromTrades(
     { open: number; high: number; low: number; close: number; volume: number; buyVol: number }
   >();
 
-  for (const trade of trades) {
+  for (const trade of chronological) {
     const spot = spotTicks?.get(trade.id);
     const point = tradeToChartPoint(trade, spot);
     if (!point) continue;
@@ -209,7 +250,11 @@ export function buildCandlesFromTrades(
 
     const existing = buckets.get(bucketSec);
     if (!existing) {
-      const open = (priorClose ?? touchPrices[0] ?? closePrice) as number;
+      const spotOpen = touchPrices[0] ?? closePrice;
+      const open =
+        priorClose != null
+          ? priorClose
+          : spotOpen;
       buckets.set(bucketSec, {
         open,
         high: Math.max(open, ...touchPrices),
@@ -314,6 +359,62 @@ export function buildCandlesFromTrades(
   }
 
   return { candles, volumes };
+}
+
+/**
+ * Pin the actor's optimistic spot on the live candle (trader-only).
+ * Never pulls close below open on buys or above open on sells.
+ */
+export function applyActorOptimisticSpotToCandles(
+  candles: CandleBar[],
+  volumes: VolumeBar[],
+  spotAfterScaled: number,
+  side: "buy" | "sell"
+): { candles: CandleBar[]; volumes: VolumeBar[] } {
+  if (
+    candles.length === 0 ||
+    !Number.isFinite(spotAfterScaled) ||
+    spotAfterScaled <= 0
+  ) {
+    return { candles, volumes };
+  }
+
+  const lastIdx = candles.length - 1;
+  const last = candles[lastIdx]!;
+  let open = last.open;
+  const close = spotAfterScaled;
+
+  if (side === "buy") {
+    if (close < open) open = close;
+  } else if (close > open) {
+    open = close;
+  }
+
+  const patched: CandleBar = {
+    time: last.time,
+    open,
+    high: Math.max(last.high, open, close),
+    low: Math.min(last.low, open, close),
+    close,
+  };
+
+  const nextCandles = candles.slice();
+  nextCandles[lastIdx] = patched;
+
+  let nextVolumes = volumes;
+  if (volumes.length > lastIdx) {
+    const vol = volumes[lastIdx]!;
+    nextVolumes = volumes.slice();
+    nextVolumes[lastIdx] = {
+      ...vol,
+      color:
+        side === "buy"
+          ? "rgba(74, 222, 128, 0.5)"
+          : "rgba(248, 113, 113, 0.5)",
+    };
+  }
+
+  return { candles: nextCandles, volumes: nextVolumes };
 }
 
 const SUBSCRIPTS = "₀₁₂₃₄₅₆₇₈₉";

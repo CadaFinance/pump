@@ -16,14 +16,18 @@ import {
 } from "lightweight-charts";
 import type { TradeItem } from "@/lib/db/launchpad";
 import {
+  applyActorOptimisticSpotToCandles,
   buildCandlesFromTrades,
   CANDLE_INTERVALS,
   formatPumpSubscriptPrice,
+  mergeTradesForChart,
   resolveChartPriceFormat,
+  sortTradesChronologically,
   type CandleBar,
   type CandleInterval,
   type VolumeBar,
 } from "@/lib/candles";
+import type { BondingCurveSnapshot } from "@/lib/bonding-curve";
 import { useTheme } from "@/components/theme/ThemeProvider";
 import { PctChange } from "@/components/ui/PctChange";
 import {
@@ -38,6 +42,10 @@ type PriceChartProps = {
   symbol: string;
   status: string;
   optimisticTrades?: TradeItem[];
+  /** Trader-only optimistic spot pin (other viewers rely on WS). */
+  actorOptimisticSpot?: { spotAfterBnb: number; side: "buy" | "sell" } | null;
+  /** On-chain virtual reserves for spot replay (must match curve). */
+  curveSnapshot?: BondingCurveSnapshot;
   /** WS trade deltas merged into chart without full refetch. */
   streamedTrades?: TradeItem[];
   wsConnected?: boolean;
@@ -133,6 +141,8 @@ export function PriceChart({
   symbol,
   status,
   optimisticTrades = [],
+  actorOptimisticSpot = null,
+  curveSnapshot,
   streamedTrades = [],
   wsConnected = false,
   bnbUsd = null,
@@ -206,71 +216,70 @@ export function PriceChart({
     return () => clearInterval(timer);
   }, [frozen]);
 
-  const mergedTrades = useMemo(() => {
-    const byId = new Map<string, TradeItem>();
-    for (const t of dbTrades) byId.set(t.id, t);
-    for (const t of streamedTrades) {
-      if (!byId.has(t.id)) byId.set(t.id, t);
-    }
-    for (const t of optimisticTrades) {
-      if (!byId.has(t.id)) byId.set(t.id, t);
-    }
-    return [...byId.values()].sort(
-      (a, b) => new Date(a.blockTime).getTime() - new Date(b.blockTime).getTime()
-    );
-  }, [dbTrades, streamedTrades, optimisticTrades]);
+  const mergedTrades = useMemo(
+    () => mergeTradesForChart(dbTrades, [...streamedTrades, ...optimisticTrades]),
+    [dbTrades, streamedTrades, optimisticTrades]
+  );
 
   const chartEndTimeMs = useMemo(() => {
     if (frozen && mergedTrades.length > 0) {
-      return new Date(mergedTrades[mergedTrades.length - 1]!.blockTime).getTime();
+      const sorted = sortTradesChronologically(mergedTrades);
+      return new Date(sorted[sorted.length - 1]!.blockTime).getTime();
     }
     return nowMs;
   }, [frozen, mergedTrades, nowMs]);
 
-  const { candles, volumes } = useMemo(
-    () =>
-      buildCandlesFromTrades(mergedTrades, timeInterval, priceScale, {
-        fillGaps: true,
-        endTimeMs: chartEndTimeMs,
-      }),
-    [mergedTrades, timeInterval, priceScale, chartEndTimeMs]
+  const chartBuildOptions = useMemo(
+    () => ({
+      fillGaps: true as const,
+      endTimeMs: chartEndTimeMs,
+      virtualZugReserve: curveSnapshot
+        ? BigInt(curveSnapshot.virtualZugReserve)
+        : undefined,
+      virtualTokenReserve: curveSnapshot
+        ? BigInt(curveSnapshot.virtualTokenReserve)
+        : undefined,
+    }),
+    [chartEndTimeMs, curveSnapshot]
   );
 
-  const liveHeadlinePrice =
-    currency === "usd" ? currentPriceUsd : currentMcapUsd;
+  const { candles, volumes } = useMemo(
+    () =>
+      buildCandlesFromTrades(mergedTrades, timeInterval, priceScale, chartBuildOptions),
+    [mergedTrades, timeInterval, priceScale, chartBuildOptions]
+  );
 
   const candlesForChart = useMemo(() => {
     if (
       candles.length === 0 ||
-      liveHeadlinePrice == null ||
-      !Number.isFinite(liveHeadlinePrice) ||
-      liveHeadlinePrice <= 0
+      !actorOptimisticSpot ||
+      optimisticTrades.length === 0
     ) {
       return candles;
     }
+    return applyActorOptimisticSpotToCandles(
+      candles,
+      volumes,
+      actorOptimisticSpot.spotAfterBnb * priceScale,
+      actorOptimisticSpot.side
+    ).candles;
+  }, [candles, volumes, actorOptimisticSpot, optimisticTrades.length, priceScale]);
 
-    const lastIndex = candles.length - 1;
-    const last = candles[lastIndex]!;
-    const close = liveHeadlinePrice;
-    const patched = {
-      ...last,
-      close,
-      high: Math.max(last.high, close),
-      low: Math.min(last.low, close),
-    };
-
+  const volumesForChart = useMemo(() => {
     if (
-      patched.close === last.close &&
-      patched.high === last.high &&
-      patched.low === last.low
+      candles.length === 0 ||
+      !actorOptimisticSpot ||
+      optimisticTrades.length === 0
     ) {
-      return candles;
+      return volumes;
     }
-
-    const next = candles.slice();
-    next[lastIndex] = patched;
-    return next;
-  }, [candles, liveHeadlinePrice]);
+    return applyActorOptimisticSpotToCandles(
+      candles,
+      volumes,
+      actorOptimisticSpot.spotAfterBnb * priceScale,
+      actorOptimisticSpot.side
+    ).volumes;
+  }, [candles, volumes, actorOptimisticSpot, optimisticTrades.length, priceScale]);
 
   const lastCandle = candlesForChart[candlesForChart.length - 1] ?? null;
   const displayTimeUtc = hoverTimeUtc ?? (frozen ? null : formatUtcMs(nowMs));
@@ -292,9 +301,9 @@ export function PriceChart({
     rightScale.applyOptions({
       mode: useLog ? PriceScaleMode.Logarithmic : PriceScaleMode.Normal,
     });
-    const { from, to } = visibleLogicalRange(candlesForChart, volumes, DEFAULT_VISIBLE_CANDLES);
+    const { from, to } = visibleLogicalRange(candlesForChart, volumesForChart, DEFAULT_VISIBLE_CANDLES);
     ts.setVisibleLogicalRange({ from, to });
-  }, [candlesForChart, volumes]);
+  }, [candlesForChart, volumesForChart]);
 
   // Defer viewport fit until lightweight-charts has laid out setData (fixes flat line on first paint).
   const scheduleFitViewport = useCallback(() => {
@@ -554,7 +563,7 @@ export function PriceChart({
       close: c.close,
     }));
 
-    const volumeData: HistogramData[] = volumes.map((v) => ({
+    const volumeData: HistogramData[] = volumesForChart.map((v) => ({
       time: v.time as HistogramData["time"],
       value: v.value,
       color: v.color,
@@ -568,7 +577,7 @@ export function PriceChart({
     const ts = chartRef.current?.timeScale();
     if (!ts) return;
 
-    const tradeBucketCount = volumes.filter((v) => v.value > 0).length;
+    const tradeBucketCount = volumesForChart.filter((v) => v.value > 0).length;
 
     if (shouldFitViewportRef.current) {
       scheduleFitViewport();
@@ -582,17 +591,17 @@ export function PriceChart({
       ts.scrollToRealTime();
       lastTradeBucketCountRef.current = tradeBucketCount;
     }
-  }, [candlesForChart, volumes, priceFormat, ready, scheduleFitViewport]);
+  }, [candlesForChart, volumesForChart, priceFormat, ready, scheduleFitViewport]);
 
   const summaryValue =
     currency === "usd"
-      ? (liveHeadlinePrice != null
-          ? formatPumpSubscriptPrice(liveHeadlinePrice, "$")
+      ? (currentPriceUsd != null && currentPriceUsd > 0
+          ? formatPumpSubscriptPrice(currentPriceUsd, "$")
           : lastCandle != null
             ? formatPumpSubscriptPrice(lastCandle.close, "$")
             : "—")
-      : (liveHeadlinePrice != null
-          ? formatUsd(liveHeadlinePrice, { compact: true }) ?? "—"
+      : (currentMcapUsd != null && currentMcapUsd > 0
+          ? formatUsd(currentMcapUsd, { compact: true }) ?? "—"
           : lastCandle != null
             ? formatUsd(lastCandle.close, { compact: true }) ?? "—"
             : "—");

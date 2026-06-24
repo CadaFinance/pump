@@ -1,6 +1,9 @@
 import { formatEther, formatUnits, parseEventLogs, type Address, type TransactionReceipt } from "viem";
 import type { TokenDetail, TradeItem } from "@/lib/db/launchpad";
-import { bondingCurveManagerAbi } from "@/lib/bonding-curve";
+import {
+  bondingCurveManagerAbi,
+  spotPriceZugFromReserves,
+} from "@/lib/bonding-curve";
 
 export type ParsedTradeEvent = {
   token: Address;
@@ -69,10 +72,13 @@ export function tradeEventToItem(
 }
 
 export function applyTradeToToken(token: TokenDetail, trade: ParsedTradeEvent): TokenDetail {
+  const spotAfter = spotPriceZugFromReserves(trade.reserveBnb, trade.soldTokens);
   const price =
-    trade.tokenAmount > 0n
-      ? formatEther((trade.nativeAmount * 10n ** 18n) / trade.tokenAmount)
-      : token.lastPriceBnb;
+    spotAfter > 0
+      ? String(spotAfter)
+      : trade.tokenAmount > 0n
+        ? formatEther((trade.nativeAmount * 10n ** 18n) / trade.tokenAmount)
+        : token.lastPriceBnb;
 
   return {
     ...token,
