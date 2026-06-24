@@ -44,7 +44,20 @@ bash deploy/bundler/alto/health.sh
 curl -s http://127.0.0.1:4337/health
 ```
 
-## Executor BNB
+## Chain profiles
+
+| Chain | `BUNDLER_CHAIN_ID` | Alto defaults |
+|-------|---------------------|---------------|
+| BSC testnet | `97` (default) | legacy tx, 3s block-time, 1s bundle interval |
+| Base Sepolia | `84532` | EIP-1559, `op-stack`, 2s block-time, 400ms max bundle interval |
+
+```bash
+export BUNDLER_CHAIN_ID=84532
+export BUNDLER_CHAIN_RPC_URL=https://base-sepolia.g.alchemy.com/v2/PAYG_KEY
+bash deploy/bundler/alto/setup-alto-pm2.sh
+```
+
+## Executor BNB / ETH
 
 Fund executor + utility addresses with BSC testnet BNB (faucet). Alto auto-refills executors from utility wallet.
 

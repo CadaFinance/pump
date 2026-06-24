@@ -20,6 +20,7 @@ export function createKernelTradeClients(kernelClient: KernelAccountClient): {
   const publicClient = createTradeHttpPublicClient();
   const client = createKernelClientFromAccount(kernelClient.account, publicClient, {
     fastPolling: true,
+    tradeGas: true,
   });
   return { kernelClient: client, publicClient };
 }

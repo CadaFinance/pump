@@ -30,11 +30,42 @@ fi
 if [[ -n "${BUNDLER_CHAIN_RPC_URL:-}" ]]; then
   CHAIN_RPC="$BUNDLER_CHAIN_RPC_URL"
 elif [[ -n "${ALCHEMY_API_KEY:-}" ]]; then
-  CHAIN_RPC="https://bnb-testnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}"
+  case "$CHAIN_ID" in
+    84532) CHAIN_RPC="https://base-sepolia.g.alchemy.com/v2/${ALCHEMY_API_KEY}" ;;
+    8453)  CHAIN_RPC="https://base-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}" ;;
+    *)     CHAIN_RPC="https://bnb-testnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}" ;;
+  esac
 else
   echo "Set BUNDLER_CHAIN_RPC_URL or ALCHEMY_API_KEY (paid tier recommended for bundler getLogs)."
   exit 1
 fi
+
+# Chain-specific Alto timing (see Alto CLI: block-time, max-bundle-interval, chain-type)
+case "$CHAIN_ID" in
+  84532|8453)
+    LEGACY_TX="False"
+    CHAIN_TYPE="${ALTO_CHAIN_TYPE:-op-stack}"
+    BLOCK_TIME="${ALTO_BLOCK_TIME_MS:-2000}"
+    MAX_BUNDLE_INTERVAL="${ALTO_MAX_BUNDLE_INTERVAL_MS:-400}"
+    MIN_BUNDLE_INTERVAL="${ALTO_MIN_BUNDLE_INTERVAL_MS:-100}"
+    NETWORK_NAME="${ALTO_NETWORK_NAME:-$([ "$CHAIN_ID" = "84532" ] && echo base-sepolia || echo base)}"
+    FLOOR_MAX_FEE="${ALTO_FLOOR_MAX_FEE_PER_GAS:-0.001}"
+    FLOOR_PRIORITY="${ALTO_FLOOR_MAX_PRIORITY_FEE_PER_GAS:-0.001}"
+    EXECUTOR_GAS_MULT="${ALTO_EXECUTOR_GAS_MULTIPLIER:-110}"
+    ;;
+  *)
+    LEGACY_TX="True"
+    CHAIN_TYPE="${ALTO_CHAIN_TYPE:-default}"
+    BLOCK_TIME="${ALTO_BLOCK_TIME_MS:-3000}"
+    MAX_BUNDLE_INTERVAL="${ALTO_MAX_BUNDLE_INTERVAL_MS:-1000}"
+    MIN_BUNDLE_INTERVAL="${ALTO_MIN_BUNDLE_INTERVAL_MS:-100}"
+    NETWORK_NAME="${ALTO_NETWORK_NAME:-binance-testnet}"
+    FLOOR_MAX_FEE="${ALTO_FLOOR_MAX_FEE_PER_GAS:-0.1}"
+    FLOOR_PRIORITY="${ALTO_FLOOR_MAX_PRIORITY_FEE_PER_GAS:-0.1}"
+    EXECUTOR_GAS_MULT="${ALTO_EXECUTOR_GAS_MULTIPLIER:-105}"
+    ;;
+esac
+echo "Alto chain $CHAIN_ID: legacy=$LEGACY_TX block-time=${BLOCK_TIME}ms bundle-interval=${MIN_BUNDLE_INTERVAL}-${MAX_BUNDLE_INTERVAL}ms chain-type=$CHAIN_TYPE"
 
 # Alchemy free tier: cap getLogs range (Alto default 2000 exceeds free limit)
 MAX_BLOCK_RANGE="${ALTO_MAX_BLOCK_RANGE:-128}"
@@ -91,18 +122,24 @@ python3 <<PY
 import json
 from pathlib import Path
 
+legacy_tx = "${LEGACY_TX}" == "True"
 cfg = {
     "entrypoints": "0x0000000071727De22E5E9d8BAf0edAc6f37da032",
     "executor-private-keys": "${BUNDLER_EXECUTOR_PRIVATE_KEYS}",
     "utility-private-key": "${BUNDLER_UTILITY_PRIVATE_KEY}",
     "rpc-url": "${CHAIN_RPC}",
     "safe-mode": False,
-    "legacy-transactions": True,
+    "legacy-transactions": legacy_tx,
+    "chain-type": "${CHAIN_TYPE}",
+    "network-name": "${NETWORK_NAME}",
     "port": ${ALTO_PORT},
-    "block-time": 3000,
+    "block-time": ${BLOCK_TIME},
+    "min-bundle-interval": ${MIN_BUNDLE_INTERVAL},
+    "max-bundle-interval": ${MAX_BUNDLE_INTERVAL},
+    "executor-gas-multiplier": "${EXECUTOR_GAS_MULT}",
     "max-block-range": ${MAX_BLOCK_RANGE},
-    "floor-max-fee-per-gas": "0.1",
-    "floor-max-priority-fee-per-gas": "0.1",
+    "floor-max-fee-per-gas": "${FLOOR_MAX_FEE}",
+    "floor-max-priority-fee-per-gas": "${FLOOR_PRIORITY}",
     "min-executor-balance": "10000000000000000",
     "default-api-version": "v2",
     "api-version": "v1,v2",

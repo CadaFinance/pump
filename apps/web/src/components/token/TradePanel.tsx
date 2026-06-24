@@ -18,7 +18,7 @@ import {
   useSignTypedData,
 } from "wagmi";
 import { useFlashblocksTransactionReceipt } from "@/hooks/useFlashblocksTransactionReceipt";
-import { useKernelTradeWriteContract } from "@/hooks/useKernelTradeWriteContract";
+import { useKernelTradeWriteContract, type TradeWritePhase } from "@/hooks/useKernelTradeWriteContract";
 import {
   createTradeHttpPublicClient,
   isTradeFlashblocksActive,
@@ -76,6 +76,11 @@ export type TradeConfirmedPayload = {
   receipt: TransactionReceipt;
 };
 
+export type TradeSubmittedPayload = {
+  userOpHash: string;
+  side: "buy" | "sell";
+};
+
 type TradePanelProps = {
   tokenAddress: `0x${string}`;
   symbol: string;
@@ -83,6 +88,7 @@ type TradePanelProps = {
   reserveBnb?: string;
   embedded?: boolean;
   prefill?: TradePrefillConfig | null;
+  onTradeSubmitted?: (payload: TradeSubmittedPayload) => void;
   onTradeConfirmed?: (payload: TradeConfirmedPayload) => void;
   /** Live curve snapshot from token page — keeps quotes in sync with chart polling. */
   chainCurveSnapshot?: BondingCurveSnapshot;
@@ -183,12 +189,26 @@ function SwapArrowsIcon() {
   );
 }
 
+function tradePhaseBusyLabel(phase: TradeWritePhase, fallback: string): string {
+  switch (phase) {
+    case "preparing":
+      return "Sending…";
+    case "submitted":
+      return "Submitted…";
+    case "confirming":
+      return "Confirming…";
+    default:
+      return fallback;
+  }
+}
+
 export function TradePanel({
   tokenAddress,
   symbol,
   status,
   embedded = false,
   prefill = null,
+  onTradeSubmitted,
   onTradeConfirmed,
   chainCurveSnapshot,
 }: TradePanelProps) {
@@ -452,7 +472,9 @@ export function TradePanel({
   const {
     tradeWrite,
     txHash,
+    userOpHash,
     receipt: kernelReceipt,
+    tradePhase,
     isPending,
     reset,
     error: writeError,
@@ -470,7 +492,17 @@ export function TradePanel({
     pending: false,
     confirming: false,
     lastTxHash: undefined as string | undefined,
+    lastSubmittedUserOp: undefined as string | undefined,
   });
+
+  useEffect(() => {
+    if (tradePhase !== "submitted" || !userOpHash || !onTradeSubmitted) return;
+    if (!pendingAction || (pendingAction !== "buy" && pendingAction !== "sell")) return;
+    if (uxTraceRef.current.lastSubmittedUserOp === userOpHash) return;
+    uxTraceRef.current.lastSubmittedUserOp = userOpHash;
+    tradeTraceStep("ux.on_trade_submitted", { userOpHash, side: pendingAction });
+    onTradeSubmitted({ userOpHash, side: pendingAction });
+  }, [tradePhase, userOpHash, pendingAction, onTradeSubmitted]);
 
   useEffect(() => {
     if (isPending && !uxTraceRef.current.pending) {
@@ -1528,6 +1560,10 @@ export function TradePanel({
   }
 
   const isBusy = isPending || isConfirming;
+  const tradePhaseActive =
+    tradePhase === "preparing" ||
+    tradePhase === "submitted" ||
+    tradePhase === "confirming";
   const sellFlowActive = side === "sell" && pendingAction !== null;
 
   useEffect(() => {
@@ -1559,18 +1595,26 @@ export function TradePanel({
             : "Insufficient balance"
         : side === "buy"
           ? isBusy
-            ? "Buying…"
+            ? tradePhaseActive
+              ? tradePhaseBusyLabel(tradePhase, "Buying…")
+              : "Buying…"
             : "Buy"
           : pendingAction === "approve"
             ? isBusy
-              ? "Approving…"
+              ? tradePhaseActive
+                ? tradePhaseBusyLabel(tradePhase, "Approving…")
+                : "Approving…"
               : "Approve & sell"
             : pendingAction === "sell" || (isBusy && sellFlowActive)
-              ? "Selling…"
+              ? tradePhaseActive
+                ? tradePhaseBusyLabel(tradePhase, "Selling…")
+                : "Selling…"
               : needsLegacyApproval
                 ? "Approve & sell"
                 : isBusy
-                  ? "Selling…"
+                  ? tradePhaseActive
+                    ? tradePhaseBusyLabel(tradePhase, "Selling…")
+                    : "Selling…"
                   : "Sell";
 
   const submitDisabled =
@@ -1781,6 +1825,13 @@ export function TradePanel({
         ) : null}
 
         {error ? <p className="notice-error mx-4 mb-3">{error}</p> : null}
+
+        {userOpHash && !txHash && tradePhaseActive ? (
+          <p className="mx-4 mb-3 text-caption text-pump-muted">
+            Submitted — waiting for on-chain confirmation
+            {fastTradeConfirm ? " (~2s)" : ""}
+          </p>
+        ) : null}
 
         {txHash ? (
           <p className="mx-4 mb-3 text-caption text-pump-muted break-all">

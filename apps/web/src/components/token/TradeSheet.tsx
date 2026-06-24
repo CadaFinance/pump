@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { TradePanel, type TradeConfirmedPayload } from "@/components/token/TradePanel";
+import { TradePanel, type TradeConfirmedPayload, type TradeSubmittedPayload } from "@/components/token/TradePanel";
 import type { TradePrefillConfig } from "@/lib/token-trade-prefill";
 import type { BondingCurveSnapshot } from "@/lib/bonding-curve";
 
@@ -14,6 +14,7 @@ type TradeSheetProps = {
   status: string;
   reserveBnb?: string;
   prefill?: TradePrefillConfig | null;
+  onTradeSubmitted?: (payload: TradeSubmittedPayload) => void;
   onTradeConfirmed?: (payload: TradeConfirmedPayload) => void;
   chainCurveSnapshot?: BondingCurveSnapshot;
   /** Bottom sheet on mobile token page; centered modal for portfolio quick actions. */
@@ -28,6 +29,7 @@ export function TradeSheet({
   status,
   reserveBnb,
   prefill = null,
+  onTradeSubmitted,
   onTradeConfirmed,
   chainCurveSnapshot,
   presentation = "sheet",
@@ -111,6 +113,7 @@ export function TradeSheet({
               status={status}
               reserveBnb={reserveBnb}
               prefill={prefill}
+              onTradeSubmitted={onTradeSubmitted}
               onTradeConfirmed={onTradeConfirmed}
               chainCurveSnapshot={chainCurveSnapshot}
             />

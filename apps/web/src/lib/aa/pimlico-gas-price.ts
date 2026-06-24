@@ -22,8 +22,12 @@ function clampGasTier(tier: GasTier) {
   return clampUserOpFees(BigInt(tier.maxFeePerGas), BigInt(tier.maxPriorityFeePerGas));
 }
 
+type GasTierPreference = "standard" | "fast";
+
 /** Pimlico-recommended gas for UserOps (via bundler proxy). */
-export async function fetchPimlicoUserOpGasPrice(): Promise<{
+export async function fetchPimlicoUserOpGasPrice(
+  preference: GasTierPreference = "standard"
+): Promise<{
   maxFeePerGas: bigint;
   maxPriorityFeePerGas: bigint;
 } | null> {
@@ -44,7 +48,13 @@ export async function fetchPimlicoUserOpGasPrice(): Promise<{
     error?: { message?: string };
   };
 
-  const tier = payload.result?.standard ?? payload.result?.fast ?? payload.result?.slow;
+  const tiers = payload.result;
+  if (!tiers) return null;
+
+  const tier =
+    preference === "fast"
+      ? (tiers.fast ?? tiers.standard ?? tiers.slow)
+      : (tiers.standard ?? tiers.fast ?? tiers.slow);
   if (!tier) return null;
 
   return clampGasTier(tier);
@@ -55,14 +65,15 @@ function feesFromChainGasPrice(gasPrice: bigint) {
   return clampUserOpFees(gasPrice, priority);
 }
 
-export async function resolveUserOpGasPrice(
-  chainGasPrice: () => Promise<bigint>
+async function resolveUserOpGasPriceWithPreference(
+  chainGasPrice: () => Promise<bigint>,
+  preference: GasTierPreference
 ): Promise<{ maxFeePerGas: bigint; maxPriorityFeePerGas: bigint }> {
   const [chainFees, bundler] = await Promise.all([
     chainGasPrice()
       .then((gasPrice) => (gasPrice > 0n ? feesFromChainGasPrice(gasPrice) : null))
       .catch(() => null),
-    fetchPimlicoUserOpGasPrice().catch(() => null),
+    fetchPimlicoUserOpGasPrice(preference).catch(() => null),
   ]);
 
   if (chainFees && bundler) {
@@ -79,4 +90,17 @@ export async function resolveUserOpGasPrice(
     maxFeePerGas: MIN_USER_OP_MAX_FEE,
     maxPriorityFeePerGas: MIN_USER_OP_PRIORITY_FEE,
   };
+}
+
+export async function resolveUserOpGasPrice(
+  chainGasPrice: () => Promise<bigint>
+): Promise<{ maxFeePerGas: bigint; maxPriorityFeePerGas: bigint }> {
+  return resolveUserOpGasPriceWithPreference(chainGasPrice, "standard");
+}
+
+/** Buy/sell — prefer bundler `fast` tier for quicker executor inclusion. */
+export async function resolveTradeUserOpGasPrice(
+  chainGasPrice: () => Promise<bigint>
+): Promise<{ maxFeePerGas: bigint; maxPriorityFeePerGas: bigint }> {
+  return resolveUserOpGasPriceWithPreference(chainGasPrice, "fast");
 }

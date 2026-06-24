@@ -31,7 +31,7 @@ import {
   pushOptimisticActivity,
 } from "@/lib/optimistic-activity";
 import { contracts, pumpChain, shortAddress } from "@/config/chain";
-import { TradePanel, type TradeConfirmedPayload } from "@/components/token/TradePanel";
+import { TradePanel, type TradeConfirmedPayload, type TradeSubmittedPayload } from "@/components/token/TradePanel";
 import { TradeSheet } from "@/components/token/TradeSheet";
 import {
   parseTradePrefillFromSearchParams,
@@ -433,6 +433,15 @@ export function TokenDetailLive({
     [tokenAddress, refetchCurve]
   );
 
+  const handleTradeSubmitted = useCallback(
+    (_payload: TradeSubmittedPayload) => {
+      burstUntilRef.current = Date.now() + BURST_DURATION_MS;
+      setIndexerSyncing(true);
+      void fetchLive();
+    },
+    [fetchLive]
+  );
+
   const handleTradeConfirmed = useCallback(
     async (payload: TradeConfirmedPayload) => {
       burstUntilRef.current = Date.now() + BURST_DURATION_MS;
@@ -726,6 +735,7 @@ export function TokenDetailLive({
               status={liveToken.status}
               reserveBnb={liveToken.reserveBnb}
               prefill={tradePrefill}
+              onTradeSubmitted={handleTradeSubmitted}
               onTradeConfirmed={handleTradeConfirmed}
               chainCurveSnapshot={tradeCurveSnapshot}
             />
@@ -776,6 +786,7 @@ export function TokenDetailLive({
         status={liveToken.status}
         reserveBnb={liveToken.reserveBnb}
         prefill={tradePrefill}
+        onTradeSubmitted={handleTradeSubmitted}
         onTradeConfirmed={handleTradeConfirmed}
         chainCurveSnapshot={tradeCurveSnapshot}
       />

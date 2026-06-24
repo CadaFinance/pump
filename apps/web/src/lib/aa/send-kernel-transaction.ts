@@ -20,12 +20,16 @@ export type KernelTransactionResult = {
   receipt?: TransactionReceipt;
 };
 
-export async function sendKernelTransaction(
+export type KernelSubmitResult = {
+  userOpHash: Hash;
+  fromBlock: bigint;
+};
+
+export async function submitKernelUserOperation(
   client: KernelAccountClient,
   publicClient: PublicClient,
-  call: KernelTransactionCall,
-  options?: UserOpConfirmationOptions
-): Promise<KernelTransactionResult> {
+  call: KernelTransactionCall
+): Promise<KernelSubmitResult> {
   const account = client.account;
   if (!account) {
     throw new Error("Smart account not ready.");
@@ -66,6 +70,16 @@ export async function sendKernelTransaction(
     submitMs: sendMs,
   });
 
+  return { userOpHash, fromBlock };
+}
+
+export async function confirmKernelUserOperation(
+  client: KernelAccountClient,
+  publicClient: PublicClient,
+  userOpHash: Hash,
+  fromBlock: bigint,
+  options?: UserOpConfirmationOptions
+): Promise<KernelTransactionResult> {
   const confirmT0 = performance.now();
   tradeTraceStep("bundler.wait_confirm.start", { userOpHash });
   const { txHash, receipt, confirmPath } = await waitForUserOpConfirmation(
@@ -93,4 +107,18 @@ export async function sendKernelTransaction(
   });
 
   return { hash: txHash, receipt };
+}
+
+export async function sendKernelTransaction(
+  client: KernelAccountClient,
+  publicClient: PublicClient,
+  call: KernelTransactionCall,
+  options?: UserOpConfirmationOptions
+): Promise<KernelTransactionResult> {
+  const { userOpHash, fromBlock } = await submitKernelUserOperation(
+    client,
+    publicClient,
+    call
+  );
+  return confirmKernelUserOperation(client, publicClient, userOpHash, fromBlock, options);
 }

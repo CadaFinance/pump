@@ -13,7 +13,7 @@ import {
 } from "viem";
 import { pumpChain, rpcUrl } from "@/config/chain";
 import { createBundlerTransport } from "@/lib/aa/bundler-transport";
-import { resolveUserOpGasPrice } from "@/lib/aa/pimlico-gas-price";
+import { resolveTradeUserOpGasPrice, resolveUserOpGasPrice } from "@/lib/aa/pimlico-gas-price";
 import { sendKernelTransaction } from "@/lib/aa/send-kernel-transaction";
 import { assertScwReadyForUserOp } from "@/lib/aa/scw-preflight";
 
@@ -55,7 +55,10 @@ type PreparedUserOpGas = {
   preVerificationGas: bigint;
 };
 
-function createKernelUserOperationConfig(publicClient: PublicClient) {
+function createKernelUserOperationConfig(
+  publicClient: PublicClient,
+  options?: { tradeGas?: boolean }
+) {
   const prepareUserOperation = (async (client, args) => {
     const userOp = await viemPrepareUserOperation(client, args);
     const gas = userOp as typeof userOp & PreparedUserOpGas;
@@ -70,8 +73,10 @@ function createKernelUserOperationConfig(publicClient: PublicClient) {
     };
   }) as typeof viemPrepareUserOperation;
 
+  const resolveFees = options?.tradeGas ? resolveTradeUserOpGasPrice : resolveUserOpGasPrice;
+
   return {
-    estimateFeesPerGas: () => resolveUserOpGasPrice(() => publicClient.getGasPrice()),
+    estimateFeesPerGas: () => resolveFees(() => publicClient.getGasPrice()),
     prepareUserOperation,
   };
 }
@@ -86,7 +91,7 @@ export function createPumpPublicClient(): PublicClient {
 export function createKernelClientFromAccount(
   account: NonNullable<KernelAccountClient["account"]>,
   publicClient: PublicClient,
-  options?: { fastPolling?: boolean }
+  options?: { fastPolling?: boolean; tradeGas?: boolean }
 ): KernelAccountClient {
   return createKernelAccountClient({
     account,
@@ -94,7 +99,9 @@ export function createKernelClientFromAccount(
     bundlerTransport: createBundlerTransport(),
     client: publicClient,
     pollingInterval: options?.fastPolling ? 200 : 2_000,
-    userOperation: createKernelUserOperationConfig(publicClient),
+    userOperation: createKernelUserOperationConfig(publicClient, {
+      tradeGas: options?.tradeGas,
+    }),
   });
 }
 
