@@ -1,5 +1,17 @@
+/**
+ * Replay trades into token_candles (all intervals).
+ *
+ *   npm run backfill-candles --workspace @pump/indexer
+ *   npm run backfill-candles --workspace @pump/indexer -- 0x...
+ *
+ * Env: LAUNCHPAD_DATABASE_URL (auto-loads /var/www/pump/Indexer/.env on VM).
+ * Optional: PUMP_INDEXER_ENV=/path/to/.env
+ */
 import pg from "pg";
 import { upsertCandlesAfterTrade, incrementalCandlesEnabled } from "./candles.js";
+import { loadIndexerEnv } from "./load-env.js";
+
+loadIndexerEnv();
 
 type TradeRow = {
   side: string;
@@ -22,7 +34,10 @@ async function main(): Promise<void> {
 
   const url = process.env.LAUNCHPAD_DATABASE_URL;
   if (!url) {
-    throw new Error("LAUNCHPAD_DATABASE_URL is required");
+    throw new Error(
+      "LAUNCHPAD_DATABASE_URL is required. Set it in /var/www/pump/Indexer/.env " +
+        "(pump_indexer user — needs INSERT on token_candles) or export before running."
+    );
   }
 
   const pool = new pg.Pool({ connectionString: url, max: 4 });
