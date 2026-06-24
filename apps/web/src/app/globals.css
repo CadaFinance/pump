@@ -946,6 +946,11 @@ code,
     cursor: not-allowed;
   }
 
+  .trade-submit-button--stealth-locked {
+    pointer-events: none;
+    cursor: default;
+  }
+
   .trade-submit-button--buy {
     border: 1px solid rgb(var(--pump-success) / 0.55);
     background: rgb(var(--pump-success));

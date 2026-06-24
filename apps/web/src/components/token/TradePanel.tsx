@@ -34,7 +34,6 @@ import { useFlashblocksTransactionReceipt } from "@/hooks/useFlashblocksTransact
 import {
   useKernelTradeWriteContract,
   type KernelTradeWriteCallbacks,
-  type TradeWritePhase,
 } from "@/hooks/useKernelTradeWriteContract";
 import type { KernelTransactionResult } from "@/lib/aa/send-kernel-transaction";
 import {
@@ -213,19 +212,6 @@ function SwapArrowsIcon() {
   );
 }
 
-function tradePhaseBusyLabel(phase: TradeWritePhase, fallback: string): string {
-  switch (phase) {
-    case "preparing":
-      return "Sending…";
-    case "submitted":
-      return "Submitted…";
-    case "confirming":
-      return "Confirming…";
-    default:
-      return fallback;
-  }
-}
-
 export function TradePanel({
   tokenAddress,
   symbol,
@@ -267,10 +253,13 @@ export function TradePanel({
   const [error, setError] = useState<string | null>(null);
   const [submitSuccess, setSubmitSuccess] = useState<string | null>(null);
   const [receiveExpanded, setReceiveExpanded] = useState(false);
+  const [tradeInFlight, setTradeInFlight] = useState(false);
+  const tradeInFlightRef = useRef(false);
   const [pendingAction, setPendingAction] = useState<"buy" | "sell" | "approve" | null>(null);
   /** Sync side for callbacks — setState(pendingAction) may lag behind userOp submitted. */
   const pendingTradeSideRef = useRef<"buy" | "sell" | null>(null);
   const optimisticPendingRef = useRef<{ id: string; side: "buy" | "sell" } | null>(null);
+  const legacyApproveChainRef = useRef(false);
   const pendingSellRef = useRef<{ amountWei: bigint; minBnbOut: bigint } | null>(null);
   const handledReceiptHashRef = useRef<`0x${string}` | null>(null);
   const pendingTradeReferrerRef = useRef<`0x${string}` | null>(null);
@@ -504,7 +493,6 @@ export function TradePanel({
     txHash,
     userOpHash,
     receipt: kernelReceipt,
-    tradePhase,
     isSubmitting,
     isBackgroundConfirming,
     reset,
@@ -569,6 +557,7 @@ export function TradePanel({
 
   useEffect(() => {
     if (!writeError) return;
+    legacyApproveChainRef.current = false;
     if (optimisticPendingRef.current) {
       rollbackInstantOptimistic();
       pendingSellRef.current = null;
@@ -578,6 +567,7 @@ export function TradePanel({
     pendingTradeSideRef.current = null;
     setPendingAction(null);
     handledReceiptHashRef.current = null;
+    endTradeInFlight();
     setSubmitSuccess(null);
     setError(formatTradeError(writeError));
     failTradeTrace("ux.write_error", writeError);
@@ -1007,23 +997,29 @@ export function TradePanel({
   }, [side, buyInputMode, linkedBuySpendWei, bondingCurve, protocolFeeBps, amount]);
 
   useEffect(() => {
-    if (!activeReceipt || !txHash || pendingAction !== "approve") return;
+    if (!activeReceipt || !txHash || !legacyApproveChainRef.current) return;
     if (activeReceipt.transactionHash !== txHash) return;
     if (handledReceiptHashRef.current === txHash) return;
 
     if (activeReceipt.status !== "success") {
       handledReceiptHashRef.current = txHash;
+      legacyApproveChainRef.current = false;
       failTradeTrace("chain.receipt_reverted", new Error("Transaction reverted on-chain"));
+      if (optimisticPendingRef.current) {
+        rollbackInstantOptimistic();
+      }
       setError("Transaction reverted on-chain. Check wallet balance, token status, and amount.");
       setPendingAction(null);
       pendingSellRef.current = null;
       pendingTradeReferrerRef.current = null;
+      endTradeInFlight();
       reset();
       return;
     }
 
     handledReceiptHashRef.current = txHash;
     const pendingSell = pendingSellRef.current;
+    legacyApproveChainRef.current = false;
 
     void (async () => {
       await refetchAllowance();
@@ -1031,6 +1027,7 @@ export function TradePanel({
       if (!pendingSell) {
         setPendingAction(null);
         pendingSellRef.current = null;
+        endTradeInFlight();
         reset();
         return;
       }
@@ -1040,8 +1037,10 @@ export function TradePanel({
       quoteUsdAtSubmitRef.current = estimatedQuotePriceUsd;
       handledReceiptHashRef.current = null;
       reset();
-      pendingTradeSideRef.current = "sell";
-      setPendingAction("sell");
+      if (!optimisticPendingRef.current) {
+        pendingTradeSideRef.current = "sell";
+        setPendingAction("sell");
+      }
       tradeTraceStep("ui.approve_complete.starting_sell");
       tradeWrite({
         address: contracts.bondingCurveManager,
@@ -1051,6 +1050,7 @@ export function TradePanel({
           ? [tokenAddress, pendingSell.amountWei, pendingSell.minBnbOut, tradeReferrer]
           : [tokenAddress, pendingSell.amountWei, pendingSell.minBnbOut],
         chainId: pumpChain.id,
+        preflight: scwPreflightForTrade(0n),
         callbacks: pumpTradeCallbacks("sell"),
       });
     })();
@@ -1213,12 +1213,22 @@ export function TradePanel({
     return () => assertScwForTrade(address, callValueWei);
   }
 
+  function beginTradeInFlight() {
+    tradeInFlightRef.current = true;
+    setTradeInFlight(true);
+  }
+
+  function endTradeInFlight() {
+    tradeInFlightRef.current = false;
+    setTradeInFlight(false);
+  }
+
   function unlockTradeFormAfterSubmit(side: "buy" | "sell", submittedUserOpHash: string) {
     setAmount("");
     setLinkedBuySpendWei(null);
     setLinkedSellTokenWei(null);
     setError(null);
-    setSubmitSuccess("Submitted — confirming on-chain…");
+    setSubmitSuccess(side === "buy" ? `Bought ${symbol}` : `Sold ${symbol}`);
     pendingTradeSideRef.current = null;
     setPendingAction(null);
     tradeTraceStep("ux.on_trade_submitted", { userOpHash: submittedUserOpHash, side });
@@ -1280,6 +1290,7 @@ export function TradePanel({
       receipt: activeReceipt,
     });
 
+    endTradeInFlight();
     setSubmitSuccess(null);
     void (async () => {
       const t0 = performance.now();
@@ -1303,6 +1314,8 @@ export function TradePanel({
     tradeTraceStep("ux.optimistic.rollback", { pendingId: pending.id });
     onTradeOptimisticRollback?.({ pendingId: pending.id });
     optimisticPendingRef.current = null;
+    legacyApproveChainRef.current = false;
+    endTradeInFlight();
     setSubmitSuccess(null);
   }
 
@@ -1326,6 +1339,9 @@ export function TradePanel({
     setLinkedBuySpendWei(null);
     setLinkedSellTokenWei(null);
     setError(null);
+    beginTradeInFlight();
+    setPendingAction(null);
+    pendingTradeSideRef.current = null;
     setSubmitSuccess(
       tradeSide === "buy" ? `Bought ${symbol}` : `Sold ${symbol}`
     );
@@ -1453,7 +1469,7 @@ export function TradePanel({
             sellParams.amountWei,
             legacyApproveGasReserveWei
           );
-          setPendingAction("approve");
+          legacyApproveChainRef.current = true;
           tradeTraceStep("ux.legacy_approve.start");
           tradeWrite({
             address: tokenAddress,
@@ -1463,6 +1479,7 @@ export function TradePanel({
             chainId: pumpChain.id,
           });
         } catch (err) {
+          legacyApproveChainRef.current = false;
           pendingSellRef.current = null;
           setPendingAction(null);
           handleInstantTradeFailure(err);
@@ -1514,6 +1531,8 @@ export function TradePanel({
       onFailed: (err) => {
         if (optimisticPendingRef.current) {
           rollbackInstantOptimistic();
+        } else {
+          endTradeInFlight();
         }
         setSubmitSuccess(null);
         setError(formatTradeError(err));
@@ -1530,6 +1549,7 @@ export function TradePanel({
       minTokenOut: buyParams.minTokenOut.toString(),
     });
     if (!optimisticPendingRef.current) {
+      beginTradeInFlight();
       pendingTradeSideRef.current = "buy";
       setPendingAction("buy");
     }
@@ -1553,6 +1573,7 @@ export function TradePanel({
   ) {
     const params = usePermit ? await buildSellParamsWithPermit(sellParams, true) : sellParams;
     if (!optimisticPendingRef.current) {
+      beginTradeInFlight();
       pendingTradeSideRef.current = "sell";
       setPendingAction("sell");
     }
@@ -1640,6 +1661,9 @@ export function TradePanel({
 
   async function submitTrade() {
     setError(null);
+    if (tradeInFlightRef.current || optimisticPendingRef.current || legacyApproveChainRef.current) {
+      return;
+    }
     tradeTraceStep("ux.submit_trade.start", { side });
 
     if (!isConnected || !address) {
@@ -1780,6 +1804,8 @@ export function TradePanel({
 
         if (tryDispatchInstantTrade(undefined, baseSellParams, false)) return;
 
+        beginTradeInFlight();
+        legacyApproveChainRef.current = true;
         setPendingAction("approve");
         tradeWrite({
           address: tokenAddress,
@@ -1846,10 +1872,10 @@ export function TradePanel({
   useEffect(() => {
     if (side !== "sell" || tokenBalance === undefined || sellTokenWei <= 0n) return;
     if (sellTokenWei <= tokenBalance) return;
-    if (pendingAction !== null || isSubmitting || isConfirming) return;
+    if (pendingAction !== null || isSubmitting || isConfirming || tradeInFlight) return;
     applySellTokenWei(tokenBalance);
     setError("Amount adjusted to your current token balance.");
-  }, [side, tokenBalance, sellTokenWei, pendingAction, isSubmitting, isConfirming]);
+  }, [side, tokenBalance, sellTokenWei, pendingAction, isSubmitting, isConfirming, tradeInFlight]);
 
   async function confirmPendingTrade(rememberAutoConfirm: boolean) {
     if (!pendingTrade) return;
@@ -1879,7 +1905,9 @@ export function TradePanel({
             setPendingTrade(null);
             return;
           }
+          beginTradeInFlight();
           setPendingAction("approve");
+          legacyApproveChainRef.current = true;
           tradeWrite({
             address: tokenAddress,
             abi: erc20Abi,
@@ -1917,6 +1945,7 @@ export function TradePanel({
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (tradeInFlightRef.current) return;
     if (needsBnbFunding) {
       openFundChoice({
         title: "Add BNB to trade",
@@ -1939,13 +1968,12 @@ export function TradePanel({
     await submitTrade();
   }
 
-  const isBlockingSubmit = isSubmitting;
-  const sellFlowActive =
-    side === "sell" && pendingAction !== null && (isSubmitting || pendingAction === "approve");
+  const stealthSubmitLocked =
+    tradeInFlight || isSubmitting || pendingAction !== null;
 
   useEffect(() => {
     if (!autoSubmitPendingRef.current || autoSubmitTriggeredRef.current) return;
-    if (balancePending || isBlockingSubmit) return;
+    if (balancePending || stealthSubmitLocked) return;
     if (side === "sell") {
       if (sellTokenWei === 0n || !sellQuoteOut) return;
     } else if (side === "buy") {
@@ -1956,7 +1984,7 @@ export function TradePanel({
     autoSubmitPendingRef.current = false;
     autoSubmitTriggeredRef.current = true;
     void submitTrade();
-  }, [side, sellTokenWei, sellQuoteOut, buyCostWei, balancePending, isBlockingSubmit]);
+  }, [side, sellTokenWei, sellQuoteOut, buyCostWei, balancePending, stealthSubmitLocked]);
 
   const submitLabel = !isConnected
     ? "Sign in to trade"
@@ -1970,32 +1998,19 @@ export function TradePanel({
           ? insufficientTokenOnly
             ? "Insufficient token balance"
             : "Insufficient balance"
-        : side === "buy"
-          ? isBlockingSubmit
-            ? tradePhaseBusyLabel(tradePhase, "Buying…")
-            : "Buy"
-          : pendingAction === "approve"
-            ? isBlockingSubmit
-              ? tradePhaseBusyLabel(tradePhase, "Approving…")
-              : "Approve & sell"
-            : pendingAction === "sell" || (isBlockingSubmit && sellFlowActive)
-              ? tradePhaseBusyLabel(tradePhase, "Selling…")
-              : needsLegacyApproval
-                ? "Approve & sell"
-                : isBlockingSubmit
-                  ? tradePhaseBusyLabel(tradePhase, "Selling…")
-                  : "Sell";
+          : side === "buy"
+            ? "Buy"
+            : "Sell";
 
-  const submitDisabled =
+  const hardSubmitDisabled =
     isConnected &&
     (wrongChain ||
-      isBlockingSubmit ||
-      sellFlowActive ||
       paused ||
       balancePending ||
       (insufficientBalance && !needsBnbFunding));
   const submitButtonClass =
     side === "sell" ? "trade-submit-button--sell" : "trade-submit-button--buy";
+  const submitButtonStealthLocked = stealthSubmitLocked && !hardSubmitDisabled;
 
   const canUseMaxBuy =
     side === "buy" &&
@@ -2199,36 +2214,12 @@ export function TradePanel({
           <p className="mx-4 mb-3 text-caption text-pump-success">{submitSuccess}</p>
         ) : null}
 
-        {isBackgroundConfirming && !submitSuccess ? (
-          <p className="mx-4 mb-3 text-caption text-pump-muted">
-            Confirming on-chain…
-          </p>
-        ) : null}
-
-        {txHash ? (
-          <p className="mx-4 mb-3 text-caption text-pump-muted break-all">
-            Tx: {txHash}
-            {isConfirming
-              ? pendingAction === "approve"
-                ? fastTradeConfirm
-                  ? " — confirming approval (~200ms)…"
-                  : " — confirming approval…"
-                : pendingAction === "sell"
-                  ? fastTradeConfirm
-                    ? " — confirming sell (~200ms)…"
-                    : " — confirming sell…"
-                  : fastTradeConfirm
-                    ? " — confirming (~200ms)…"
-                    : " — confirming…"
-              : null}
-          </p>
-        ) : null}
-
         <div className="px-4 pb-4">
           <button
             type="submit"
-            disabled={submitDisabled}
-            className={`trade-submit-button ${submitButtonClass}`}
+            disabled={hardSubmitDisabled}
+            aria-disabled={hardSubmitDisabled || stealthSubmitLocked}
+            className={`trade-submit-button ${submitButtonClass}${submitButtonStealthLocked ? " trade-submit-button--stealth-locked" : ""}`}
           >
             {submitLabel}
           </button>
@@ -2241,7 +2232,7 @@ export function TradePanel({
         symbol={symbol}
         spendLabel={pendingTrade?.spendLabel ?? ""}
         receiveLabel={pendingTrade?.receiveLabel ?? ""}
-        loading={isSubmitting}
+        loading={false}
         error={tradeConfirmError}
         onClose={() => {
           setTradeConfirmOpen(false);
