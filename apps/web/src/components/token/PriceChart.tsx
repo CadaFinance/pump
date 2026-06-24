@@ -24,6 +24,7 @@ import {
   pinTailCandleToLiveMark,
   reconcileCandleSeriesToLiveMark,
   resolveChartPriceFormat,
+  sanitizeCandleSeries,
   scaleCandleBars,
   type ActorOptimisticChartSpot,
   type CandleBar,
@@ -355,13 +356,25 @@ export function PriceChart({
     }
 
     if (actorOptimisticSpot) {
-      return applyActorOptimisticCandleBucket(
+      const patched = applyActorOptimisticCandleBucket(
         baseCandles,
         baseVolumes,
         timeInterval,
         actorOptimisticSpot,
         candleUnitScale
       );
+      const anchor = actorOptimisticSpot.spotAfterBnb * candleUnitScale;
+      return {
+        candles: sanitizeCandleSeries(patched.candles, anchor),
+        volumes: patched.volumes,
+      };
+    }
+
+    if (liveMarkPriceBnb != null && liveMarkPriceBnb > 0 && baseCandles.length > 0) {
+      return {
+        candles: sanitizeCandleSeries(baseCandles, liveMarkPriceBnb * candleUnitScale),
+        volumes: baseVolumes,
+      };
     }
 
     return { candles: baseCandles, volumes: baseVolumes };

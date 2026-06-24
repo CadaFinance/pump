@@ -637,13 +637,22 @@ export function applyActorOptimisticCandleBucket(
 
   if (idx >= 0) {
     const existing = candles[idx]!;
-    const merged: CandleBar = {
-      time: bucketSec,
-      open: existing.open,
-      high: Math.max(existing.high, high),
-      low: Math.min(existing.low, low),
-      close: after,
-    };
+    const priorClose = idx > 0 ? candles[idx - 1]!.close : undefined;
+    const open = coherentOpenForBar(
+      existing.open,
+      after,
+      before > 0 ? before : priorClose
+    );
+    const merged = sanitizeCandleOhlc(
+      {
+        time: bucketSec,
+        open,
+        high: Math.max(existing.high, high),
+        low: Math.min(existing.low, low),
+        close: after,
+      },
+      after
+    );
     const nextCandles = candles.slice();
     const nextVolumes = volumes.slice();
     nextCandles[idx] = merged;
@@ -659,14 +668,24 @@ export function applyActorOptimisticCandleBucket(
   }
 
   if (bucketSec === last.time) {
+    const priorClose = candles.length > 1 ? candles[candles.length - 2]!.close : undefined;
+    const open = coherentOpenForBar(
+      last.open,
+      after,
+      before > 0 ? before : priorClose
+    );
     const nextCandles = candles.slice();
     const nextVolumes = volumes.slice();
-    nextCandles[nextCandles.length - 1] = {
-      ...patched,
-      open: last.open,
-      high: Math.max(last.high, high),
-      low: Math.min(last.low, low),
-    };
+    nextCandles[nextCandles.length - 1] = sanitizeCandleOhlc(
+      {
+        time: last.time,
+        open,
+        high: Math.max(last.high, high),
+        low: Math.min(last.low, low),
+        close: after,
+      },
+      after
+    );
     nextVolumes[nextVolumes.length - 1] = volBar;
     return { candles: nextCandles, volumes: nextVolumes };
   }
@@ -677,6 +696,52 @@ export function applyActorOptimisticCandleBucket(
   }
 
   return { candles, volumes };
+}
+
+const OHLC_MAGNITUDE_LOG_EPS = 0.35;
+
+/** Whether two spot prices are on the same decade scale (guards stale 1000× DB OHLC). */
+export function pricesSameMagnitude(a: number, b: number): boolean {
+  if (!Number.isFinite(a) || !Number.isFinite(b) || a <= 0 || b <= 0) return true;
+  return Math.abs(Math.log10(a / b)) <= OHLC_MAGNITUDE_LOG_EPS;
+}
+
+function coherentOpenForBar(
+  existingOpen: number,
+  anchor: number,
+  fallback?: number
+): number {
+  if (Number.isFinite(existingOpen) && existingOpen > 0 && pricesSameMagnitude(existingOpen, anchor)) {
+    return existingOpen;
+  }
+  if (
+    fallback != null &&
+    Number.isFinite(fallback) &&
+    fallback > 0 &&
+    pricesSameMagnitude(fallback, anchor)
+  ) {
+    return fallback;
+  }
+  return anchor;
+}
+
+/** Drop OHLC legs on a different magnitude than anchor (prevents giant bear wicks). */
+export function sanitizeCandleOhlc(bar: CandleBar, anchor: number): CandleBar {
+  if (!Number.isFinite(anchor) || anchor <= 0) return bar;
+
+  const pick = (p: number, fallback: number): number =>
+    Number.isFinite(p) && p > 0 && pricesSameMagnitude(p, anchor) ? p : fallback;
+
+  const close = pick(bar.close, anchor);
+  const open = pick(bar.open, close);
+  const high = Math.max(pick(bar.high, close), open, close);
+  const low = Math.min(pick(bar.low, close), open, close);
+  return { time: bar.time, open, high, low, close };
+}
+
+export function sanitizeCandleSeries(candles: CandleBar[], anchor: number): CandleBar[] {
+  if (candles.length === 0 || !Number.isFinite(anchor) || anchor <= 0) return candles;
+  return candles.map((c) => sanitizeCandleOhlc(c, anchor));
 }
 
 export function scaleCandleBars(candles: CandleBar[], scale: number): CandleBar[] {
@@ -706,7 +771,13 @@ export function reconcileCandleSeriesToLiveMark(
   const tailClose = candles[candles.length - 1]!.close;
   if (!Number.isFinite(tailClose) || tailClose <= 0) return { candles, volumes };
 
-  const ratio = tailClose / liveMarkBnb;
+  let seriesPeak = tailClose;
+  for (const c of candles) {
+    if (Number.isFinite(c.high) && c.high > 0) seriesPeak = Math.max(seriesPeak, c.high);
+    if (Number.isFinite(c.open) && c.open > 0) seriesPeak = Math.max(seriesPeak, c.open);
+  }
+
+  const ratio = seriesPeak / liveMarkBnb;
   if (!Number.isFinite(ratio) || ratio <= 0) return { candles, volumes };
 
   const log10 = Math.log10(ratio);
@@ -744,13 +815,20 @@ export function pinTailCandleToLiveMark(
   const existing = candles[targetIdx];
   if (!existing) return { candles, volumes };
 
-  const open = existing.open;
+  const priorClose = targetIdx > 0 ? candles[targetIdx - 1]!.close : undefined;
   const close = liveMarkBnb;
-  const high = Math.max(existing.high, open, close);
-  const low = Math.min(existing.low, open, close);
-
+  const open = coherentOpenForBar(existing.open, close, priorClose);
   const nextCandles = candles.slice();
-  nextCandles[targetIdx] = { time: existing.time, open, high, low, close };
+  nextCandles[targetIdx] = sanitizeCandleOhlc(
+    {
+      time: existing.time,
+      open,
+      high: Math.max(existing.high, open, close),
+      low: Math.min(existing.low, open, close),
+      close,
+    },
+    close
+  );
   return { candles: nextCandles, volumes };
 }
 
@@ -774,22 +852,20 @@ export function applyActorOptimisticSpotToCandles(
 
   const lastIdx = candles.length - 1;
   const last = candles[lastIdx]!;
-  let open = last.open;
+  const priorClose = lastIdx > 0 ? candles[lastIdx - 1]!.close : undefined;
   const close = spotAfterScaled;
+  const open = coherentOpenForBar(last.open, close, priorClose);
 
-  if (side === "buy") {
-    if (close < open) open = close;
-  } else if (close > open) {
-    open = close;
-  }
-
-  const patched: CandleBar = {
-    time: last.time,
-    open,
-    high: Math.max(last.high, open, close),
-    low: Math.min(last.low, open, close),
-    close,
-  };
+  const patched = sanitizeCandleOhlc(
+    {
+      time: last.time,
+      open,
+      high: Math.max(last.high, open, close),
+      low: Math.min(last.low, open, close),
+      close,
+    },
+    close
+  );
 
   const nextCandles = candles.slice();
   nextCandles[lastIdx] = patched;
