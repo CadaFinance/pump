@@ -1335,7 +1335,7 @@ export function PortfolioPanel({
               label="Net PnL"
               icon={MetricIcons.netPnl}
               value={formatUsdReadable(totalNetPnlUsd, { compact: true, signed: true })}
-              valueClassName={`financial-value text-body-sm font-semibold ${pnlTone(totalNetPnl)} ${flashText(totalPnlFlash)}`}
+              valueClassName={`financial-value text-body-sm font-semibold ${pnlTone(totalNetPnlUsd)} ${flashText(totalPnlFlash)}`}
             />
             <CreatorFeesCard
               className="col-span-2 lg:col-span-1"
