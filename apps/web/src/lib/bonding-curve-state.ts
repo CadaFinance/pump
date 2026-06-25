@@ -7,6 +7,8 @@ import { formatEther, parseEther, parseUnits } from "viem";
 import {
   bondingCurveFromSnapshot,
   bondingCurveSnapshotFromTuple,
+  BONDING_TOKEN_SUPPLY_HUMAN,
+  BONDING_VIRTUAL_BNB_HUMAN,
   DEFAULT_VIRTUAL_TOKEN_RESERVE,
   DEFAULT_VIRTUAL_ZUG_RESERVE,
   spotPriceBnbFromBondingDecimals,
@@ -103,10 +105,18 @@ export function machineFromTokenReserves(
 }
 
 export function machineSpotPriceBnb(machine: BondingCurveMachine): number {
-  const { reserveZug, soldTokens } = machine.snapshot;
+  const { reserveZug, soldTokens, virtualZugReserve, virtualTokenReserve } = machine.snapshot;
+  const vzWei = BigInt(virtualZugReserve || "0");
+  const vtWei = BigInt(virtualTokenReserve || "0");
+  const virtualZug =
+    vzWei > 0n ? Number(formatEther(vzWei)) : BONDING_VIRTUAL_BNB_HUMAN;
+  const virtualToken =
+    vtWei > 0n ? Number(formatEther(vtWei)) : BONDING_TOKEN_SUPPLY_HUMAN;
   const spot = spotPriceBnbFromBondingDecimals(
     formatEther(BigInt(reserveZug || "0")),
-    formatEther(BigInt(soldTokens || "0"))
+    formatEther(BigInt(soldTokens || "0")),
+    virtualZug,
+    virtualToken
   );
   return spot > 0 ? spot : 0;
 }

@@ -13,8 +13,8 @@ import {
 const SQL_BONDING_MARK_PRICE_ZUG = `
   CASE
     WHEN (${BONDING_TOKEN_SUPPLY_HUMAN}::numeric - COALESCE(b.token_sold, 0)) > 0
-    THEN (${BONDING_VIRTUAL_BNB_HUMAN}::numeric + COALESCE(b.reserve_zug, 0))
-         / (${BONDING_TOKEN_SUPPLY_HUMAN}::numeric - COALESCE(b.token_sold, 0))
+    THEN (COALESCE(b.virtual_zug_reserve, ${BONDING_VIRTUAL_BNB_HUMAN})::numeric + COALESCE(b.reserve_zug, 0))
+         / (COALESCE(b.virtual_token_reserve, ${BONDING_TOKEN_SUPPLY_HUMAN})::numeric - COALESCE(b.token_sold, 0))
     ELSE COALESCE(b.last_price_zug, 0)
   END
 `;

@@ -432,18 +432,21 @@ export const DEFAULT_STARTING_SPOT_PRICE_BNB = freshSpotPriceZug(
 export const DEFAULT_STARTING_SPOT_PRICE_ZUG = DEFAULT_STARTING_SPOT_PRICE_BNB;
 
 /** Human-unit bonding constants (DB stores reserve_zug / token_sold as decimals). */
-export const BONDING_VIRTUAL_BNB_HUMAN = 5;
+/** Matches MemeFactory `defaultVirtualZugReserve = 5_000 ether` (not 5 BNB). */
+export const BONDING_VIRTUAL_BNB_HUMAN = 5_000;
 export const BONDING_TOKEN_SUPPLY_HUMAN = 1_000_000_000;
 
 /** Marginal spot BNB/token from indexer DB bonding_state decimals (chart / holders mark). */
 export function spotPriceBnbFromBondingDecimals(
   reserveZug: string | number | null | undefined,
-  tokenSold: string | number | null | undefined
+  tokenSold: string | number | null | undefined,
+  virtualZugHuman: number = BONDING_VIRTUAL_BNB_HUMAN,
+  virtualTokenHuman: number = BONDING_TOKEN_SUPPLY_HUMAN
 ): number {
   const reserve = Number(reserveZug ?? 0);
   const sold = Number(tokenSold ?? 0);
-  const poolZug = BONDING_VIRTUAL_BNB_HUMAN + reserve;
-  const poolTokens = BONDING_TOKEN_SUPPLY_HUMAN - sold;
+  const poolZug = virtualZugHuman + reserve;
+  const poolTokens = virtualTokenHuman - sold;
   if (!Number.isFinite(poolZug) || !Number.isFinite(poolTokens) || poolTokens <= 0 || poolZug <= 0) {
     return 0;
   }

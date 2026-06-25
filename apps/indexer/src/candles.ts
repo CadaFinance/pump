@@ -1,4 +1,5 @@
 import type pg from "pg";
+import { parseUnits } from "viem";
 import { ratioWeiToDecimal, weiToDecimal } from "./utils.js";
 import { fetchIndexerNativeUsdRate } from "./native-usd.js";
 
@@ -63,10 +64,17 @@ function virtualReserves(): { virtualZug: bigint; virtualToken: bigint } {
   return { virtualZug, virtualToken };
 }
 
-export function spotPriceZugFromReserves(reserveZug: bigint, soldTokens: bigint): string {
-  const { virtualZug, virtualToken } = virtualReserves();
-  const poolZug = virtualZug + reserveZug;
-  const poolTokens = virtualToken - soldTokens;
+export function spotPriceZugFromReserves(
+  reserveZug: bigint,
+  soldTokens: bigint,
+  virtualZug?: bigint,
+  virtualToken?: bigint
+): string {
+  const defaults = virtualReserves();
+  const vz = virtualZug ?? defaults.virtualZug;
+  const vt = virtualToken ?? defaults.virtualToken;
+  const poolZug = vz + reserveZug;
+  const poolTokens = vt - soldTokens;
   if (poolTokens <= 0n || poolZug <= 0n) return "0";
   return ratioWeiToDecimal(poolZug, poolTokens);
 }
@@ -110,6 +118,38 @@ function touchPrices(open: number, spotBefore: number, spotAfter: number): {
     low: Math.min(...prices),
     close: spotAfter,
   };
+}
+
+async function readBondingVirtualReserves(
+  client: pg.PoolClient,
+  tokenAddress: string
+): Promise<{ virtualZug: bigint; virtualToken: bigint }> {
+  const defaults = virtualReserves();
+  const result = await client.query<{
+    virtual_zug_reserve: string;
+    virtual_token_reserve: string;
+  }>(
+    `
+      SELECT virtual_zug_reserve::text, virtual_token_reserve::text
+      FROM bonding_states
+      WHERE token_address = $1
+      LIMIT 1
+    `,
+    [tokenAddress]
+  );
+  const row = result.rows[0];
+  if (!row) return defaults;
+
+  try {
+    const virtualZug = parseUnits(row.virtual_zug_reserve || "5000", 18);
+    const virtualToken = parseUnits(row.virtual_token_reserve || "1000000000", 18);
+    return {
+      virtualZug: virtualZug > 0n ? virtualZug : defaults.virtualZug,
+      virtualToken: virtualToken > 0n ? virtualToken : defaults.virtualToken,
+    };
+  } catch {
+    return defaults;
+  }
 }
 
 async function readPriorBucketClose(
@@ -164,7 +204,7 @@ async function upsertIntervalCandle(
     ? await readPriorBucketClose(client, input.tokenAddress, interval, bucketTs)
     : null;
   const spotOpen = spotBefore > 0 && Number.isFinite(spotBefore) ? spotBefore : spotAfter;
-  const open = priorClose ?? spotOpen;
+  const open = priorClose ?? (isNewBucket ? spotAfter : spotOpen);
   const ohlc = touchPrices(open, spotOpen, spotAfter);
   const closeUsd =
     nativeUsdRate != null && nativeUsdRate > 0 ? spotAfter * nativeUsdRate : null;
@@ -260,8 +300,17 @@ export async function upsertCandlesAfterTrade(
     input.tokenAmount
   );
 
-  const spotBefore = Number(spotPriceZugFromReserves(reserveBefore, soldBefore));
-  const spotAfter = Number(spotPriceZugFromReserves(input.reserveAfter, input.soldAfter));
+  const { virtualZug, virtualToken } = await readBondingVirtualReserves(
+    client,
+    input.tokenAddress
+  );
+
+  const spotBefore = Number(
+    spotPriceZugFromReserves(reserveBefore, soldBefore, virtualZug, virtualToken)
+  );
+  const spotAfter = Number(
+    spotPriceZugFromReserves(input.reserveAfter, input.soldAfter, virtualZug, virtualToken)
+  );
   const gross = Number(weiToDecimal(input.zugAmount));
   const fee = Number(weiToDecimal(input.feeZug));
   const volumeZug = Math.max(0, gross - fee);
