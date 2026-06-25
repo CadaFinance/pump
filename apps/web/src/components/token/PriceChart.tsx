@@ -16,6 +16,7 @@ import {
 } from "lightweight-charts";
 import {
   applyCandleSeriesPriceFormat,
+  buildCandlesFromTrades,
   CANDLE_INTERVALS,
   createOptimisticCandleBar,
   formatPumpSubscriptPrice,
@@ -27,6 +28,7 @@ import {
   type CandleWsUpdate,
   type VolumeBar,
 } from "@/lib/candles";
+import type { TradeItem } from "@/lib/db/launchpad";
 import type { InitialChartCandles } from "@/lib/token-server";
 import {
   canSafeIncrementalUpdate,
@@ -63,6 +65,8 @@ type PriceChartProps = {
   curveSnapshot?: BondingCurveSnapshot;
   /** WS candle buckets from indexer (db source). */
   liveCandleUpdates?: CandleWsUpdate[];
+  /** Tape trades (DB + optimistic) — chart fallback before indexer candles land. */
+  fallbackTrades?: TradeItem[];
   wsConnected?: boolean;
   bnbUsd?: number | null;
   /** Live on-chain bonding spot (native) — chart tail + header USD. */
@@ -230,6 +234,7 @@ export function PriceChart({
   actorOptimisticSpot = null,
   curveSnapshot,
   liveCandleUpdates = [],
+  fallbackTrades = [],
   wsConnected = false,
   bnbUsd = null,
   liveOnChainSpotBnb = null,
@@ -444,10 +449,49 @@ export function PriceChart({
     });
   }, [liveCandleUpdates, timeInterval, seriesState.source, tokenAddress, wsConnected]);
 
+  const chartSeriesState = useMemo(() => {
+    if (seriesState.candles.length > 0 || fallbackTrades.length === 0) {
+      return seriesState;
+    }
+    const virtualZugReserve = curveSnapshot?.virtualZugReserve
+      ? BigInt(curveSnapshot.virtualZugReserve)
+      : undefined;
+    const virtualTokenReserve = curveSnapshot?.virtualTokenReserve
+      ? BigInt(curveSnapshot.virtualTokenReserve)
+      : undefined;
+    const { candles, volumes } = buildCandlesFromTrades(
+      fallbackTrades,
+      timeInterval,
+      candleUnitScale,
+      {
+        fillGaps: true,
+        endTimeMs: chartEndTimeMs,
+        virtualZugReserve,
+        virtualTokenReserve,
+      }
+    );
+    if (candles.length === 0) return seriesState;
+    return {
+      candles,
+      volumes,
+      source: "trades" as const,
+      interval: timeInterval,
+      gapFilledByApi: false,
+    };
+  }, [
+    seriesState,
+    fallbackTrades,
+    timeInterval,
+    candleUnitScale,
+    chartEndTimeMs,
+    curveSnapshot?.virtualZugReserve,
+    curveSnapshot?.virtualTokenReserve,
+  ]);
+
   const { candles, volumes } = useMemo(
     () =>
       deriveChartSeries({
-        state: seriesState,
+        state: chartSeriesState,
         displayInterval: timeInterval,
         priceScale: candleUnitScale,
         endTimeMs: chartEndTimeMs,
@@ -455,7 +499,7 @@ export function PriceChart({
         actorOptimisticSpot: actorOptimisticSpot,
       }),
     [
-      seriesState,
+      chartSeriesState,
       timeInterval,
       candleUnitScale,
       chartEndTimeMs,

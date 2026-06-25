@@ -790,6 +790,7 @@ export function TokenDetailLive({
             actorOptimisticSpot={actorChartSpot}
             curveSnapshot={tradeCurveSnapshot}
             liveCandleUpdates={liveCandleUpdates}
+            fallbackTrades={trades}
             wsConnected={wsConnected}
             bnbUsd={bnbUsd}
             liveOnChainSpotBnb={onChainSpotBnb}

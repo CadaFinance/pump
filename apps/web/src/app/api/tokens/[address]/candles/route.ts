@@ -91,39 +91,42 @@ export async function GET(request: NextRequest, context: RouteContext) {
         interval,
         { endTimeMs: Date.now() }
       );
-      if (gapFill === "sql" && seriesHasTemporalGaps(candles, interval)) {
-        gapFill = "ts";
-      }
-
-      const payload = {
-        candles,
-        volumes,
-        interval,
-        source: "db" as const,
-        gapFilled: true,
-        gapFill,
-        bucketCount: stored.length,
-        frozen: false,
-        status: token.status,
-      };
-
-      void writeCandleCache(address, interval, {
-        candles,
-        volumes,
-        interval,
-        source: "db",
-        gapFilled: true,
-        gapFill,
-      });
-
-      return NextResponse.json(
-        { data: payload },
-        {
-          headers: {
-            "Cache-Control": "private, max-age=2, stale-while-revalidate=5",
-          },
+      if (candles.length > 0) {
+        if (gapFill === "sql" && seriesHasTemporalGaps(candles, interval)) {
+          gapFill = "ts";
         }
-      );
+
+        const payload = {
+          candles,
+          volumes,
+          interval,
+          source: "db" as const,
+          gapFilled: true,
+          gapFill,
+          bucketCount: stored.length,
+          frozen: false,
+          status: token.status,
+        };
+
+        void writeCandleCache(address, interval, {
+          candles,
+          volumes,
+          interval,
+          source: "db",
+          gapFilled: true,
+          gapFill,
+        });
+
+        return NextResponse.json(
+          { data: payload },
+          {
+            headers: {
+              "Cache-Control": "private, max-age=2, stale-while-revalidate=5",
+            },
+          }
+        );
+      }
+      // Stored rows with invalid/zero closes — rebuild from trades instead.
     }
 
     const trades = await listTradesForChart(address);
