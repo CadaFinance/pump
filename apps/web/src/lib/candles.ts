@@ -471,11 +471,7 @@ export function fillGapsForStoredCandles(
   for (let t = startSec; t <= endSec; t += intervalSec) {
     const existing = bucketByTime.get(t);
     if (existing) {
-      const bar =
-        anchorPrice != null
-          ? sanitizeCandleOhlc(existing, anchorPrice)
-          : existing;
-      nextCandles.push(bar);
+      nextCandles.push(existing);
       nextVolumes.push(
         volumeByTime.get(t) ?? {
           time: t,
@@ -483,7 +479,7 @@ export function fillGapsForStoredCandles(
           color: volumeBarColor(0, 0),
         }
       );
-      lastClose = bar.close;
+      lastClose = existing.close;
       continue;
     }
     if (lastClose == null) continue;
@@ -915,22 +911,13 @@ export function pinTailCandleToLiveMark(
   if (!existing) return { candles, volumes };
 
   const bucketVolume = volumes[targetIdx]?.value ?? 0;
-  const isLiveBucket = existing.time === liveBucketSec;
-
-  // Idle live bucket: flat at mark (matches header) — no open/close spread (ghost wick).
-  if (bucketVolume <= 0 && isLiveBucket) {
-    const nextCandles = candles.slice();
-    nextCandles[targetIdx] = {
-      time: existing.time,
-      open: liveMarkBnb,
-      high: liveMarkBnb,
-      low: liveMarkBnb,
-      close: liveMarkBnb,
-    };
-    return { candles: nextCandles, volumes };
+  if (bucketVolume <= 0) {
+    // Gap-fill already carried last trade close forward — do not jump to live mark.
+    return { candles, volumes };
   }
 
-  if (bucketVolume <= 0) {
+  const isLiveBucket = existing.time === liveBucketSec;
+  if (!isLiveBucket) {
     return { candles, volumes };
   }
 

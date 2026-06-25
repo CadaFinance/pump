@@ -85,14 +85,21 @@ export function chartSeriesReducer(
   switch (action.type) {
     case "reset":
       return initialChartSeriesState;
-    case "set_fetched":
+    case "set_fetched": {
+      const gapFilled = fillGapsForStoredCandles(
+        action.candles,
+        action.volumes,
+        action.interval,
+        { endTimeMs: Date.now() }
+      );
       return {
-        candles: action.candles,
-        volumes: action.volumes,
+        candles: gapFilled.candles,
+        volumes: gapFilled.volumes,
         source: action.source,
         interval: action.interval,
-        gapFilledByApi: action.gapFilledByApi ?? action.source === "db",
+        gapFilledByApi: true,
       };
+    }
     case "merge_ws": {
       if (state.source !== "db" || state.candles.length === 0) return state;
       const merged = mergeWsCandleUpdate(
@@ -101,7 +108,17 @@ export function chartSeriesReducer(
         action.update,
         action.priceScale
       );
-      return { ...state, candles: merged.candles, volumes: merged.volumes };
+      const gapFilled = fillGapsForStoredCandles(
+        merged.candles,
+        merged.volumes,
+        action.update.interval,
+        { endTimeMs: Date.now() }
+      );
+      return {
+        ...state,
+        candles: gapFilled.candles,
+        volumes: gapFilled.volumes,
+      };
     }
     case "apply_live": {
       if (state.candles.length === 0) return state;
@@ -187,22 +204,22 @@ export function deriveChartSeries(input: DeriveChartSeriesInput): {
       ? liveMarkPriceBnb * priceScale
       : null;
 
-  if (scaledMark != null) {
-    const reconciled = reconcileCandleSeriesToLiveMark(candles, volumes, scaledMark);
-    candles = reconciled.candles;
-    volumes = reconciled.volumes;
-  }
-
+  // Gap-fill first — continuous flat line at last trade close through now.
   const gapFilled = gapFillChartSeries(
     candles,
     volumes,
     displayInterval,
     endTimeMs,
-    state.gapFilledByApi,
-    scaledMark ?? undefined
+    state.gapFilledByApi
   );
   candles = gapFilled.candles;
   volumes = gapFilled.volumes;
+
+  if (scaledMark != null) {
+    const reconciled = reconcileCandleSeriesToLiveMark(candles, volumes, scaledMark);
+    candles = reconciled.candles;
+    volumes = reconciled.volumes;
+  }
 
   if (liveMarkPriceBnb != null && liveMarkPriceBnb > 0) {
     const pinned = pinTailCandleToLiveMark(
