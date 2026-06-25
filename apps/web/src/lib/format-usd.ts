@@ -88,6 +88,74 @@ export function bnbToUsd(bnbAmount: number, bnbUsd: number | null | undefined): 
   return Number.isFinite(usd) ? usd : null;
 }
 
+/** Scale frozen USD cost basis when on-chain balance < indexed balance. */
+export function scaleCostBasisUsdForBalance(
+  costBasisUsd: number,
+  indexedBalance: number,
+  displayBalance: number
+): number {
+  if (!Number.isFinite(costBasisUsd) || costBasisUsd <= 0) return 0;
+  if (!Number.isFinite(indexedBalance) || indexedBalance <= 0) return 0;
+  if (!Number.isFinite(displayBalance) || displayBalance <= 0) return 0;
+  if (displayBalance >= indexedBalance) return costBasisUsd;
+  return costBasisUsd * (displayBalance / indexedBalance);
+}
+
+/** Avg entry USD/token — frozen cost basis first, native×live rate fallback. */
+export function positionAvgEntryUsd(
+  balance: number,
+  remainingCostBasisUsd: number,
+  remainingCostBasisBnb: number,
+  liveBnbUsd: number | null | undefined
+): number | null {
+  if (balance > 0 && remainingCostBasisUsd > 0) {
+    return remainingCostBasisUsd / balance;
+  }
+  if (balance > 0 && remainingCostBasisBnb > 0 && liveBnbUsd != null) {
+    return (remainingCostBasisBnb / balance) * liveBnbUsd;
+  }
+  return null;
+}
+
+/**
+ * Mark-to-market unrealized P/L in USD.
+ * Cost frozen at trade-time USD; mark = balance × spot_native × live FX.
+ */
+export function positionUnrealizedUsd(
+  balance: number,
+  markPriceBnb: number,
+  remainingCostBasisUsd: number,
+  remainingCostBasisBnb: number,
+  liveBnbUsd: number | null | undefined
+): number | null {
+  const markUsd = bnbToUsd(balance * markPriceBnb, liveBnbUsd);
+  if (markUsd == null) return null;
+  const costUsd =
+    remainingCostBasisUsd > 0
+      ? remainingCostBasisUsd
+      : liveBnbUsd != null
+        ? remainingCostBasisBnb * liveBnbUsd
+        : null;
+  if (costUsd == null) return null;
+  return markUsd - costUsd;
+}
+
+export function positionUnrealizedPct(
+  unrealizedUsd: number | null,
+  remainingCostBasisUsd: number,
+  remainingCostBasisBnb: number,
+  liveBnbUsd: number | null | undefined
+): number | null {
+  const costUsd =
+    remainingCostBasisUsd > 0
+      ? remainingCostBasisUsd
+      : liveBnbUsd != null
+        ? remainingCostBasisBnb * liveBnbUsd
+        : null;
+  if (unrealizedUsd == null || costUsd == null || costUsd <= 0) return null;
+  return (unrealizedUsd / costUsd) * 100;
+}
+
 /** Net BNB moved on the curve for a trade row (after protocol fee). */
 export function tradeNetBnbFromParts(
   nativeAmount: string,

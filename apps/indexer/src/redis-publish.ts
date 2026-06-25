@@ -145,6 +145,8 @@ export type WalletTradePublishPayload = {
     tokenBalance: string;
     remainingCostBasisZug: string;
     realizedPnlZug: string;
+    remainingCostBasisUsd: string;
+    realizedPnlUsd: string;
   };
   bonding: Pick<
     TradePublishPayload["bonding"],

@@ -19,6 +19,7 @@ type HolderResponse = Array<{
   totalSoldBnb: string;
   realizedPnlBnb: string;
   remainingCostBasisBnb: string;
+  remainingCostBasisUsd?: string;
   onChainBalance: string;
 }>;
 
@@ -85,6 +86,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
       totalSoldBnb: holder.totalSoldBnb,
       realizedPnlBnb: holder.realizedPnlBnb,
       remainingCostBasisBnb: holder.remainingCostBasisBnb,
+      remainingCostBasisUsd: holder.remainingCostBasisUsd,
       onChainBalance: onChain.get(holder.address.toLowerCase()) ?? "0",
     }));
 

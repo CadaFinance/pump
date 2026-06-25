@@ -1321,6 +1321,8 @@ CREATE TABLE public.user_positions (
     realized_pnl_zug numeric(78,18) DEFAULT 0 NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     remaining_cost_basis_zug numeric(78,18) DEFAULT 0 NOT NULL,
+    remaining_cost_basis_usd numeric(24,8) DEFAULT 0 NOT NULL,
+    realized_pnl_usd numeric(24,8) DEFAULT 0 NOT NULL,
     CONSTRAINT user_positions_address_check CHECK ((address = lower(address)))
 );
 
@@ -1330,6 +1332,20 @@ CREATE TABLE public.user_positions (
 --
 
 COMMENT ON COLUMN public.user_positions.remaining_cost_basis_zug IS 'Open-lot cost basis (net BNB after fees). Resets when token_balance reaches 0.';
+
+
+--
+-- Name: COLUMN user_positions.remaining_cost_basis_usd; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.user_positions.remaining_cost_basis_usd IS 'Open-lot USD cost (net native × native_usd_rate at each buy). Resets at zero balance.';
+
+
+--
+-- Name: COLUMN user_positions.realized_pnl_usd; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.user_positions.realized_pnl_usd IS 'Cumulative realized P/L in USD (sell proceeds USD − avg-cost USD removed).';
 
 
 --

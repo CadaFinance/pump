@@ -31,7 +31,7 @@ import { TokenAvatar } from "@/components/token/TokenAvatar";
 import { TradeSheet } from "@/components/token/TradeSheet";
 import type { PortfolioSnapshot, TokenListItem } from "@/lib/db/launchpad";
 import { useBnbUsdPrice } from "@/hooks/useBnbUsdPrice";
-import { bnbToUsd, formatPortfolioHoldingValueUsd, formatUsdReadable } from "@/lib/format-usd";
+import { bnbToUsd, formatPortfolioHoldingValueUsd, formatUsdReadable, positionAvgEntryUsd, positionUnrealizedUsd, positionUnrealizedPct, scaleCostBasisUsdForBalance } from "@/lib/format-usd";
 import { PctChange } from "@/components/ui/PctChange";
 import { formatCapForBoard } from "@/lib/arena-board-format";
 import {
@@ -77,6 +77,8 @@ type PortfolioPosition = {
   totalSoldBnb: string;
   realizedPnlBnb: string;
   remainingCostBasisBnb: string;
+  remainingCostBasisUsd: string;
+  realizedPnlUsd: string;
   lastPriceBnb: string;
   estimatedValueBnb: number;
 };
@@ -115,8 +117,10 @@ type VerifiedPositionView = {
   position: PortfolioPosition;
   balance: number;
   remainingCostBasis: number;
+  remainingCostBasisUsd: number;
   avgEntry: number | null;
   realizedPnlBnb: number;
+  realizedPnlUsd: number;
 };
 
 type FlashTone = "up" | "down";
@@ -133,6 +137,7 @@ function buildVerifiedPositionView(
 ): VerifiedPositionView | null {
   const indexedBalance = Number(position.tokenBalance);
   const fullCostBasis = Math.max(0, Number(position.remainingCostBasisBnb));
+  const fullCostBasisUsd = Math.max(0, Number(position.remainingCostBasisUsd ?? 0));
   const onChainStr = onChainBalances[position.tokenAddress.toLowerCase()];
   const onChainBalance = onChainStr != null ? Number(onChainStr) : null;
 
@@ -148,24 +153,53 @@ function buildVerifiedPositionView(
     indexedBalance,
     displayBalance
   );
+  const remainingCostBasisUsd = scaleCostBasisUsdForBalance(
+    fullCostBasisUsd,
+    indexedBalance,
+    displayBalance
+  );
 
   return {
     position,
     balance: displayBalance,
     remainingCostBasis,
+    remainingCostBasisUsd,
     avgEntry: displayBalance > 0 ? remainingCostBasis / displayBalance : null,
     realizedPnlBnb: Number(position.realizedPnlBnb),
+    realizedPnlUsd: Number(position.realizedPnlUsd ?? 0),
   };
 }
 
-/** Open-lot PnL (mark-to-market minus cost basis). */
+/** Open-lot PnL (native) — internal / fallback. */
 function holdingOpenPnlBnb(view: VerifiedPositionView): number {
   return view.balance * Number(view.position.lastPriceBnb) - view.remainingCostBasis;
 }
 
-/** Unrealized + cumulative realized for this wallet+token (matches hero Net PnL). */
+function holdingOpenPnlUsd(
+  view: VerifiedPositionView,
+  liveBnbUsd: number | null | undefined
+): number | null {
+  return positionUnrealizedUsd(
+    view.balance,
+    Number(view.position.lastPriceBnb),
+    view.remainingCostBasisUsd,
+    view.remainingCostBasis,
+    liveBnbUsd
+  );
+}
+
+/** Unrealized + cumulative realized for this wallet+token. */
 function holdingNetPnlBnb(view: VerifiedPositionView): number {
   return holdingOpenPnlBnb(view) + view.realizedPnlBnb;
+}
+
+function holdingNetPnlUsd(
+  view: VerifiedPositionView,
+  liveBnbUsd: number | null | undefined
+): number | null {
+  const open = holdingOpenPnlUsd(view, liveBnbUsd);
+  if (open == null) return null;
+  return open + view.realizedPnlUsd;
 }
 
 function pnlTone(value: number): string {
@@ -1104,21 +1138,32 @@ export function PortfolioPanel({
     (sum, view) => sum + view.balance * Number(view.position.lastPriceBnb),
     0
   );
+  const totalUnrealizedPnlUsd = metricViews.reduce(
+    (sum, view) => sum + (holdingOpenPnlUsd(view, bnbUsd) ?? 0),
+    0
+  );
+  const totalRealizedPnlUsd = metricViews.reduce(
+    (sum, view) => sum + view.realizedPnlUsd,
+    0
+  );
+  const totalNetPnlUsd = totalUnrealizedPnlUsd + totalRealizedPnlUsd;
+  const totalEstimatedUsd = bnbToUsd(totalEstimated, bnbUsd);
+  const totalCostBasisUsd = metricViews.reduce(
+    (sum, view) => sum + view.remainingCostBasisUsd,
+    0
+  );
   const totalUnrealizedPnl = metricViews.reduce(
     (sum, view) => sum + holdingOpenPnlBnb(view),
     0
   );
   const totalRealizedPnl = metricViews.reduce((sum, view) => sum + view.realizedPnlBnb, 0);
   const totalNetPnl = totalUnrealizedPnl + totalRealizedPnl;
-  const totalEstimatedUsd = bnbToUsd(totalEstimated, bnbUsd);
-  const totalNetPnlUsd =
-    bnbUsd != null && Number.isFinite(totalNetPnl) ? totalNetPnl * bnbUsd : null;
   const totalCostBasis = metricViews.reduce(
     (sum, view) => sum + view.remainingCostBasis,
     0
   );
   const portfolioValuePct =
-    totalCostBasis > 0 ? (totalUnrealizedPnl / totalCostBasis) * 100 : null;
+    totalCostBasisUsd > 0 ? (totalUnrealizedPnlUsd / totalCostBasisUsd) * 100 : null;
   const claimedBnb = data.creatorFeesClaimedBnb ?? 0;
   const pendingBnb = pendingWei != null ? Number(formatEther(pendingWei)) : 0;
   const creatorFeesTotalBnb = claimedBnb + pendingBnb;
@@ -1398,16 +1443,24 @@ export function PortfolioPanel({
                         );
                       }
 
-                      const { position, balance, remainingCostBasis, avgEntry } = row.view;
-                      const avgEntryUsd = avgEntry != null ? bnbToUsd(avgEntry, bnbUsd) : null;
+                      const { position, balance, remainingCostBasis, remainingCostBasisUsd } = row.view;
+                      const avgEntryUsd = positionAvgEntryUsd(
+                        balance,
+                        remainingCostBasisUsd,
+                        remainingCostBasis,
+                        bnbUsd
+                      );
                       const positionValueUsd = bnbToUsd(
                         balance * Number(position.lastPriceBnb),
                         bnbUsd
                       );
-                      const openPnlBnb = holdingOpenPnlBnb(row.view);
-                      const openPnlUsd = bnbUsd != null ? openPnlBnb * bnbUsd : null;
-                      const openPnlPct =
-                        remainingCostBasis > 0 ? (openPnlBnb / remainingCostBasis) * 100 : null;
+                      const openPnlUsd = holdingOpenPnlUsd(row.view, bnbUsd);
+                      const openPnlPct = positionUnrealizedPct(
+                        openPnlUsd,
+                        remainingCostBasisUsd,
+                        remainingCostBasis,
+                        bnbUsd
+                      );
 
                       return (
                         <HoldingSwipeRow
@@ -1491,18 +1544,24 @@ export function PortfolioPanel({
                             );
                           }
 
-                          const { position, balance, remainingCostBasis, avgEntry } = row.view;
-                          const avgEntryUsd = avgEntry != null ? bnbToUsd(avgEntry, bnbUsd) : null;
+                          const { position, balance, remainingCostBasis, remainingCostBasisUsd } = row.view;
+                          const avgEntryUsd = positionAvgEntryUsd(
+                            balance,
+                            remainingCostBasisUsd,
+                            remainingCostBasis,
+                            bnbUsd
+                          );
                           const positionValueUsd = bnbToUsd(
                             balance * Number(position.lastPriceBnb),
                             bnbUsd
                           );
-                          const openPnlBnb = holdingOpenPnlBnb(row.view);
-                          const openPnlUsd = bnbUsd != null ? openPnlBnb * bnbUsd : null;
-                          const openPnlPct =
-                            remainingCostBasis > 0
-                              ? (openPnlBnb / remainingCostBasis) * 100
-                              : null;
+                          const openPnlUsd = holdingOpenPnlUsd(row.view, bnbUsd);
+                          const openPnlPct = positionUnrealizedPct(
+                            openPnlUsd,
+                            remainingCostBasisUsd,
+                            remainingCostBasis,
+                            bnbUsd
+                          );
 
                           return (
                             <tr key={position.tokenAddress} className="group">

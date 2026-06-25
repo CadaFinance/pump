@@ -8,7 +8,7 @@ import { SectionHeadingIcon } from "@/components/ui/IconLabel";
 import { PctChange } from "@/components/ui/PctChange";
 import { MetricIcons } from "@/lib/metric-icons";
 import { ACTIVITY_PAGE_SIZE } from "@/lib/activity-page-size";
-import { DEFAULT_TOKEN_TOTAL_SUPPLY, formatUsdReadable, formatTradeFillPriceUsd, tradeNetUsdForDisplay, tradeNetBnbFromParts } from "@/lib/format-usd";
+import { DEFAULT_TOKEN_TOTAL_SUPPLY, formatUsdReadable, formatTradeFillPriceUsd, tradeNetUsdForDisplay, positionAvgEntryUsd, positionUnrealizedUsd, positionUnrealizedPct, scaleCostBasisUsdForBalance } from "@/lib/format-usd";
 import {
   resolveVerifiedTokenBalance,
   scaleCostBasisForBalance,
@@ -22,6 +22,7 @@ type HolderRow = {
   address: string;
   netTokens: number;
   remainingCostBasisBnb: number;
+  remainingCostBasisUsd: number;
   avgEntryBnb: number | null;
 };
 
@@ -36,10 +37,6 @@ const cellClass = "px-2.5 py-2.5 sm:px-3 lg:px-4 lg:py-3";
 const accountCellClass = `${cellClass} max-w-[9.5rem] whitespace-nowrap !pr-0 lg:min-w-[9rem] lg:max-w-none lg:!pr-4`;
 const sideCellClass = `${cellClass} w-px whitespace-nowrap !px-1 !pl-0 lg:!px-3 lg:!pl-4`;
 const amountCellClass = `${cellClass} whitespace-nowrap !pl-1 financial-value text-pump-text lg:!pl-3`;
-
-function tradeNetBnb(trade: TradeItem): number {
-  return tradeNetBnbFromParts(trade.nativeAmount, trade.feeBnb, trade.netBnb);
-}
 
 function formatRelativeTime(iso: string): string {
   const diffMs = Date.now() - new Date(iso).getTime();
@@ -97,8 +94,14 @@ function mapApiHoldersToRows(holders: TokenHolderSnapshot[]): HolderRow[] {
       if (hidden) return null;
 
       const fullCostBasis = Math.max(0, Number(holder.remainingCostBasisBnb));
+      const fullCostBasisUsd = Math.max(0, Number(holder.remainingCostBasisUsd ?? 0));
       const remainingCostBasisBnb = scaleCostBasisForBalance(
         fullCostBasis,
+        indexedBalance,
+        displayBalance
+      );
+      const remainingCostBasisUsd = scaleCostBasisUsdForBalance(
+        fullCostBasisUsd,
         indexedBalance,
         displayBalance
       );
@@ -107,6 +110,7 @@ function mapApiHoldersToRows(holders: TokenHolderSnapshot[]): HolderRow[] {
         address: holder.address,
         netTokens: displayBalance,
         remainingCostBasisBnb,
+        remainingCostBasisUsd,
         avgEntryBnb:
           displayBalance > 0 ? remainingCostBasisBnb / displayBalance : null,
       };
@@ -393,20 +397,25 @@ export function TradeTape({
                 </thead>
                 <tbody>
                   {holderRows.map((row) => {
-                    const avgEntryUsd =
-                      row.avgEntryBnb != null && bnbUsd != null ? row.avgEntryBnb * bnbUsd : null;
-                    const currentValueUsd =
-                      bnbUsd != null ? currentPriceBnb * row.netTokens * bnbUsd : null;
-                    const costBasisUsd =
-                      bnbUsd != null ? row.remainingCostBasisBnb * bnbUsd : null;
-                    const unrealizedPnlUsd =
-                      currentValueUsd != null && costBasisUsd != null
-                        ? currentValueUsd - costBasisUsd
-                        : null;
-                    const unrealizedPnlPct =
-                      costBasisUsd != null && costBasisUsd > 0
-                        ? ((currentValueUsd ?? 0) - costBasisUsd) / costBasisUsd * 100
-                        : null;
+                    const avgEntryUsd = positionAvgEntryUsd(
+                      row.netTokens,
+                      row.remainingCostBasisUsd,
+                      row.remainingCostBasisBnb,
+                      bnbUsd
+                    );
+                    const unrealizedPnlUsd = positionUnrealizedUsd(
+                      row.netTokens,
+                      currentPriceBnb,
+                      row.remainingCostBasisUsd,
+                      row.remainingCostBasisBnb,
+                      bnbUsd
+                    );
+                    const unrealizedPnlPct = positionUnrealizedPct(
+                      unrealizedPnlUsd,
+                      row.remainingCostBasisUsd,
+                      row.remainingCostBasisBnb,
+                      bnbUsd
+                    );
                     const pnlTone =
                       unrealizedPnlUsd == null
                         ? "text-pump-muted"

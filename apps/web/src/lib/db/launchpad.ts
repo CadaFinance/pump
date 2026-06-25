@@ -1045,6 +1045,8 @@ export type TokenHolderSnapshot = {
   totalSoldBnb: string;
   realizedPnlBnb: string;
   remainingCostBasisBnb: string;
+  remainingCostBasisUsd?: string;
+  realizedPnlUsd?: string;
 };
 
 export async function getTokenByAddress(address: string): Promise<TokenDetail | null> {
@@ -1214,6 +1216,8 @@ export async function listTokenHolders(
     total_sold_zug: string;
     realized_pnl_zug: string;
     remaining_cost_basis_zug: string;
+    remaining_cost_basis_usd: string;
+    realized_pnl_usd: string;
   }>(
     `
     SELECT
@@ -1222,7 +1226,9 @@ export async function listTokenHolders(
       p.total_bought_zug::text,
       p.total_sold_zug::text,
       p.realized_pnl_zug::text,
-      COALESCE(p.remaining_cost_basis_zug, 0)::text AS remaining_cost_basis_zug
+      COALESCE(p.remaining_cost_basis_zug, 0)::text AS remaining_cost_basis_zug,
+      COALESCE(p.remaining_cost_basis_usd, 0)::text AS remaining_cost_basis_usd,
+      COALESCE(p.realized_pnl_usd, 0)::text AS realized_pnl_usd
     FROM user_positions p
     WHERE p.token_address = $1
       AND p.token_balance > 0
@@ -1239,6 +1245,8 @@ export async function listTokenHolders(
     totalSoldBnb: row.total_sold_zug,
     realizedPnlBnb: row.realized_pnl_zug,
     remainingCostBasisBnb: row.remaining_cost_basis_zug,
+    remainingCostBasisUsd: row.remaining_cost_basis_usd,
+    realizedPnlUsd: row.realized_pnl_usd,
   }));
 }
 
@@ -1537,6 +1545,8 @@ export type PortfolioPosition = {
   totalSoldBnb: string;
   realizedPnlBnb: string;
   remainingCostBasisBnb: string;
+  remainingCostBasisUsd: string;
+  realizedPnlUsd: string;
   lastPriceBnb: string;
   progressBps: number;
   estimatedValueBnb: number;
@@ -1879,6 +1889,8 @@ export async function getPortfolioForAddress(
       total_sold_zug: string;
       realized_pnl_zug: string;
       remaining_cost_basis_zug: string;
+      remaining_cost_basis_usd: string;
+      realized_pnl_usd: string;
       reserve_zug: string;
       token_sold: string;
       last_price_zug: string;
@@ -1896,6 +1908,8 @@ export async function getPortfolioForAddress(
           p.total_sold_zug::text,
           p.realized_pnl_zug::text,
           COALESCE(p.remaining_cost_basis_zug, 0)::text AS remaining_cost_basis_zug,
+          COALESCE(p.remaining_cost_basis_usd, 0)::text AS remaining_cost_basis_usd,
+          COALESCE(p.realized_pnl_usd, 0)::text AS realized_pnl_usd,
           COALESCE(b.reserve_zug, 0)::text AS reserve_zug,
           COALESCE(b.token_sold, 0)::text AS token_sold,
           COALESCE(b.last_price_zug, 0)::text AS last_price_zug,
@@ -1952,6 +1966,8 @@ export async function getPortfolioForAddress(
       totalSoldBnb: row.total_sold_zug,
       realizedPnlBnb: row.realized_pnl_zug,
       remainingCostBasisBnb: row.remaining_cost_basis_zug,
+      remainingCostBasisUsd: row.remaining_cost_basis_usd,
+      realizedPnlUsd: row.realized_pnl_usd,
       lastPriceBnb: markPrice,
       progressBps: row.progress_bps,
       estimatedValueBnb: balance * price,

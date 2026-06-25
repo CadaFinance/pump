@@ -310,7 +310,16 @@ export class LaunchpadEventHandlers {
         [token, weiToDecimal(reserveZug), weiToDecimal(soldTokens), markPrice]
       );
 
-      await this.updateUserAggregates(client, token, trader, isBuy, zugAmount, feeZug, tokenAmount);
+      await this.updateUserAggregates(
+        client,
+        token,
+        trader,
+        isBuy,
+        zugAmount,
+        feeZug,
+        tokenAmount,
+        nativeUsdRate
+      );
       await this.updateHolderCountIncremental(client, token, trader, oldBalance);
 
       if (isBuy) {
@@ -451,12 +460,16 @@ export class LaunchpadEventHandlers {
       token_balance: string;
       remaining_cost_basis_zug: string;
       realized_pnl_zug: string;
+      remaining_cost_basis_usd: string;
+      realized_pnl_usd: string;
     }>(
       `
         SELECT
           token_balance::text,
           COALESCE(remaining_cost_basis_zug, 0)::text AS remaining_cost_basis_zug,
-          realized_pnl_zug::text
+          realized_pnl_zug::text,
+          COALESCE(remaining_cost_basis_usd, 0)::text AS remaining_cost_basis_usd,
+          COALESCE(realized_pnl_usd, 0)::text AS realized_pnl_usd
         FROM user_positions
         WHERE token_address = $1 AND address = $2
       `,
@@ -487,6 +500,8 @@ export class LaunchpadEventHandlers {
           tokenBalance: position.token_balance,
           remainingCostBasisZug: position.remaining_cost_basis_zug,
           realizedPnlZug: position.realized_pnl_zug,
+          remainingCostBasisUsd: position.remaining_cost_basis_usd,
+          realizedPnlUsd: position.realized_pnl_usd,
         },
         bonding: {
           reserveZug: tradeResult.bonding.reserve_zug,
@@ -736,7 +751,8 @@ export class LaunchpadEventHandlers {
     isBuy: boolean,
     zugAmount: bigint,
     feeZug: bigint,
-    tokenAmount: bigint
+    tokenAmount: bigint,
+    nativeUsdRate: number | null
   ): Promise<void> {
     const grossZug = Number(weiToDecimal(zugAmount));
     const fee = Number(weiToDecimal(feeZug));
@@ -748,6 +764,8 @@ export class LaunchpadEventHandlers {
       total_sold_zug: string;
       remaining_cost_basis_zug: string;
       realized_pnl_zug: string;
+      remaining_cost_basis_usd: string;
+      realized_pnl_usd: string;
     }>(
       `
         SELECT
@@ -755,7 +773,9 @@ export class LaunchpadEventHandlers {
           total_bought_zug::text,
           total_sold_zug::text,
           COALESCE(remaining_cost_basis_zug, 0)::text AS remaining_cost_basis_zug,
-          realized_pnl_zug::text
+          realized_pnl_zug::text,
+          COALESCE(remaining_cost_basis_usd, 0)::text AS remaining_cost_basis_usd,
+          COALESCE(realized_pnl_usd, 0)::text AS realized_pnl_usd
         FROM user_positions
         WHERE token_address = $1 AND address = $2
       `,
@@ -769,9 +789,18 @@ export class LaunchpadEventHandlers {
       totalSold: Number(row?.total_sold_zug ?? 0),
       remainingCostBasis: Number(row?.remaining_cost_basis_zug ?? 0),
       realizedPnl: Number(row?.realized_pnl_zug ?? 0),
+      remainingCostBasisUsd: Number(row?.remaining_cost_basis_usd ?? 0),
+      realizedPnlUsd: Number(row?.realized_pnl_usd ?? 0),
     };
 
-    const next = applyTradeToPositionCost(prior, isBuy, grossZug, fee, tokens);
+    const next = applyTradeToPositionCost(
+      prior,
+      isBuy,
+      grossZug,
+      fee,
+      tokens,
+      nativeUsdRate
+    );
 
     await client.query(
       `
@@ -783,14 +812,18 @@ export class LaunchpadEventHandlers {
           total_sold_zug,
           remaining_cost_basis_zug,
           realized_pnl_zug,
+          remaining_cost_basis_usd,
+          realized_pnl_usd,
           updated_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, now())
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, now())
         ON CONFLICT (token_address, address) DO UPDATE
         SET token_balance = EXCLUDED.token_balance,
             total_bought_zug = EXCLUDED.total_bought_zug,
             total_sold_zug = EXCLUDED.total_sold_zug,
             remaining_cost_basis_zug = EXCLUDED.remaining_cost_basis_zug,
             realized_pnl_zug = EXCLUDED.realized_pnl_zug,
+            remaining_cost_basis_usd = EXCLUDED.remaining_cost_basis_usd,
+            realized_pnl_usd = EXCLUDED.realized_pnl_usd,
             updated_at = now()
       `,
       [
@@ -801,6 +834,8 @@ export class LaunchpadEventHandlers {
         String(next.totalSold),
         String(next.remainingCostBasis),
         String(next.realizedPnl),
+        String(next.remainingCostBasisUsd),
+        String(next.realizedPnlUsd),
       ]
     );
 

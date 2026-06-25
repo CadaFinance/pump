@@ -14,6 +14,8 @@ export type WalletTradeWsPayload = {
     tokenBalance: string;
     remainingCostBasisZug: string;
     realizedPnlZug: string;
+    remainingCostBasisUsd?: string;
+    realizedPnlUsd?: string;
   };
   bonding?: {
     lastPriceZug?: string;
@@ -41,6 +43,8 @@ function patchPositionRow<T extends {
   tokenBalance: string;
   remainingCostBasisBnb: string;
   realizedPnlBnb: string;
+  remainingCostBasisUsd?: string;
+  realizedPnlUsd?: string;
   lastPriceBnb: string;
   estimatedValueBnb: number;
 }>(
@@ -69,6 +73,8 @@ function patchPositionRow<T extends {
     tokenBalance: pos.tokenBalance,
     remainingCostBasisBnb: pos.remainingCostBasisZug,
     realizedPnlBnb: pos.realizedPnlZug,
+    remainingCostBasisUsd: pos.remainingCostBasisUsd ?? position.remainingCostBasisUsd,
+    realizedPnlUsd: pos.realizedPnlUsd ?? position.realizedPnlUsd,
     lastPriceBnb,
     estimatedValueBnb,
   };
@@ -88,6 +94,8 @@ export type PortfolioLivePatchTarget = {
     tokenBalance: string;
     remainingCostBasisBnb: string;
     realizedPnlBnb: string;
+    remainingCostBasisUsd?: string;
+    realizedPnlUsd?: string;
     lastPriceBnb: string;
     estimatedValueBnb: number;
   }>;
