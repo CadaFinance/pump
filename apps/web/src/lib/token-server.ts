@@ -18,6 +18,7 @@ import { useRedisArenaCache } from "@/lib/db/perf-flags";
 import {
   fillGapsForStoredCandles,
   storedCandlesToBars,
+  DEFAULT_CHART_INTERVAL,
   type CandleBar,
   type CandleInterval,
   type VolumeBar,
@@ -42,7 +43,7 @@ export type TokenDetailBundle = TokenDetailPayload & {
   initialCandles?: InitialChartCandles;
 };
 
-const SSR_CHART_INTERVAL: CandleInterval = "1m";
+const SSR_CHART_INTERVAL: CandleInterval = DEFAULT_CHART_INTERVAL;
 const SSR_CHART_LIMIT = 1000;
 
 async function fetchInitialChartCandles(

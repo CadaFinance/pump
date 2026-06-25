@@ -3,12 +3,10 @@ import { parseUnits } from "viem";
 import { ratioWeiToDecimal, weiToDecimal } from "./utils.js";
 import { fetchIndexerNativeUsdRate } from "./native-usd.js";
 
-export const CANDLE_INTERVALS = ["15s", "1m", "5m", "15m", "1h", "4h"] as const;
+export const CANDLE_INTERVALS = ["5m", "15m", "1h", "4h"] as const;
 export type CandleInterval = (typeof CANDLE_INTERVALS)[number];
 
 const INTERVAL_MS: Record<CandleInterval, number> = {
-  "15s": 15_000,
-  "1m": 60_000,
   "5m": 5 * 60_000,
   "15m": 15 * 60_000,
   "1h": 60 * 60_000,
@@ -24,7 +22,7 @@ export function incrementalCandlesEnabled(): boolean {
 
 /** Intervals broadcast on WS (all intervals still written to DB). */
 export function wsCandleIntervals(): CandleInterval[] {
-  const raw = process.env.CANDLE_WS_INTERVALS ?? "1m,5m";
+  const raw = process.env.CANDLE_WS_INTERVALS ?? "5m";
   const allowed = new Set(
     raw
       .split(",")

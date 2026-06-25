@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import {
   buildCandlesFromTrades,
   CANDLE_INTERVALS,
+  DEFAULT_CHART_INTERVAL,
   fillGapsForStoredCandles,
   seriesHasTemporalGaps,
   storedCandlesToBars,
@@ -25,10 +26,10 @@ const MAX_LIMIT = 4000;
 
 export async function GET(request: NextRequest, context: RouteContext) {
   const { address } = await context.params;
-  const intervalParam = request.nextUrl.searchParams.get("interval") ?? "1m";
+  const intervalParam = request.nextUrl.searchParams.get("interval") ?? DEFAULT_CHART_INTERVAL;
   const interval = (VALID_INTERVALS.has(intervalParam as CandleInterval)
     ? intervalParam
-    : "1m") as CandleInterval;
+    : DEFAULT_CHART_INTERVAL) as CandleInterval;
   const limitParam = Number(request.nextUrl.searchParams.get("limit") ?? DEFAULT_LIMIT);
   const limit = Number.isFinite(limitParam)
     ? Math.min(MAX_LIMIT, Math.max(1, Math.floor(limitParam)))

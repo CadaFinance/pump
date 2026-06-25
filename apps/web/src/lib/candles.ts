@@ -10,11 +10,12 @@ import {
 const CHART_FEE_ESTIMATE_BPS = 100n;
 const FEE_BPS_DENOMINATOR = 10_000n;
 
-export type CandleInterval = "15s" | "1m" | "5m" | "15m" | "1h" | "4h";
+export type CandleInterval = "5m" | "15m" | "1h" | "4h";
+
+/** Default chart interval (SSR, API fallback, initial client state). */
+export const DEFAULT_CHART_INTERVAL: CandleInterval = "5m";
 
 export const CANDLE_INTERVALS: { id: CandleInterval; label: string; ms: number }[] = [
-  { id: "15s", label: "15s", ms: 15_000 },
-  { id: "1m", label: "1m", ms: 60_000 },
   { id: "5m", label: "5m", ms: 5 * 60_000 },
   { id: "15m", label: "15m", ms: 15 * 60_000 },
   { id: "1h", label: "1h", ms: 60 * 60_000 },
@@ -211,10 +212,6 @@ const MAX_CANDLES = 4000;
 
 function gapTailBarsForInterval(interval: CandleInterval): number {
   switch (interval) {
-    case "15s":
-      return 8;
-    case "1m":
-      return 6;
     case "5m":
       return 4;
     default:

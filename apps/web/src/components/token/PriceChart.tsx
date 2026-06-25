@@ -18,6 +18,7 @@ import {
   applyCandleSeriesPriceFormat,
   buildCandlesFromTrades,
   CANDLE_INTERVALS,
+  DEFAULT_CHART_INTERVAL,
   createOptimisticCandleBar,
   formatPumpSubscriptPrice,
   resolveChartPriceFormat,
@@ -57,7 +58,7 @@ type PriceChartProps = {
   tokenAddress: string;
   symbol: string;
   status: string;
-  /** SSR seed from token bundle (default 1m). */
+  /** SSR seed from token bundle (default 5m). */
   initialCandles?: InitialChartCandles;
   /** Trader-only optimistic bucket (other viewers rely on WS). */
   actorOptimisticSpot?: ActorOptimisticChartSpot | null;
@@ -256,7 +257,7 @@ export function PriceChart({
   const renderedVolumesRef = useRef<VolumeBar[]>([]);
   const renderedFingerprintRef = useRef("");
 
-  const [timeInterval, setTimeInterval] = useState<CandleInterval>("1m");
+  const [timeInterval, setTimeInterval] = useState<CandleInterval>(DEFAULT_CHART_INTERVAL);
   const [currency, setCurrency] = useState<"usd" | "mcap">("usd");
   const [seriesState, dispatchSeries] = useReducer(chartSeriesReducer, initialChartSeriesState);
   const [loading, setLoading] = useState(() => !initialCandles?.candles.length);
@@ -514,7 +515,7 @@ export function PriceChart({
   const lastCandle = candlesForChart[candlesForChart.length - 1] ?? null;
   const displayTimeLabel =
     hoverTimeLabel ??
-    (frozen ? null : formatLocalChartTime(Math.floor(nowMs / 1000) as Time, timeInterval === "15s"));
+    (frozen ? null : formatLocalChartTime(Math.floor(nowMs / 1000) as Time));
   const displayCandle = hoverOhlc ?? lastCandle;
 
   const priceFormat = useMemo(
@@ -639,8 +640,7 @@ export function PriceChart({
         rightOffset: 8,
         fixLeftEdge: false,
         fixRightEdge: false,
-        tickMarkFormatter: (time: Time) =>
-          formatLocalChartTick(time, timeInterval === "15s"),
+        tickMarkFormatter: (time: Time) => formatLocalChartTick(time, false),
       },
       handleScroll: {
         mouseWheel: true,
@@ -657,8 +657,7 @@ export function PriceChart({
       height,
       localization: {
         locale: typeof navigator !== "undefined" ? navigator.language : "en-US",
-        timeFormatter: (time: Time) =>
-          formatLocalChartTime(time, timeInterval === "15s"),
+        timeFormatter: (time: Time) => formatLocalChartTime(time),
         priceFormatter: (price: number) => chartPriceFormatterRef.current(price),
       },
     });
@@ -690,7 +689,7 @@ export function PriceChart({
         setHoverTimeLabel(null);
         return;
       }
-      setHoverTimeLabel(formatLocalChartTime(param.time, timeInterval === "15s"));
+      setHoverTimeLabel(formatLocalChartTime(param.time));
       const bar = param.seriesData.get(candleSeries) as CandlestickData | undefined;
       if (!bar || bar.open == null) {
         setHoverOhlc(null);
@@ -731,12 +730,6 @@ export function PriceChart({
       setReady(false);
     };
   }, []);
-
-  // Time scale options when interval changes (do not recreate chart).
-  useEffect(() => {
-    if (!chartRef.current) return;
-    chartRef.current.timeScale().applyOptions({ secondsVisible: timeInterval === "15s" });
-  }, [timeInterval]);
 
   useEffect(() => {
     if (!chartRef.current || !candleSeriesRef.current) return;
@@ -797,23 +790,22 @@ export function PriceChart({
     });
   }, [candles, currency]);
 
-  // Local timezone labels + seconds on 15s interval.
+  // Local timezone labels on chart axis.
   useEffect(() => {
     const chart = chartRef.current;
     if (!chart) return;
-    const showSeconds = timeInterval === "15s";
     chart.applyOptions({
       timeScale: {
-        secondsVisible: showSeconds,
-        tickMarkFormatter: (time: Time) => formatLocalChartTick(time, showSeconds),
+        secondsVisible: false,
+        tickMarkFormatter: (time: Time) => formatLocalChartTick(time, false),
       },
       localization: {
         locale: typeof navigator !== "undefined" ? navigator.language : "en-US",
-        timeFormatter: (time: Time) => formatLocalChartTime(time, showSeconds),
+        timeFormatter: (time: Time) => formatLocalChartTime(time),
         priceFormatter: (price: number) => chartPriceFormatterRef.current(price),
       },
     });
-  }, [timeInterval, priceFormat]);
+  }, [priceFormat]);
 
   // Push candle data — setData on structural changes; series.update() for live tail.
   useEffect(() => {
