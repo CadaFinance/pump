@@ -7,7 +7,6 @@ import { useOpenConnectModal } from "@/hooks/useOpenConnectModal";
 import type { SessionBuyParams, SessionSellParams } from "@/hooks/useSessionTrade";
 import { useWalletFunding } from "@/components/wallet/WalletFundingProvider";
 import { TradeConfirmModal } from "@/components/token/TradeConfirmModal";
-import { TradePendingOrdersStrip } from "@/components/token/TradePendingOrdersStrip";
 import { assertScwReadyForUserOp } from "@/lib/aa/scw-preflight";
 import { bufferCostWei, bufferedGasCostWei } from "@/lib/aa/gas-buffer";
 import {
@@ -26,11 +25,12 @@ import {
 import { loadTradeAutoConfirm, saveTradeAutoConfirm } from "@/lib/trade-confirm-storage";
 import { instantTradeGateMessage } from "@/lib/trade-instant-copy";
 import {
-  appendPendingOrder,
-  patchPendingOrder,
-  removePendingOrder,
-  type TradePendingOrder,
-} from "@/lib/trade-pending-orders";
+  trackTradeOrderConfirmed,
+  trackTradeOrderFailed,
+  trackTradeOrderIncluded,
+  trackTradeOrderPending,
+  trackTradeOrderSubmitted,
+} from "@/lib/trade-order-toast";
 import { toast } from "@/lib/toast";
 import {
   addPendingReservation,
@@ -274,7 +274,6 @@ export function TradePanel({
   const [error, setError] = useState<string | null>(null);
   const [receiveExpanded, setReceiveExpanded] = useState(false);
   const [pendingReservationTick, setPendingReservationTick] = useState(0);
-  const [pendingOrders, setPendingOrders] = useState<TradePendingOrder[]>([]);
   const pendingLedgerRef = useRef(createTradePendingLedger());
   const pendingTradesRef = useRef<Map<string, { side: "buy" | "sell" }>>(new Map());
   const bumpPendingLedger = () => setPendingReservationTick((n) => n + 1);
@@ -1285,16 +1284,12 @@ export function TradePanel({
       tokenReservedWei,
     });
     pendingTradesRef.current.set(pendingId, { side: tradeSide });
-    setPendingOrders((prev) =>
-      appendPendingOrder(prev, { id: pendingId, side: tradeSide, phase: "submitting" })
-    );
     bumpPendingLedger();
   }
 
   function releasePendingReservation(pendingId: string) {
     removePendingReservation(pendingLedgerRef.current, pendingId);
     pendingTradesRef.current.delete(pendingId);
-    setPendingOrders((prev) => removePendingOrder(prev, pendingId));
     bumpPendingLedger();
   }
 
@@ -1322,10 +1317,17 @@ export function TradePanel({
       handledReceiptHashRef.current = activeReceipt.transactionHash;
       failTradeTrace("chain.receipt_reverted", new Error("Transaction reverted on-chain"));
       rollbackInstantOptimistic(pendingId);
-      toast.error(
-        "Order failed",
-        "Transaction reverted on-chain. Check balance and token status."
-      );
+      if (pendingId !== "fallback") {
+        trackTradeOrderFailed(
+          pendingId,
+          "Transaction reverted on-chain. Check balance and token status."
+        );
+      } else {
+        toast.error(
+          "Order failed",
+          "Transaction reverted on-chain. Check balance and token status."
+        );
+      }
       if (pendingTradeCount(pendingLedgerRef.current) === 0) reset();
       return;
     }
@@ -1368,10 +1370,14 @@ export function TradePanel({
       }
     }
 
-    toast.success(
-      side === "buy" ? "Buy confirmed" : "Sell confirmed",
-      "Balances and chart will update shortly."
-    );
+    if (pendingId !== "fallback") {
+      trackTradeOrderConfirmed(pendingId, side, symbol);
+    } else {
+      toast.success(
+        side === "buy" ? "Buy confirmed" : "Sell confirmed",
+        "Balances and chart will update shortly."
+      );
+    }
 
     onTradeConfirmed?.({
       txHash: activeReceipt.transactionHash,
@@ -1409,7 +1415,7 @@ export function TradePanel({
     pendingTradeSideRef.current = null;
     setPendingAction(null);
     failTradeTrace("ux.instant_trade.failed", err);
-    toast.error("Order failed", formatTradeError(err));
+    trackTradeOrderFailed(pendingId, formatTradeError(err));
   }
 
   function applyInstantOptimisticUi(
@@ -1426,10 +1432,6 @@ export function TradePanel({
       userOpHash: preview.pendingTxHash,
       side: tradeSide,
     });
-    toast.info(
-      tradeSide === "buy" ? "Buy submitted" : "Sell submitted",
-      "Confirming on-chain in the background."
-    );
   }
 
   async function hardValidateBeforeSend(
@@ -1475,6 +1477,7 @@ export function TradePanel({
       gate.submitValue + buyGasReserveWei,
       0n
     );
+    trackTradeOrderPending(pendingId, "buy", symbol);
     const preview = buildOptimisticBuyPreview({
       pendingId,
       tokenAddress,
@@ -1511,6 +1514,7 @@ export function TradePanel({
       sellGasReserveWei,
       gate.sellTokenWei
     );
+    trackTradeOrderPending(pendingId, "sell", symbol);
     const preview = buildOptimisticSellPreview({
       pendingId,
       tokenAddress,
@@ -1546,6 +1550,7 @@ export function TradePanel({
       sellGasReserveWei + legacyApproveGasReserveWei,
       gate.sellTokenWei
     );
+    trackTradeOrderPending(pendingId, "sell", symbol);
     pendingSellRef.current = {
       amountWei: sellParams.amountWei,
       minBnbOut: sellParams.minBnbOut,
@@ -1624,12 +1629,7 @@ export function TradePanel({
     awaitingConfirmSideRef.current = side;
     return {
       onSubmitted: ({ userOpHash: submittedHash }) => {
-        setPendingOrders((prev) =>
-          patchPendingOrder(prev, pendingId, {
-            phase: "confirming",
-            userOpHash: submittedHash,
-          })
-        );
+        trackTradeOrderSubmitted(pendingId, side, symbol);
         tradeTraceStep("ux.on_trade_submitted.background", {
           userOpHash: submittedHash,
           side,
@@ -1637,9 +1637,7 @@ export function TradePanel({
         });
       },
       onIncluded: (txHash) => {
-        setPendingOrders((prev) =>
-          patchPendingOrder(prev, pendingId, { phase: "confirming", txHash })
-        );
+        trackTradeOrderIncluded(pendingId, txHash);
       },
       onConfirmed: (result) => {
         handleBuySellConfirmed(pendingId, side, result);
@@ -2153,8 +2151,6 @@ export function TradePanel({
             {error}
           </div>
         ) : null}
-
-        <TradePendingOrdersStrip orders={pendingOrders} symbol={symbol} />
 
         <div className="trade-action-zone">
           <button

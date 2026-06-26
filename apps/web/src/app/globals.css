@@ -932,86 +932,15 @@ code,
     border-color: rgb(var(--pump-danger));
   }
 
-  .trade-pending-orders {
-    border: 1px solid rgb(var(--pump-border) / 0.35);
-    border-radius: var(--radius-md);
-    background: rgb(var(--pump-card) / 0.55);
-    overflow: hidden;
-  }
+  @media (prefers-reduced-motion: reduce) {
+    .toast-item {
+      animation: none;
+    }
 
-  .trade-pending-orders__header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.75rem;
-    padding: 0.5rem 0.75rem;
-    border-bottom: 1px solid rgb(var(--pump-border) / 0.25);
-  }
-
-  .trade-pending-orders__title {
-    font-size: var(--text-caption-size);
-    font-weight: 600;
-    color: rgb(var(--pump-text));
-  }
-
-  .trade-pending-orders__hint {
-    font-size: var(--text-caption-size);
-    color: rgb(var(--pump-muted));
-  }
-
-  .trade-pending-orders__list {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    max-height: 7.5rem;
-    overflow-y: auto;
-  }
-
-  .trade-pending-orders__row {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto auto;
-    gap: 0.5rem;
-    align-items: center;
-    padding: 0.4375rem 0.75rem;
-    font-size: var(--text-caption-size);
-    border-top: 1px solid rgb(var(--pump-border) / 0.15);
-  }
-
-  .trade-pending-orders__row:first-child {
-    border-top: none;
-  }
-
-  .trade-pending-orders__side {
-    font-weight: 600;
-  }
-
-  .trade-pending-orders__side--buy {
-    color: rgb(var(--pump-success));
-  }
-
-  .trade-pending-orders__side--sell {
-    color: rgb(var(--pump-danger));
-  }
-
-  .trade-pending-orders__phase {
-    color: rgb(var(--pump-muted));
-    white-space: nowrap;
-  }
-
-  .trade-pending-orders__tx-link {
-    color: rgb(var(--pump-accent));
-    font-weight: 500;
-    white-space: nowrap;
-    text-decoration: none;
-  }
-
-  .trade-pending-orders__tx-link:hover {
-    text-decoration: underline;
-  }
-
-  .trade-pending-orders__tx-placeholder {
-    color: rgb(var(--pump-muted) / 0.45);
-    letter-spacing: 0.08em;
+    .toast-item__spinner {
+      animation: none;
+      border-top-color: rgb(var(--pump-muted));
+    }
   }
 
   .trade-action-zone,
@@ -1057,6 +986,10 @@ code,
 
   .toast-item {
     pointer-events: auto;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.75rem;
     border-radius: var(--radius-md);
     border: 1px solid rgb(var(--pump-border) / 0.45);
     background: rgb(var(--pump-card) / 0.97);
@@ -1065,6 +998,49 @@ code,
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     animation: toast-in 0.18s ease-out;
+  }
+
+  .toast-item__body {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.625rem;
+    min-width: 0;
+    flex: 1;
+  }
+
+  .toast-item__copy {
+    min-width: 0;
+  }
+
+  .toast-item__spinner {
+    flex-shrink: 0;
+    width: 0.875rem;
+    height: 0.875rem;
+    margin-top: 0.125rem;
+    border-radius: 999px;
+    border: 2px solid rgb(var(--pump-border) / 0.45);
+    border-top-color: rgb(var(--pump-accent));
+    animation: toast-spin 0.75s linear infinite;
+  }
+
+  @keyframes toast-spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  .toast-item__action {
+    flex-shrink: 0;
+    align-self: center;
+    font-size: var(--text-caption);
+    font-weight: 600;
+    color: rgb(var(--pump-accent));
+    text-decoration: none;
+    white-space: nowrap;
+  }
+
+  .toast-item__action:hover {
+    text-decoration: underline;
   }
 
   @keyframes toast-in {
@@ -1102,6 +1078,11 @@ code,
 
   .toast-item--info {
     border-color: rgb(var(--pump-accent) / 0.35);
+  }
+
+  .toast-item--loading {
+    border-color: rgb(var(--pump-accent) / 0.28);
+    background: rgb(var(--pump-card-soft) / 0.92);
   }
 
   @media (prefers-reduced-motion: reduce) {

@@ -7,6 +7,7 @@ import { usePumpWallet } from "@/components/wallet/PumpWalletProvider";
 import { isTradeFlashblocksActive } from "@/config/flashblocks";
 import { tradeBundlerLog } from "@/lib/aa/bundler-debug";
 import { resolveTradeKernelClients } from "@/lib/aa/kernel-trade-clients";
+import { enqueueKernelSubmit } from "@/lib/aa/kernel-trade-submit-queue";
 import {
   confirmKernelUserOperation,
   submitKernelUserOperation,
@@ -128,11 +129,10 @@ export function useKernelTradeWriteContract() {
             value: params.value ?? 0n,
           };
 
-          const submitResult = await submitKernelUserOperation(
-            activeClient,
-            publicClient,
-            call,
-            { preflight: params.preflight }
+          const submitResult = await enqueueKernelSubmit(() =>
+            submitKernelUserOperation(activeClient, publicClient, call, {
+              preflight: params.preflight,
+            })
           );
 
           if (isCurrent()) {
