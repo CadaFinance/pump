@@ -774,7 +774,7 @@ export function TradePanel({
     isConnected &&
     tokenBalance !== undefined &&
     sellTokenWei > 0n &&
-    sellTokenWei > tokenBalance;
+    sellTokenWei > maxSellTokenWei;
 
   const insufficientSellGas =
     side === "sell" &&
@@ -804,6 +804,13 @@ export function TradePanel({
     (insufficientBuyBalance || (side === "sell" && insufficientSellGas && !insufficientSellTokenBalance));
 
   const showDepositCta = needsBnbFunding && isConnected && !wrongChain;
+
+  const showInsufficientTokenBalance =
+    side === "sell" &&
+    isConnected &&
+    !wrongChain &&
+    sellTokenWei > 0n &&
+    insufficientSellTokenBalance;
 
   const balancePending =
     side === "buy"
@@ -1953,11 +1960,13 @@ export function TradePanel({
     ? "Sign in to trade"
     : wrongChain
       ? "Switch to Base Sepolia"
-      : showDepositCta
-        ? `Deposit ${NATIVE_SYMBOL}`
-        : side === "buy"
-          ? "Buy"
-          : "Sell";
+      : showInsufficientTokenBalance
+        ? "Insufficient balance"
+        : showDepositCta
+          ? `Deposit ${NATIVE_SYMBOL}`
+          : side === "buy"
+            ? "Buy"
+            : "Sell";
 
   const hardSubmitDisabled = isConnected && (wrongChain || paused);
   const submitButtonClass = showDepositCta
@@ -1965,7 +1974,8 @@ export function TradePanel({
     : side === "sell"
       ? "trade-submit-button--sell"
       : "trade-submit-button--buy";
-  const submitDisabled = hardSubmitDisabled;
+  const submitDisabled =
+    hardSubmitDisabled || showInsufficientTokenBalance;
 
   const canUseMaxBuy =
     side === "buy" &&
