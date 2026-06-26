@@ -63,8 +63,6 @@ export type TradePublishPayload = {
     marketCapZug: string;
     spotPriceZug?: string;
     lastPriceZug: string;
-    virtualZugReserve?: string;
-    virtualTokenReserve?: string;
     progressBps: number;
     tradeCount: number;
     holderCount: number;
@@ -152,7 +150,7 @@ export type WalletTradePublishPayload = {
   };
   bonding: Pick<
     TradePublishPayload["bonding"],
-    "lastPriceZug" | "marketCapZug" | "reserveZug" | "tokenSold" | "spotPriceZug" | "virtualZugReserve" | "virtualTokenReserve"
+    "lastPriceZug" | "marketCapZug" | "reserveZug" | "tokenSold" | "spotPriceZug"
   >;
 };
 

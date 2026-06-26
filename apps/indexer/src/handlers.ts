@@ -17,7 +17,7 @@ import {
   seedBoardStatsOnTokenCreated,
   upsertBoardStatsAfterTrade,
 } from "./board-stats.js";
-import { upsertCandlesAfterTrade, readBondingVirtualReserves, spotPriceZugFromReserves } from "./candles.js";
+import { upsertCandlesAfterTrade } from "./candles.js";
 import { fetchIndexerNativeUsdRate } from "./native-usd.js";
 import { invalidateArenaCaches } from "./redis-cache.js";
 import { FIRST_SMART_BUY_MIN_WEI, VOLUME_MONSTER_MIN_BNB } from "./mission-thresholds.js";
@@ -219,18 +219,13 @@ export class LaunchpadEventHandlers {
     };
     this.pendingFeeSplits.delete(feeSplitKey(txHash, token));
 
-    const { virtualZug, virtualToken } = await readBondingVirtualReserves(
-      this.context.launchpadPool,
-      token
-    );
-
     const tradeEventId = eventId(txHash, logIndex);
     const side = isBuy ? "BUY" : "SELL";
     const executionPrice = ratioWeiToDecimal(zugAmount, tokenAmount);
     const spotPriceStr =
       spotPriceWeiArg != null && spotPriceWeiArg > 0n
         ? ratioWeiToDecimal(spotPriceWeiArg, 10n ** 18n)
-        : spotPriceZugFromReserves(reserveZug, soldTokens, virtualZug, virtualToken);
+        : spotPriceBnbFromReserves(reserveZug, soldTokens);
     const markPrice =
       Number(spotPriceStr) > 0 ? spotPriceStr : executionPrice;
 
@@ -349,15 +344,12 @@ export class LaunchpadEventHandlers {
         token_sold: string;
         market_cap_zug: string;
         last_price_zug: string;
-        virtual_zug_reserve: string;
-        virtual_token_reserve: string;
         progress_bps: number;
         trade_count: number;
         holder_count: number;
       }>(
         `
           SELECT reserve_zug::text, token_sold::text, market_cap_zug::text, last_price_zug::text,
-                 virtual_zug_reserve::text, virtual_token_reserve::text,
                  progress_bps, trade_count, holder_count
           FROM bonding_states
           WHERE token_address = $1
@@ -454,8 +446,6 @@ export class LaunchpadEventHandlers {
         tokenSold: tradeResult.bonding.token_sold,
         marketCapZug: tradeResult.bonding.market_cap_zug,
         lastPriceZug: tradeResult.bonding.last_price_zug,
-        virtualZugReserve: tradeResult.bonding.virtual_zug_reserve,
-        virtualTokenReserve: tradeResult.bonding.virtual_token_reserve,
         progressBps: tradeResult.bonding.progress_bps,
         tradeCount: tradeResult.bonding.trade_count,
         holderCount: tradeResult.bonding.holder_count,
@@ -518,8 +508,6 @@ export class LaunchpadEventHandlers {
           tokenSold: tradeResult.bonding.token_sold,
           lastPriceZug: tradeResult.bonding.last_price_zug,
           marketCapZug: tradeResult.bonding.market_cap_zug,
-          virtualZugReserve: tradeResult.bonding.virtual_zug_reserve,
-          virtualTokenReserve: tradeResult.bonding.virtual_token_reserve,
         },
       });
     }
@@ -1052,6 +1040,16 @@ function bytes32ToHex(value: unknown): string {
 
 function unixToDate(seconds: bigint): Date {
   return new Date(Number(seconds) * 1000);
+}
+
+/** Marginal spot BNB/token after trade (matches chart + holders P/L). */
+function spotPriceBnbFromReserves(reserveZug: bigint, soldTokens: bigint): string {
+  const virtualZug = defaultVirtualZugWei();
+  const virtualToken = defaultVirtualTokenWei();
+  const poolZug = virtualZug + reserveZug;
+  const poolTokens = virtualToken - soldTokens;
+  if (poolTokens <= 0n || poolZug <= 0n) return "0";
+  return ratioWeiToDecimal(poolZug, poolTokens);
 }
 
 function defaultVirtualEthWei(): bigint {

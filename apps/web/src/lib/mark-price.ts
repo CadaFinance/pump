@@ -13,10 +13,7 @@ import type { CurveTuple } from "@/lib/launchpad-events";
  * USD display = native × nativeUsd (oracle); never mix USD into OHLC storage.
  */
 export function resolveMarkPriceBnb(
-  token: Pick<
-    TokenDetail,
-    "lastPriceBnb" | "tradeCount" | "reserveBnb" | "tokenSold" | "virtualZugReserveBnb" | "virtualTokenReserve"
-  >,
+  token: Pick<TokenDetail, "lastPriceBnb" | "tradeCount" | "reserveBnb" | "tokenSold">,
   liveTrades: TradeItem[],
   chainCurve?: CurveTuple
 ): number {
@@ -33,15 +30,7 @@ export function resolveMarkPriceBnb(
     if (fromChain > 0) return fromChain;
   }
 
-  const virtualZug = token.virtualZugReserveBnb != null ? Number(token.virtualZugReserveBnb) : undefined;
-  const virtualToken =
-    token.virtualTokenReserve != null ? Number(token.virtualTokenReserve) : undefined;
-  const fromBonding = spotPriceBnbFromBondingDecimals(
-    token.reserveBnb,
-    token.tokenSold,
-    virtualZug,
-    virtualToken
-  );
+  const fromBonding = spotPriceBnbFromBondingDecimals(token.reserveBnb, token.tokenSold);
   if (fromBonding > 0) return fromBonding;
 
   const fromDb = Number(token.lastPriceBnb);

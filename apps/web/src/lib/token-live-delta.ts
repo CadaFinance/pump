@@ -3,7 +3,7 @@ import {
 } from "@/lib/bonding-curve";
 import type { TokenDetail, TradeItem } from "@/lib/db/launchpad";
 import type { CandleWsUpdate } from "@/lib/candles";
-import { arenaWsSpotPriceBnb, bondingMarkCapBnbFromWs, type ArenaTradeWsPayload } from "@/lib/arena-live-delta";
+import { arenaWsSpotPriceBnb, type ArenaTradeWsPayload } from "@/lib/arena-live-delta";
 
 export type TokenTradeWsPayload = {
   type?: string;
@@ -77,23 +77,12 @@ export function patchTokenDetailFromWsTrade(
   if (!addr || token.address.toLowerCase() !== addr) return null;
 
   const bonding = payload.bonding;
-  const mcapBnb = bonding
-    ? bondingMarkCapBnbFromWs(bonding, token.marketCapBnb) ?? token.marketCapBnb
-    : token.marketCapBnb;
-  const spotPublished = bonding
-    ? Number(bonding.spotPriceZug ?? bonding.lastPriceZug)
-    : 0;
-  const spotFromMcap =
-    Number(mcapBnb) > 0 ? Number(mcapBnb) / BONDING_TOKEN_SUPPLY_HUMAN : 0;
-  const spot =
-    spotPublished > 0
-      ? spotPublished
-      : spotFromMcap > 0
-        ? spotFromMcap
-        : bonding
-          ? arenaWsSpotPriceBnb(bonding)
-          : 0;
+  const spot = bonding ? arenaWsSpotPriceBnb(bonding) : 0;
   const spotStr = spot > 0 ? String(spot) : token.lastPriceBnb;
+  const mcapBnb =
+    spot > 0
+      ? String(spot * BONDING_TOKEN_SUPPLY_HUMAN)
+      : bonding?.marketCapZug ?? token.marketCapBnb;
 
   return {
     ...token,
@@ -107,17 +96,9 @@ export function patchTokenDetailFromWsTrade(
   };
 }
 
-/** Spot from bonding WS — per-token virtual reserves when present (matches portfolio SQL). */
+/** Spot from bonding for portfolio mark (same as arena). */
 export function wsBondingSpotPriceBnb(
-  bonding: {
-    reserveZug?: string;
-    tokenSold?: string;
-    lastPriceZug?: string;
-    marketCapZug?: string;
-    spotPriceZug?: string;
-    virtualZugReserve?: string;
-    virtualTokenReserve?: string;
-  } | undefined
+  bonding: { reserveZug?: string; tokenSold?: string; lastPriceZug?: string; marketCapZug?: string } | undefined
 ): number {
   if (!bonding) return 0;
   return arenaWsSpotPriceBnb(bonding);

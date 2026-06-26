@@ -161,14 +161,14 @@ export async function reconcileBoardStatsRollingWindows(pool: pg.Pool): Promise<
     SET
       spot_price_zug = CASE
         WHEN (1000000000::numeric - COALESCE(b.token_sold, 0)) > 0
-        THEN (COALESCE(b.virtual_zug_reserve, 5)::numeric + COALESCE(b.reserve_zug, 0))
-             / (COALESCE(b.virtual_token_reserve, 1000000000)::numeric - COALESCE(b.token_sold, 0))
+        THEN (5::numeric + COALESCE(b.reserve_zug, 0))
+             / (1000000000::numeric - COALESCE(b.token_sold, 0))
         ELSE tbs.spot_price_zug
       END,
       market_cap_zug = CASE
         WHEN (1000000000::numeric - COALESCE(b.token_sold, 0)) > 0
-        THEN ((COALESCE(b.virtual_zug_reserve, 5)::numeric + COALESCE(b.reserve_zug, 0))
-             / (COALESCE(b.virtual_token_reserve, 1000000000)::numeric - COALESCE(b.token_sold, 0)))
+        THEN ((5::numeric + COALESCE(b.reserve_zug, 0))
+             / (1000000000::numeric - COALESCE(b.token_sold, 0)))
              * 1000000000
         ELSE tbs.market_cap_zug
       END,
@@ -176,8 +176,8 @@ export async function reconcileBoardStatsRollingWindows(pool: pg.Pool): Promise<
         tbs.ath_market_cap_zug,
         CASE
           WHEN (1000000000::numeric - COALESCE(b.token_sold, 0)) > 0
-          THEN ((COALESCE(b.virtual_zug_reserve, 5)::numeric + COALESCE(b.reserve_zug, 0))
-               / (COALESCE(b.virtual_token_reserve, 1000000000)::numeric - COALESCE(b.token_sold, 0)))
+          THEN ((5::numeric + COALESCE(b.reserve_zug, 0))
+               / (1000000000::numeric - COALESCE(b.token_sold, 0)))
                * 1000000000
           ELSE 0
         END
