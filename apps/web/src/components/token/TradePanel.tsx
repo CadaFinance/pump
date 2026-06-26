@@ -253,7 +253,6 @@ export function TradePanel({
   const autoSubmitPendingRef = useRef(false);
   const autoSubmitTriggeredRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
-  const [submitSuccess, setSubmitSuccess] = useState<string | null>(null);
   const [receiveExpanded, setReceiveExpanded] = useState(false);
   const [tradeInFlight, setTradeInFlight] = useState(false);
   const tradeInFlightRef = useRef(false);
@@ -519,12 +518,6 @@ export function TradePanel({
   });
 
   useEffect(() => {
-    if (!submitSuccess) return;
-    const timer = setTimeout(() => setSubmitSuccess(null), 5_000);
-    return () => clearTimeout(timer);
-  }, [submitSuccess]);
-
-  useEffect(() => {
     if (isSubmitting && !uxTraceRef.current.pending) {
       tradeTraceStep("ux.state.isSubmitting=true");
       uxTraceRef.current.pending = true;
@@ -581,7 +574,6 @@ export function TradePanel({
     setPendingAction(null);
     handledReceiptHashRef.current = null;
     endTradeInFlight();
-    setSubmitSuccess(null);
     setError(formatTradeError(writeError));
     failTradeTrace("ux.write_error", writeError);
   }, [writeError, isBackgroundConfirming]);
@@ -1241,7 +1233,6 @@ export function TradePanel({
     setLinkedBuySpendWei(null);
     setLinkedSellTokenWei(null);
     setError(null);
-    setSubmitSuccess(side === "buy" ? `Bought ${symbol}` : `Sold ${symbol}`);
     pendingTradeSideRef.current = null;
     setPendingAction(null);
     tradeTraceStep("ux.on_trade_submitted", { userOpHash: submittedUserOpHash, side });
@@ -1257,7 +1248,6 @@ export function TradePanel({
       handledReceiptHashRef.current = activeReceipt.transactionHash;
       failTradeTrace("chain.receipt_reverted", new Error("Transaction reverted on-chain"));
       setError("Transaction reverted on-chain. Check wallet balance, token status, and amount.");
-      setSubmitSuccess(null);
       reset();
       return;
     }
@@ -1304,7 +1294,6 @@ export function TradePanel({
     });
 
     endTradeInFlight();
-    setSubmitSuccess(null);
     awaitingConfirmSideRef.current = null;
     void (async () => {
       const t0 = performance.now();
@@ -1330,7 +1319,6 @@ export function TradePanel({
     optimisticPendingRef.current = null;
     legacyApproveChainRef.current = false;
     endTradeInFlight();
-    setSubmitSuccess(null);
   }
 
   function handleInstantTradeFailure(err: unknown) {
@@ -1356,9 +1344,6 @@ export function TradePanel({
     beginTradeInFlight();
     setPendingAction(null);
     pendingTradeSideRef.current = null;
-    setSubmitSuccess(
-      tradeSide === "buy" ? `Bought ${symbol}` : `Sold ${symbol}`
-    );
     onTradeOptimistic?.({ ...preview, side: tradeSide });
     onTradeSubmitted?.({
       userOpHash: preview.pendingTxHash,
@@ -1552,7 +1537,6 @@ export function TradePanel({
         } else {
           endTradeInFlight();
         }
-        setSubmitSuccess(null);
         setError(formatTradeError(err));
         pendingTradeSideRef.current = null;
         setPendingAction(null);
@@ -1989,6 +1973,16 @@ export function TradePanel({
   const stealthSubmitLocked =
     tradeInFlight || isSubmitting || pendingAction !== null;
 
+  const isApprovePending = pendingAction === "approve";
+  const tradeSubmitPhase =
+    isSubmitting || isApprovePending
+      ? "submitting"
+      : isBackgroundConfirming || isConfirming || tradeInFlight
+        ? "confirming"
+        : "idle";
+
+  const tradeSubmitPending = tradeSubmitPhase !== "idle";
+
   useEffect(() => {
     if (!autoSubmitPendingRef.current || autoSubmitTriggeredRef.current) return;
     if (balancePending || stealthSubmitLocked) return;
@@ -2004,7 +1998,7 @@ export function TradePanel({
     void submitTrade();
   }, [side, sellTokenWei, sellQuoteOut, buyCostWei, balancePending, stealthSubmitLocked]);
 
-  const submitLabel = !isConnected
+  const submitActionLabel = !isConnected
     ? "Sign in to trade"
     : wrongChain
       ? "Switch to BSC Testnet"
@@ -2020,6 +2014,15 @@ export function TradePanel({
             ? "Buy"
             : "Sell";
 
+  const submitButtonLabel =
+    tradeSubmitPhase === "submitting"
+      ? isApprovePending
+        ? "Approving…"
+        : "Submitting…"
+      : tradeSubmitPhase === "confirming"
+        ? "Confirming…"
+        : submitActionLabel;
+
   const hardSubmitDisabled =
     isConnected &&
     (wrongChain ||
@@ -2028,7 +2031,8 @@ export function TradePanel({
       (insufficientBalance && !needsBnbFunding));
   const submitButtonClass =
     side === "sell" ? "trade-submit-button--sell" : "trade-submit-button--buy";
-  const submitButtonStealthLocked = stealthSubmitLocked && !hardSubmitDisabled;
+  const submitButtonLoading = tradeSubmitPending && !hardSubmitDisabled;
+  const submitDisabled = hardSubmitDisabled || tradeSubmitPending;
 
   const canUseMaxBuy =
     side === "buy" &&
@@ -2060,6 +2064,7 @@ export function TradePanel({
               setLinkedSellTokenWei(null);
               setError(null);
             }}
+            disabled={tradeSubmitPending}
             className={side === "buy" ? "trade-side-button-active-buy" : "trade-side-button"}
           >
             Buy
@@ -2073,6 +2078,7 @@ export function TradePanel({
               setLinkedSellTokenWei(null);
               setError(null);
             }}
+            disabled={tradeSubmitPending}
             className={side === "sell" ? "trade-side-button-active-sell" : "trade-side-button"}
           >
             Sell
@@ -2228,19 +2234,28 @@ export function TradePanel({
 
         {error ? <p className="notice-error mx-4 mb-3">{error}</p> : null}
 
-        {submitSuccess ? (
-          <p className="mx-4 mb-3 text-caption text-pump-success">{submitSuccess}</p>
-        ) : null}
-
         <div className="px-4 pb-4">
           <button
             type="submit"
-            disabled={hardSubmitDisabled}
-            aria-disabled={hardSubmitDisabled || stealthSubmitLocked}
-            className={`trade-submit-button ${submitButtonClass}${submitButtonStealthLocked ? " trade-submit-button--stealth-locked" : ""}`}
+            disabled={submitDisabled}
+            aria-busy={tradeSubmitPending}
+            aria-live="polite"
+            className={`trade-submit-button ${submitButtonClass}${submitButtonLoading ? " trade-submit-button--loading" : ""}`}
           >
-            {submitLabel}
+            {submitButtonLoading ? (
+              <>
+                <span className="trade-submit-spinner" aria-hidden />
+                {submitButtonLabel}
+              </>
+            ) : (
+              submitButtonLabel
+            )}
           </button>
+          {tradeSubmitPhase === "confirming" ? (
+            <p className="mt-2 text-center text-caption text-pump-muted">
+              Settling on-chain — chart and balances update when confirmed.
+            </p>
+          ) : null}
         </div>
       </form>
 

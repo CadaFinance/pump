@@ -637,6 +637,13 @@ code,
     color: rgb(var(--pump-accent-foreground));
   }
 
+  .trade-side-button:disabled,
+  .trade-side-button-active-buy:disabled,
+  .trade-side-button-active-sell:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+
   .trade-side-group {
     display: flex;
     gap: 0;
@@ -944,6 +951,33 @@ code,
   .trade-submit-button:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+  }
+
+  .trade-submit-button--loading {
+    gap: 0.5rem;
+    cursor: wait;
+    opacity: 0.92;
+  }
+
+  .trade-submit-button--loading:disabled {
+    opacity: 0.92;
+    cursor: wait;
+  }
+
+  .trade-submit-spinner {
+    width: 1rem;
+    height: 1rem;
+    flex-shrink: 0;
+    border: 2px solid currentColor;
+    border-right-color: transparent;
+    border-radius: 50%;
+    animation: trade-submit-spin 0.65s linear infinite;
+  }
+
+  @keyframes trade-submit-spin {
+    to {
+      transform: rotate(360deg);
+    }
   }
 
   .trade-submit-button--stealth-locked {
