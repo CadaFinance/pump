@@ -932,6 +932,88 @@ code,
     border-color: rgb(var(--pump-danger));
   }
 
+  .trade-pending-orders {
+    border: 1px solid rgb(var(--pump-border) / 0.35);
+    border-radius: var(--radius-md);
+    background: rgb(var(--pump-card) / 0.55);
+    overflow: hidden;
+  }
+
+  .trade-pending-orders__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid rgb(var(--pump-border) / 0.25);
+  }
+
+  .trade-pending-orders__title {
+    font-size: var(--text-caption-size);
+    font-weight: 600;
+    color: rgb(var(--pump-text));
+  }
+
+  .trade-pending-orders__hint {
+    font-size: var(--text-caption-size);
+    color: rgb(var(--pump-muted));
+  }
+
+  .trade-pending-orders__list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    max-height: 7.5rem;
+    overflow-y: auto;
+  }
+
+  .trade-pending-orders__row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    gap: 0.5rem;
+    align-items: center;
+    padding: 0.4375rem 0.75rem;
+    font-size: var(--text-caption-size);
+    border-top: 1px solid rgb(var(--pump-border) / 0.15);
+  }
+
+  .trade-pending-orders__row:first-child {
+    border-top: none;
+  }
+
+  .trade-pending-orders__side {
+    font-weight: 600;
+  }
+
+  .trade-pending-orders__side--buy {
+    color: rgb(var(--pump-success));
+  }
+
+  .trade-pending-orders__side--sell {
+    color: rgb(var(--pump-danger));
+  }
+
+  .trade-pending-orders__phase {
+    color: rgb(var(--pump-muted));
+    white-space: nowrap;
+  }
+
+  .trade-pending-orders__tx-link {
+    color: rgb(var(--pump-accent));
+    font-weight: 500;
+    white-space: nowrap;
+    text-decoration: none;
+  }
+
+  .trade-pending-orders__tx-link:hover {
+    text-decoration: underline;
+  }
+
+  .trade-pending-orders__tx-placeholder {
+    color: rgb(var(--pump-muted) / 0.45);
+    letter-spacing: 0.08em;
+  }
+
   .trade-action-zone,
   .form-action-zone {
     border-top: 1px solid rgb(var(--pump-border) / 0.35);
