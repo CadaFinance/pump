@@ -932,46 +932,139 @@ code,
     border-color: rgb(var(--pump-danger));
   }
 
+  .trade-action-zone {
+    border-top: 1px solid rgb(var(--pump-border) / 0.35);
+    padding: 0.875rem 1rem 1rem;
+  }
+
+  .trade-execution-status {
+    margin-bottom: 0.75rem;
+    padding: 0.625rem 0.75rem;
+    border-radius: var(--radius-md);
+    border: 1px solid rgb(var(--pump-border) / 0.4);
+    background: rgb(var(--pump-card-soft) / 0.55);
+  }
+
+  .trade-execution-status__label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-size: var(--text-label);
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: rgb(var(--pump-muted));
+  }
+
+  .trade-execution-steps {
+    display: flex;
+    gap: 0.375rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .trade-execution-step {
+    flex: 1;
+    height: 3px;
+    border-radius: 999px;
+    background: rgb(var(--pump-border) / 0.45);
+    transition: background 0.2s ease;
+  }
+
+  .trade-execution-step--done {
+    background: rgb(var(--pump-success) / 0.85);
+  }
+
+  .trade-execution-step--active {
+    background: rgb(var(--pump-accent));
+    animation: trade-step-pulse 1.4s ease-in-out infinite;
+  }
+
+  @keyframes trade-step-pulse {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.55;
+    }
+  }
+
+  .trade-execution-status__detail {
+    font-size: var(--text-caption);
+    line-height: var(--leading-caption);
+    color: rgb(var(--pump-text));
+  }
+
+  .trade-side-group--locked {
+    opacity: 0.72;
+    pointer-events: none;
+  }
+
   .trade-submit-button {
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    gap: 0.5rem;
     width: 100%;
     min-height: 2.75rem;
     border-radius: var(--radius-md);
-    padding: 0 0.75rem;
+    padding: 0 0.875rem;
     font-size: var(--text-body-sm);
     font-weight: 600;
     line-height: 1.25;
+    letter-spacing: -0.01em;
     cursor: pointer;
-    transition: background 0.15s ease, border-color 0.15s ease;
+    transition:
+      background 0.15s ease,
+      border-color 0.15s ease,
+      opacity 0.15s ease,
+      transform 0.1s ease;
     white-space: nowrap;
   }
 
-  .trade-submit-button:disabled {
+  .trade-submit-button:active:not(:disabled) {
+    transform: scale(0.985);
+  }
+
+  .trade-submit-button:disabled:not(.trade-submit-button--loading) {
     opacity: 0.5;
     cursor: not-allowed;
   }
 
   .trade-submit-button--loading {
-    gap: 0.5rem;
     cursor: wait;
-    opacity: 0.92;
+    opacity: 1;
   }
 
   .trade-submit-button--loading:disabled {
-    opacity: 0.92;
+    opacity: 1;
     cursor: wait;
   }
 
   .trade-submit-spinner {
-    width: 1rem;
-    height: 1rem;
+    width: 0.875rem;
+    height: 0.875rem;
     flex-shrink: 0;
     border: 2px solid currentColor;
     border-right-color: transparent;
     border-radius: 50%;
-    animation: trade-submit-spin 0.65s linear infinite;
+    opacity: 0.9;
+    animation: trade-submit-spin 0.7s linear infinite;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .trade-submit-spinner {
+      animation: none;
+      border-right-color: currentColor;
+      opacity: 0.45;
+    }
+
+    .trade-execution-step--active {
+      animation: none;
+    }
+
+    .trade-submit-button:active:not(:disabled) {
+      transform: none;
+    }
   }
 
   @keyframes trade-submit-spin {

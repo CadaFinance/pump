@@ -2017,11 +2017,20 @@ export function TradePanel({
   const submitButtonLabel =
     tradeSubmitPhase === "submitting"
       ? isApprovePending
-        ? "Approving…"
-        : "Submitting…"
+        ? "Approving"
+        : "Processing"
       : tradeSubmitPhase === "confirming"
-        ? "Confirming…"
+        ? "Confirming"
         : submitActionLabel;
+
+  const tradeStatusDetail =
+    tradeSubmitPhase === "submitting"
+      ? isApprovePending
+        ? "Authorizing token spend on your wallet"
+        : "Signing and submitting your order"
+      : tradeSubmitPhase === "confirming"
+        ? "Awaiting on-chain settlement"
+        : null;
 
   const hardSubmitDisabled =
     isConnected &&
@@ -2054,7 +2063,7 @@ export function TradePanel({
       className={embedded ? "trade-panel-embedded overflow-hidden p-0" : "panel-surface overflow-hidden p-0"}
     >
       <form onSubmit={onSubmit}>
-        <div className="trade-side-group">
+        <div className={`trade-side-group${tradeSubmitPending ? " trade-side-group--locked" : ""}`}>
           <button
             type="button"
             onClick={() => {
@@ -2232,30 +2241,50 @@ export function TradePanel({
           </div>
         ) : null}
 
-        {error ? <p className="notice-error mx-4 mb-3">{error}</p> : null}
+        {error ? (
+          <div className="notice-error mx-4 mb-3 px-3 py-2 text-caption" role="alert">
+            {error}
+          </div>
+        ) : null}
 
-        <div className="px-4 pb-4">
+        <div className="trade-action-zone">
+          {tradeSubmitPending && tradeStatusDetail ? (
+            <div className="trade-execution-status" role="status" aria-live="polite">
+              <span className="trade-execution-status__label">Order status</span>
+              <div className="trade-execution-steps" aria-hidden>
+                <div
+                  className={`trade-execution-step${
+                    tradeSubmitPhase === "submitting"
+                      ? " trade-execution-step--active"
+                      : tradeSubmitPhase === "confirming"
+                        ? " trade-execution-step--done"
+                        : ""
+                  }`}
+                />
+                <div
+                  className={`trade-execution-step${
+                    tradeSubmitPhase === "confirming" ? " trade-execution-step--active" : ""
+                  }`}
+                />
+              </div>
+              <p className="trade-execution-status__detail">{tradeStatusDetail}</p>
+            </div>
+          ) : null}
           <button
             type="submit"
             disabled={submitDisabled}
             aria-busy={tradeSubmitPending}
-            aria-live="polite"
             className={`trade-submit-button ${submitButtonClass}${submitButtonLoading ? " trade-submit-button--loading" : ""}`}
           >
             {submitButtonLoading ? (
               <>
                 <span className="trade-submit-spinner" aria-hidden />
-                {submitButtonLabel}
+                <span>{submitButtonLabel}</span>
               </>
             ) : (
               submitButtonLabel
             )}
           </button>
-          {tradeSubmitPhase === "confirming" ? (
-            <p className="mt-2 text-center text-caption text-pump-muted">
-              Settling on-chain — chart and balances update when confirmed.
-            </p>
-          ) : null}
         </div>
       </form>
 
