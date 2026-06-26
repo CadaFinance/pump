@@ -1,6 +1,6 @@
 import { connection } from "next/server";
 import { ArenaListClient } from "@/components/arena/ArenaListClient";
-import { fetchArenaHomePayload } from "@/lib/arena-server";
+import { loadArenaHomePayloadFromDb } from "@/lib/arena-server";
 
 /** Dynamic server island — arena SSR payload (use cache inside fetch). */
 export async function ArenaHomeServer() {
@@ -8,10 +8,11 @@ export async function ArenaHomeServer() {
 
   let initialPayload = null;
   try {
-    initialPayload = await fetchArenaHomePayload({
+    initialPayload = await loadArenaHomePayloadFromDb({
       filter: "new",
       sortKey: "age",
       sortDir: "desc",
+      skipCache: true,
     });
   } catch {
     // Client retries on hydration if SSR fetch fails (e.g. build without DB).

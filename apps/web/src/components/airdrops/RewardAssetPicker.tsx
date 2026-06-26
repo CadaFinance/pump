@@ -2,11 +2,17 @@
 
 import { useEffect, useId, useMemo, useState, type ReactNode } from "react";
 import type { TokenListItem } from "@/lib/db/launchpad";
-import { BnbLogo } from "@/components/token/BnbLogo";
+import { NativeCurrencyLogo } from "@/components/token/NativeCurrencyLogo";
 import { TokenAvatar } from "@/components/token/TokenAvatar";
 import { ModalPortal } from "@/components/ui/ModalPortal";
 
-export const BNB_REWARD_ASSET = "__BNB__";
+import { NATIVE_SYMBOL, NATIVE_REWARD_ASSET, isNativeRewardAsset } from "@/lib/native-currency";
+
+export { NATIVE_REWARD_ASSET, isNativeRewardAsset };
+/** @deprecated Use NATIVE_REWARD_ASSET */
+export const BNB_REWARD_ASSET = NATIVE_REWARD_ASSET;
+/** @deprecated Use isNativeRewardAsset */
+export const isBnbRewardAsset = isNativeRewardAsset;
 
 function formatBalance(value: string | number): string {
   const n = typeof value === "string" ? Number(value) : value;

@@ -1,7 +1,7 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import {
-  fetchArenaHomePayload,
+  loadArenaHomePayloadFromDb,
   type ArenaHomeFetchOptions,
 } from "@/lib/arena-server";
 import type {
@@ -10,7 +10,6 @@ import type {
   ArenaBoardSortKey,
 } from "@/lib/db/launchpad";
 
-const CACHE_MS = 2_000;
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 500;
 
@@ -33,13 +32,6 @@ const BOARD_FILTERS: ArenaBoardFilter[] = [
   "kothContenders",
   "hasAirdrop",
 ];
-
-type TokensCacheEntry = {
-  expiresAt: number;
-  payload: Awaited<ReturnType<typeof fetchArenaHomePayload>>;
-};
-
-const tokensCache = new Map<string, TokensCacheEntry>();
 
 function parseLimit(value: string | null): number {
   const parsed = Number.parseInt(value ?? "", 10);
@@ -71,16 +63,6 @@ function parseAirdropAddresses(value: string | null): string[] {
     .filter((address) => /^0x[a-f0-9]{40}$/.test(address));
 }
 
-function cacheKey(options: ArenaHomeFetchOptions & { airdropKey: string }): string {
-  return [
-    options.limit,
-    options.sortKey,
-    options.sortDir,
-    options.filter,
-    options.airdropKey,
-  ].join(":");
-}
-
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -89,7 +71,6 @@ export async function GET(request: NextRequest) {
     const sortDir = parseSortDir(searchParams.get("sortDir"));
     const filter = parseFilter(searchParams.get("filter"));
     const airdropAddresses = parseAirdropAddresses(searchParams.get("airdrop"));
-    const airdropKey = airdropAddresses.join("|");
     const fetchOptions: ArenaHomeFetchOptions = {
       limit,
       sortKey,
@@ -97,25 +78,14 @@ export async function GET(request: NextRequest) {
       filter,
       airdropAddresses,
     };
-    const key = cacheKey({ ...fetchOptions, airdropKey });
-    const now = Date.now();
-    const cached = tokensCache.get(key);
 
-    if (cached && cached.expiresAt > now) {
-      return NextResponse.json(cached.payload, {
-        headers: { "Cache-Control": "private, max-age=2" },
-      });
-    }
-
-    const payload = await fetchArenaHomePayload(fetchOptions);
-
-    tokensCache.set(key, {
-      expiresAt: now + CACHE_MS,
-      payload,
+    const payload = await loadArenaHomePayloadFromDb({
+      ...fetchOptions,
+      skipCache: true,
     });
 
     return NextResponse.json(payload, {
-      headers: { "Cache-Control": "private, max-age=2" },
+      headers: { "Cache-Control": "no-store, max-age=0" },
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";

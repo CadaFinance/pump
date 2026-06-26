@@ -62,15 +62,15 @@ function arenaCacheTag(options: ArenaHomeFetchOptions): string {
   return `arena:${filter}:${sortKey}:${sortDir}:${options.limit ?? ARENA_HOME_LIMIT}:${airdropKey}`;
 }
 
-/** Server-side arena board payload — SSR home page + shared with /api/tokens. */
-export async function fetchArenaHomePayload(
-  options: ArenaHomeFetchOptions = {}
-): Promise<ArenaHomePayload> {
-  "use cache";
-  cacheTag("arena");
-  cacheTag(arenaCacheTag(options));
-  cacheLife({ stale: 2, revalidate: 2, expire: 10 });
+export type ArenaHomeLoadOptions = ArenaHomeFetchOptions & {
+  /** Skip Redis hot cache — API + post-trade refresh must read live DB. */
+  skipCache?: boolean;
+};
 
+/** Live DB read — same path as Portfolio `listTokensByCreator` / token detail. */
+export async function loadArenaHomePayloadFromDb(
+  options: ArenaHomeLoadOptions = {}
+): Promise<ArenaHomePayload> {
   const limit = options.limit ?? ARENA_HOME_LIMIT;
   const sortKey = options.sortKey ?? "age";
   const sortDir = options.sortDir ?? "desc";
@@ -85,7 +85,7 @@ export async function fetchArenaHomePayload(
     airdropAddresses,
   };
 
-  if (useRedisArenaCache()) {
+  if (!options.skipCache && useRedisArenaCache()) {
     const cached = await readArenaHomeCache(fetchOptions);
     if (cached) return cached;
   }
@@ -99,13 +99,12 @@ export async function fetchArenaHomePayload(
       filter,
       airdropAddresses,
     }),
-    (async () => {
-      if (useRedisArenaCache()) {
-        const cachedTop = await readTopMcapCache(TOP_MCAP_LIMIT);
-        if (cachedTop) return cachedTop;
-      }
-      return listTopTokensByMcap(TOP_MCAP_LIMIT);
-    })(),
+    options.skipCache || !useRedisArenaCache()
+      ? listTopTokensByMcap(TOP_MCAP_LIMIT)
+      : (async () => {
+          const cachedTop = await readTopMcapCache(TOP_MCAP_LIMIT);
+          return cachedTop ?? listTopTokensByMcap(TOP_MCAP_LIMIT);
+        })(),
     getKothSummary(RECENT_STRIP_DESKTOP),
     getArenaFilterCounts(airdropAddresses),
     fetchBnbUsdPrice(),
@@ -127,7 +126,7 @@ export async function fetchArenaHomePayload(
     bnbUsd: bnbPrice.bnbUsd,
   };
 
-  if (useRedisArenaCache()) {
+  if (!options.skipCache && useRedisArenaCache()) {
     await Promise.all([
       writeArenaHomeCache(fetchOptions, payload),
       writeTopMcapCache(TOP_MCAP_LIMIT, topByMcapFromDb),
@@ -135,4 +134,16 @@ export async function fetchArenaHomePayload(
   }
 
   return payload;
+}
+
+/** Cached SSR shell — client/API use `loadArenaHomePayloadFromDb({ skipCache: true })`. */
+export async function fetchArenaHomePayload(
+  options: ArenaHomeFetchOptions = {}
+): Promise<ArenaHomePayload> {
+  "use cache";
+  cacheTag("arena");
+  cacheTag(arenaCacheTag(options));
+  cacheLife({ stale: 2, revalidate: 2, expire: 10 });
+
+  return loadArenaHomePayloadFromDb(options);
 }

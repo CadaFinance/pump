@@ -37,7 +37,7 @@ import {
   listTokenPriceUsd,
 } from "@/lib/arena-board-format";
 import { ScrollStripTrack } from "@/components/ui/ScrollStripTrack";
-import { useLiveChannel, resolveLivePollDelay } from "@/hooks/useLiveChannel";
+import { useLiveChannels, resolveLivePollDelay } from "@/hooks/useLiveChannel";
 import { useRafMessageQueue } from "@/hooks/useRafMessageQueue";
 import { useLiveBoardAnimations } from "@/hooks/useLiveBoardAnimations";
 import { RECENT_STRIP_DESKTOP, RECENT_STRIP_MOBILE } from "@/lib/recent-strip-limits";
@@ -61,7 +61,8 @@ import {
   type BoardFilter,
 } from "@/lib/arena-filters";
 import type { ArenaTradeWsPayload } from "@/lib/arena-live-delta";
-import { patchArenaTokenList } from "@/lib/arena-live-delta";
+import { patchArenaTokenList, tradeRoomForToken } from "@/lib/arena-live-delta";
+import { isBoardRowMarkStale } from "@/lib/board-mark-price";
 import type { AirdropListItem } from "@/lib/db/airdrops";
 import { collectOpenAirdropLinkedTokens } from "@/lib/airdrop-linked-tokens";
 import { useQueryClient } from "@tanstack/react-query";
@@ -102,6 +103,15 @@ function boardCacheKey(
   airdropKey: string
 ): string {
   return `${filter}:${sortKey}:${sortDir}:${airdropKey}`;
+}
+
+function arenaTokenUsdMetric(
+  token: TokenListItem,
+  bnbAmount: number,
+  bnbUsd: number | null | undefined
+): number | null {
+  if (isBoardRowMarkStale(token)) return null;
+  return bnbToUsd(bnbAmount, bnbUsd);
 }
 
 function apiBoardFilter(activeFilter: BoardFilter): BoardFilter {
@@ -401,7 +411,7 @@ export function ArenaListClient({
   const { openConnectModal } = useOpenConnectModal();
   const { favorites, isFavorite, toggleFavorite } = useFavorites();
   const { bnbUsd: hookBnbUsd } = useBnbUsdPrice();
-  const effectiveBnbUsd = apiBnbUsd ?? hookBnbUsd;
+  const effectiveBnbUsd = hookBnbUsd ?? apiBnbUsd;
   const effectiveBnbUsdRef = useRef(effectiveBnbUsd);
   effectiveBnbUsdRef.current = effectiveBnbUsd;
   const flashTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
@@ -749,7 +759,8 @@ export function ArenaListClient({
         const body = await queryClient.fetchQuery({
           queryKey: arenaBoardQueryKey(boardParams),
           queryFn: () => fetchArenaBoard(boardParams),
-          staleTime: 2_000,
+          staleTime: 0,
+          gcTime: 0,
         });
 
         if (requestBoardKey !== currentBoardKeyRef.current) {
@@ -835,9 +846,24 @@ export function ArenaListClient({
   loadFavoriteTokensRef.current = loadFavoriteTokens;
 
   const lastArenaWsSeqRef = useRef(0);
+  const pendingWsRef = useRef<unknown[]>([]);
+
+  const liveWsRooms = useMemo(() => {
+    const rooms = new Set<string>(["arena"]);
+    for (const token of tokens ?? []) {
+      rooms.add(tradeRoomForToken(token.address));
+      if (rooms.size > 31) break;
+    }
+    return [...rooms];
+  }, [tokens]);
 
   const applyArenaWsMessages = useCallback(
     (messages: unknown[]) => {
+      if (!tokensRef.current) {
+        pendingWsRef.current.push(...messages);
+        return;
+      }
+
       for (const message of messages) {
         const payload = message as ArenaTradeWsPayload & { type?: string; seq?: number };
         if (payload.seq != null && payload.seq <= lastArenaWsSeqRef.current) continue;
@@ -856,6 +882,9 @@ export function ArenaListClient({
                 triggerFlash(`${addr}:mcap`, nextMcap > prevMcap ? "up" : "down");
               }
               snapAnimatedCapsForToken(newToken);
+              if (isBoardRowMarkStale(newToken)) {
+                void loadRef.current(listLimitRef.current, { silent: true });
+              }
             }
             setTokens(next);
             setTopByMcap((prev) => {
@@ -880,10 +909,17 @@ export function ArenaListClient({
     [triggerFlash, snapAnimatedCapsForToken]
   );
 
+  useEffect(() => {
+    if (!tokens || pendingWsRef.current.length === 0) return;
+    const pending = pendingWsRef.current;
+    pendingWsRef.current = [];
+    applyArenaWsMessages(pending);
+  }, [tokens, applyArenaWsMessages]);
+
   const queueArenaWsMessage = useRafMessageQueue(applyArenaWsMessages);
 
-  const { connected: wsConnected } = useLiveChannel({
-    room: "arena",
+  const { connected: wsConnected } = useLiveChannels({
+    rooms: liveWsRooms,
     onMessage: (message) => {
       queueArenaWsMessage(message);
     },
@@ -953,6 +989,12 @@ export function ArenaListClient({
     observer.observe(sentinel);
     return () => observer.disconnect();
   }, [activeFilter, hasMore, loadingMore, tokens?.length, viewMode]);
+
+  useEffect(() => {
+    if (!tokens?.length) return;
+    if (!tokens.some((token) => isBoardRowMarkStale(token))) return;
+    void loadRef.current(listLimitRef.current, { silent: true });
+  }, [tokens]);
 
   useEffect(() => {
     if (tokens === null) return;
@@ -1320,7 +1362,9 @@ export function ArenaListClient({
                 <div className="koth-banner__hero" aria-label="Market cap">
                   <span className="koth-banner__tag">MC</span>
                   <span className="financial-value koth-banner__hero-value text-pump-text">
-                    {formatCapForBoard(bnbToUsd(Number(kothToken.marketCapBnb), effectiveBnbUsd))}
+                    {formatCapForBoard(
+                      arenaTokenUsdMetric(kothToken, Number(kothToken.marketCapBnb), effectiveBnbUsd)
+                    )}
                   </span>
                   <PctChange
                     value={kothToken.change24hPct ?? null}
@@ -1343,7 +1387,11 @@ export function ArenaListClient({
                     <span className="koth-banner__tag">Vol</span>
                     <span className="financial-value koth-banner__meta-value">
                       {formatUsdReadable(
-                        bnbToUsd(Number(kothToken.volume24hBnb ?? 0), effectiveBnbUsd),
+                        arenaTokenUsdMetric(
+                          kothToken,
+                          Number(kothToken.volume24hBnb ?? 0),
+                          effectiveBnbUsd
+                        ),
                         { compact: true }
                       )}
                     </span>
@@ -1373,7 +1421,8 @@ export function ArenaListClient({
                     <span className="koth-banner__tag">ATH</span>
                     <span className="financial-value koth-banner__meta-value">
                       {formatCapForBoard(
-                        bnbToUsd(
+                        arenaTokenUsdMetric(
+                          kothToken,
                           Number(kothToken.athMarketCapBnb ?? kothToken.marketCapBnb),
                           effectiveBnbUsd
                         )
@@ -1612,7 +1661,7 @@ export function ArenaListClient({
               const addressKey = token.address.toLowerCase();
               const mcapUsd =
                 animatedCaps[`${addressKey}:cap:mcap`] ??
-                bnbToUsd(Number(token.marketCapBnb), effectiveBnbUsd);
+                arenaTokenUsdMetric(token, Number(token.marketCapBnb), effectiveBnbUsd);
               const isKoth = kothToken?.address.toLowerCase() === addressKey;
 
               return (
@@ -1643,10 +1692,12 @@ export function ArenaListClient({
             const addressKey = token.address.toLowerCase();
             const mcapUsd =
               animatedCaps[`${addressKey}:cap:mcap`] ??
-              bnbToUsd(Number(token.marketCapBnb), effectiveBnbUsd);
+              arenaTokenUsdMetric(token, Number(token.marketCapBnb), effectiveBnbUsd);
             const priceUsd =
-              animatedCaps[`${addressKey}:cap:price`] ??
-              listTokenPriceUsd(token.marketCapBnb, effectiveBnbUsd);
+              isBoardRowMarkStale(token)
+                ? null
+                : animatedCaps[`${addressKey}:cap:price`] ??
+                  listTokenPriceUsd(token.marketCapBnb, effectiveBnbUsd);
             return (
               <HoldingSwipeRow
                 key={token.address}
@@ -1701,13 +1752,17 @@ export function ArenaListClient({
               const addressKey = token.address.toLowerCase();
               const mcapUsd =
                 animatedCaps[`${addressKey}:cap:mcap`] ??
-                bnbToUsd(Number(token.marketCapBnb), effectiveBnbUsd);
+                arenaTokenUsdMetric(token, Number(token.marketCapBnb), effectiveBnbUsd);
               const athMcapUsd =
                 animatedCaps[`${addressKey}:cap:ath`] ??
-                bnbToUsd(Number(token.athMarketCapBnb ?? token.marketCapBnb), effectiveBnbUsd);
+                arenaTokenUsdMetric(
+                  token,
+                  Number(token.athMarketCapBnb ?? token.marketCapBnb),
+                  effectiveBnbUsd
+                );
               const vol24hUsd =
                 animatedCaps[`${addressKey}:cap:vol24h`] ??
-                bnbToUsd(Number(token.volume24hBnb ?? 0), effectiveBnbUsd);
+                arenaTokenUsdMetric(token, Number(token.volume24hBnb ?? 0), effectiveBnbUsd);
               return (
                 <tr
                   key={token.address}

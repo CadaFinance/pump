@@ -2,6 +2,7 @@ import {
   BONDING_TOKEN_SUPPLY_HUMAN,
   spotPriceBnbFromBondingDecimals,
 } from "@/lib/bonding-curve";
+import { boardMarkCapBnbString } from "@/lib/board-mark-price";
 import type { TokenListItem } from "@/lib/db/launchpad";
 
 export type ArenaTradeWsPayload = {
@@ -35,35 +36,34 @@ export function arenaWsSpotPriceBnb(
     return spotPriceBnbFromBondingDecimals(bonding.reserveZug, bonding.tokenSold);
   }
 
+  const explicitSpot = Number(bonding.spotPriceZug);
+  if (Number.isFinite(explicitSpot) && explicitSpot > 0 && explicitSpot < 1) {
+    return explicitSpot;
+  }
+
   const lastSpot = Number(bonding.lastPriceZug);
   if (Number.isFinite(lastSpot) && lastSpot > 0 && lastSpot < 1) {
     return lastSpot;
-  }
-
-  const mcap = Number(bonding.marketCapZug);
-  if (Number.isFinite(mcap) && mcap > 0) {
-    return mcap / BONDING_TOKEN_SUPPLY_HUMAN;
   }
 
   return 0;
 }
 
 /**
- * Same mark-cap as API SQL — prefers stored marketCapZug from indexer, then calculates from spot.
- * This ensures consistency between SSR (DB) and WS (real-time) data sources.
+ * Mark cap = spot × 1B supply (price-accuracy contract).
+ * Never use WS `marketCapZug` column — it can lag the bonding formula.
  */
 export function bondingMarkCapBnbFromWs(
   bonding: NonNullable<ArenaTradeWsPayload["bonding"]>,
   previousMarketCapBnb?: string | number | null
 ): string | null {
-  // Prefer stored market_cap_zug from bonding_states (same as SQL COALESCE priority)
-  const mcapCol = Number(bonding.marketCapZug);
-  if (Number.isFinite(mcapCol) && mcapCol > 0) {
+  if (bondingFieldPresent(bonding.reserveZug) && bondingFieldPresent(bonding.tokenSold)) {
+    const mcap = boardMarkCapBnbString(bonding.reserveZug, bonding.tokenSold);
     const prev = Number(previousMarketCapBnb);
-    if (isMcapJumpSane(prev, mcapCol)) return String(mcapCol);
+    if (isMcapJumpSane(prev, Number(mcap))) return mcap;
+    if (!Number.isFinite(prev) || prev <= 0) return mcap;
   }
 
-  // Fall back to calculated spot price (reserve + virtual_reserve) / (supply - sold) * 1B
   const spot = arenaWsSpotPriceBnb(bonding);
   if (spot > 0) {
     const mcap = String(spot * BONDING_TOKEN_SUPPLY_HUMAN);
@@ -100,6 +100,7 @@ export function patchTokenFromArenaTrade(
     ...token,
     progressBps: bonding.progressBps ?? token.progressBps,
     reserveBnb: bonding.reserveZug ?? token.reserveBnb,
+    tokenSold: bonding.tokenSold ?? token.tokenSold,
     marketCapBnb: nextMcap,
     tradeCount: bonding.tradeCount ?? token.tradeCount,
     holderCount: bonding.holderCount ?? token.holderCount,
@@ -125,4 +126,8 @@ export function patchArenaTokenList(
   });
 
   return { next, changed };
+}
+
+export function tradeRoomForToken(tokenAddress: string): string {
+  return `token:${tokenAddress.toLowerCase()}`;
 }
