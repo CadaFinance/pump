@@ -1,6 +1,7 @@
 "use client";
 
 import { BnbLogo } from "@/components/token/BnbLogo";
+import { NATIVE_SYMBOL } from "@/config/chain";
 import { TokenAvatar } from "@/components/token/TokenAvatar";
 
 export function BnbAmountDisplay({
@@ -68,7 +69,7 @@ export function BnbAssetChip({
   return (
     <span className={`inline-flex shrink-0 items-center gap-1 ${className}`}>
       <BnbLogo size={size} />
-      <span className={symbolClassName}>BNB</span>
+      <span className={symbolClassName}>{NATIVE_SYMBOL}</span>
     </span>
   );
 }

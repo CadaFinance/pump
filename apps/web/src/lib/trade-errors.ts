@@ -1,3 +1,5 @@
+import { NATIVE_SYMBOL } from "@/config/chain";
+
 export function formatTradeError(err: unknown): string {
   const raw =
     err instanceof Error
@@ -15,13 +17,13 @@ export function formatTradeError(err: unknown): string {
     return "Gas price too low for the bundler — wait a moment and try again.";
   }
   if (lower.includes("validateuserop") || lower.includes("aa23") || lower.includes("-32500")) {
-    return "Transaction rejected (AA23) — deposit BNB to your smart wallet address (not login wallet) for trade amount + gas, then retry.";
+    return `Transaction rejected (AA23) — deposit ${NATIVE_SYMBOL} to your smart wallet address (not login wallet) for trade amount + gas, then retry.`;
   }
   if (lower.includes("user rejected") || lower.includes("user denied")) {
     return "Transaction cancelled in wallet.";
   }
   if (lower.includes("insufficient funds")) {
-    return "Insufficient BNB balance for this trade.";
+    return `Insufficient ${NATIVE_SYMBOL} balance for this trade.`;
   }
   if (lower.includes("pausedorgraduated") || lower.includes("paused()")) {
     return "Trading is closed for this token.";

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { formatEther, formatUnits, parseEther } from "viem";
+import { FormExecutionStatus } from "@/components/ui/FormExecutionStatus";
 import { TokenAvatar } from "@/components/token/TokenAvatar";
 import { BnbLogo } from "@/components/token/BnbLogo";
 import {
@@ -42,7 +43,7 @@ import {
   useReadContracts,
   useWaitForTransactionReceipt,
 } from "wagmi";
-import { contracts, pumpChain } from "@/config/chain";
+import { contracts, NATIVE_SYMBOL, pumpChain } from "@/config/chain";
 import { pumpAirdropManagerAbi } from "@/lib/abis/pump-airdrop-manager";
 import { erc20Abi, maxUint256 } from "@/lib/abis/erc20";
 import {
@@ -91,7 +92,7 @@ function rewardPoolValidationMessage(opts: {
   if (!opts.isConnected) return "Connect wallet to set pool size.";
   if (opts.maxRewardWei === 0n) {
     return opts.isBnbReward
-      ? "Need more BNB for reward pool (balance must cover create fee and gas)."
+      ? `Need more ${NATIVE_SYMBOL} for reward pool (balance must cover create fee and gas).`
       : `Insufficient ${opts.rewardSymbol} balance for reward pool.`;
   }
   if (!opts.rewardAmountInput.trim()) return "Enter a pool size.";
@@ -99,7 +100,7 @@ function rewardPoolValidationMessage(opts: {
   if (opts.parsedRewardWei <= 0n) return "Pool size must be greater than zero.";
   if (opts.parsedRewardWei > opts.maxRewardWei) {
     return opts.isBnbReward
-      ? "Pool size exceeds available BNB (after fee and gas)."
+      ? `Pool size exceeds available ${NATIVE_SYMBOL} (after fee and gas).`
       : `Pool size exceeds your ${opts.rewardSymbol} balance.`;
   }
   return "Pool size is too small; increase the amount.";
@@ -787,7 +788,7 @@ export function CreateAirdropForm({
         canSubmit = false;
       }
       if (minBuyBnb.trim() && !rules.onchain?.minBuyBnbWei) {
-        warnings.push("Min buy must be a valid BNB amount.");
+        warnings.push(`Min buy must be a valid ${NATIVE_SYMBOL} amount.`);
         canSubmit = false;
       }
     }
@@ -852,14 +853,14 @@ export function CreateAirdropForm({
           needsBnbFunding = true;
           fundMessage =
             targetReward > 0n
-              ? `You need ${formatCampaignAmount(bnbShortfallWei)} more BNB for the reward pool, create fee, and gas.`
-              : `You need ${formatCampaignAmount(bnbShortfallWei)} more BNB for the create fee and gas.`;
+              ? `You need ${formatCampaignAmount(bnbShortfallWei)} more ${NATIVE_SYMBOL} for the reward pool, create fee, and gas.`
+              : `You need ${formatCampaignAmount(bnbShortfallWei)} more ${NATIVE_SYMBOL} for the create fee and gas.`;
         }
       } else if (rewardToken) {
         if (bnbAvail < minBnbNeeded) {
           bnbShortfallWei = minBnbNeeded - bnbAvail;
           needsBnbFunding = true;
-          fundMessage = `You need ${formatCampaignAmount(bnbShortfallWei)} more BNB for the create fee and gas.`;
+          fundMessage = `You need ${formatCampaignAmount(bnbShortfallWei)} more ${NATIVE_SYMBOL} for the create fee and gas.`;
         }
       }
     }
@@ -871,7 +872,7 @@ export function CreateAirdropForm({
         const neededBnb = parsedRewardAmount + fee + gasWei;
         if (bnbAvail < neededBnb) {
           warnings.push(
-            `Need ${formatCampaignAmount(neededBnb - bnbAvail)} more BNB for reward pool, create fee, and gas.`
+            `Need ${formatCampaignAmount(neededBnb - bnbAvail)} more ${NATIVE_SYMBOL} for reward pool, create fee, and gas.`
           );
           canSubmit = false;
         }
@@ -879,7 +880,7 @@ export function CreateAirdropForm({
         const neededBnb = fee + gasWei;
         if (bnbAvail < neededBnb) {
           warnings.push(
-            `Need ${formatCampaignAmount(neededBnb - bnbAvail)} more BNB for create fee and gas.`
+            `Need ${formatCampaignAmount(neededBnb - bnbAvail)} more ${NATIVE_SYMBOL} for create fee and gas.`
           );
           canSubmit = false;
         }
@@ -896,7 +897,7 @@ export function CreateAirdropForm({
       const minBnbNeeded = fee + gasWei;
       if (bnbBalance.value < minBnbNeeded) {
         warnings.push(
-          `Need ${formatCampaignAmount(minBnbNeeded - bnbBalance.value)} more BNB for create fee and gas.`
+          `Need ${formatCampaignAmount(minBnbNeeded - bnbBalance.value)} more ${NATIVE_SYMBOL} for create fee and gas.`
         );
         canSubmit = false;
       }
@@ -937,10 +938,10 @@ export function CreateAirdropForm({
 
   function openAirdropFundingModal() {
     openFundChoice({
-      title: "Add BNB to create campaign",
+      title: `Add ${NATIVE_SYMBOL} to create campaign`,
       message:
         formValidation.fundMessage ||
-        `You need ${formatCampaignAmount(formValidation.bnbShortfallWei)} more BNB to create this campaign.`,
+        `You need ${formatCampaignAmount(formValidation.bnbShortfallWei)} more ${NATIVE_SYMBOL} to create this campaign.`,
     });
   }
 
@@ -951,17 +952,35 @@ export function CreateAirdropForm({
   const displayTitle = title.trim() || "Your campaign";
   const displayPoolSymbol = selectedLinkedToken?.symbol ?? "TOKEN";
 
+  const formSubmitPhase =
+    pendingAction === "approve" || (isPending && !isConfirming)
+      ? "submitting"
+      : busy && (isConfirming || Boolean(txHash))
+        ? "confirming"
+        : null;
+  const formSubmitPending = formSubmitPhase !== null;
+  const formStatusDetail =
+    formSubmitPhase === "submitting"
+      ? pendingAction === "approve"
+        ? "Authorizing token spend on your wallet"
+        : "Signing and submitting your campaign"
+      : formSubmitPhase === "confirming"
+        ? "Awaiting on-chain confirmation"
+        : null;
+
   const submitLabel = !isConnected
     ? "Connect wallet"
     : canUseFundingCta
-      ? "Add BNB to create"
-      : pendingAction === "approve"
-        ? "Approving token…"
-        : busy
-          ? "Creating…"
-          : "Create campaign";
+      ? `Add ${NATIVE_SYMBOL} to create`
+      : formSubmitPending
+        ? formSubmitPhase === "submitting"
+          ? pendingAction === "approve"
+            ? "Approving"
+            : "Processing"
+          : "Confirming"
+        : "Create campaign";
 
-  const rewardAssetLabel = isBnbReward ? "BNB" : selectedRewardSymbol;
+  const rewardAssetLabel = isBnbReward ? NATIVE_SYMBOL : selectedRewardSymbol;
   const rewardAmountValue =
     parsedRewardAmount != null ? formatCampaignAmount(parsedRewardAmount) : "—";
   const boardRewardLabel =
@@ -1076,12 +1095,12 @@ export function CreateAirdropForm({
                 bnbBalance != null ? formatEther(bnbBalance.value) : isConnected ? "0" : null
               }
               loading={tokensLoading}
-              placeholder="BNB or launchpad token"
+              placeholder={`${NATIVE_SYMBOL} or launchpad token`}
               hint={
                 !isConnected ? (
                   <p className="field-hint">Connect wallet to see balances.</p>
                 ) : !isBnbReward ? (
-                  <p className="field-hint">Token rewards need one approval + create fee in BNB.</p>
+                  <p className="field-hint">Token rewards need one approval + create fee in {NATIVE_SYMBOL}.</p>
                 ) : null
               }
             />
@@ -1118,7 +1137,7 @@ export function CreateAirdropForm({
                 />
                 <div className="pointer-events-none absolute inset-y-0 right-3 flex items-center">
                   <span className="text-caption font-medium text-pump-muted">
-                    {isBnbReward ? "BNB" : selectedRewardSymbol}
+                    {isBnbReward ? NATIVE_SYMBOL : selectedRewardSymbol}
                   </span>
                 </div>
               </div>
@@ -1126,7 +1145,7 @@ export function CreateAirdropForm({
                 <p className="mt-1 field-hint">
                   Max available{" "}
                   <span className="financial-value text-pump-text">{maxRewardLabel}</span>
-                  {isBnbReward ? " BNB" : ` ${selectedRewardSymbol}`}.
+                  {isBnbReward ? ` ${NATIVE_SYMBOL}` : ` ${selectedRewardSymbol}`}.
                 </p>
               ) : null}
 
@@ -1170,8 +1189,8 @@ export function CreateAirdropForm({
                       aria-label="Pool size slider"
                       aria-valuetext={
                         rewardSliderPct >= 100
-                          ? `Max (${maxRewardLabel} ${isBnbReward ? "BNB" : selectedRewardSymbol})`
-                          : `${rewardSliderPct}% of available ${isBnbReward ? "BNB" : selectedRewardSymbol}`
+                          ? `Max (${maxRewardLabel} ${isBnbReward ? NATIVE_SYMBOL : selectedRewardSymbol})`
+                          : `${rewardSliderPct}% of available ${isBnbReward ? NATIVE_SYMBOL : selectedRewardSymbol}`
                       }
                     />
                   </div>
@@ -1394,7 +1413,7 @@ export function CreateAirdropForm({
               </dd>
             </div>
             <div className="flex items-center justify-between gap-2 border-t border-pump-border/15 pt-2">
-              <dt className="font-medium text-pump-text">Total BNB</dt>
+              <dt className="font-medium text-pump-text">Total {NATIVE_SYMBOL}</dt>
               <dd className="min-w-0 text-right">
                 <BnbAmountDisplay
                   amount={totalBnbValue}
@@ -1406,7 +1425,11 @@ export function CreateAirdropForm({
             </div>
           </dl>
 
-          {displayError ? <p className="notice-error mt-3 text-caption">{displayError}</p> : null}
+          {displayError ? (
+            <div className="notice-error mt-3 px-3 py-2 text-caption" role="alert">
+              {displayError}
+            </div>
+          ) : null}
 
           {formValidation.warnings.length > 0 ? (
             <ul className="mt-3 space-y-1 rounded-md border border-pump-warning/30 bg-pump-warning/5 px-2.5 py-2">
@@ -1429,19 +1452,26 @@ export function CreateAirdropForm({
             </ul>
           ) : null}
 
-          <button
-            type="submit"
-            disabled={submitDisabled}
-            className="primary-button mt-4 flex w-full items-center justify-center gap-2"
-          >
-            {busy ? (
-              <span
-                className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-current border-t-transparent"
-                aria-hidden
-              />
+          <div className="form-action-zone mt-4 -mx-4 px-4 md:-mx-5 md:px-5">
+            {formSubmitPending && formStatusDetail ? (
+              <FormExecutionStatus phase={formSubmitPhase} detail={formStatusDetail} />
             ) : null}
-            {submitLabel}
-          </button>
+            <button
+              type="submit"
+              disabled={submitDisabled}
+              aria-busy={formSubmitPending}
+              className={`primary-button flex w-full items-center justify-center gap-2${formSubmitPending ? " form-submit-button--loading" : ""}`}
+            >
+              {formSubmitPending ? (
+                <>
+                  <span className="trade-submit-spinner" aria-hidden />
+                  <span>{submitLabel}</span>
+                </>
+              ) : (
+                submitLabel
+              )}
+            </button>
+          </div>
         </section>
       </aside>
     </form>

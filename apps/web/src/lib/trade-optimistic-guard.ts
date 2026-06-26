@@ -1,5 +1,6 @@
 import { parseGwei } from "viem";
 import type { Address, PublicClient } from "viem";
+import { NATIVE_SYMBOL } from "@/config/chain";
 import { bufferedGasCostWei } from "@/lib/aa/gas-buffer";
 import { assertScwReadyForUserOp } from "@/lib/aa/scw-preflight";
 import {
@@ -183,7 +184,7 @@ export async function hardValidateInstantTrade(
 
   if (input.side === "buy") {
     if (input.callValueWei + gasReserve > input.bnbBalanceWei) {
-      throw new Error("Insufficient BNB for trade and gas.");
+      throw new Error(`Insufficient ${NATIVE_SYMBOL} for trade and gas.`);
     }
   } else {
     const sellWei = input.sellTokenWei ?? 0n;
@@ -192,7 +193,7 @@ export async function hardValidateInstantTrade(
       throw new Error("Insufficient token balance.");
     }
     if (input.bnbBalanceWei < gasReserve) {
-      throw new Error("Insufficient BNB for network fees.");
+      throw new Error(`Insufficient ${NATIVE_SYMBOL} for network fees.`);
     }
   }
 

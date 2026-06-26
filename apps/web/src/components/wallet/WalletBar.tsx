@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type MouseEvent } from "react";
 import Link from "next/link";
 import { formatEther } from "viem";
 import { useAccount, useBalance } from "wagmi";
-import { pumpChain, shortAddress } from "@/config/chain";
+import { pumpChain, NATIVE_SYMBOL, shortAddress } from "@/config/chain";
 import { UserAvatar } from "@/components/user/UserAvatar";
 import { useUserAvatar } from "@/components/user/UserAvatarProvider";
 import { useBnbUsdPrice } from "@/hooks/useBnbUsdPrice";
@@ -19,15 +19,15 @@ function formatHeaderBalanceUsd(usd: number | null): string {
   return `$${usd.toFixed(2)}`;
 }
 
-function formatHeaderBalanceBnb(bnb: number): string {
-  if (!Number.isFinite(bnb) || bnb <= 0) return "0 BNB";
-  if (bnb >= 1) return `${bnb.toFixed(4)} BNB`;
-  if (bnb >= 0.0001) return `${bnb.toFixed(4)} BNB`;
-  return `${bnb.toFixed(6)} BNB`;
+function formatHeaderBalanceNative(native: number): string {
+  if (!Number.isFinite(native) || native <= 0) return `0 ${NATIVE_SYMBOL}`;
+  if (native >= 1) return `${native.toFixed(4)} ${NATIVE_SYMBOL}`;
+  if (native >= 0.0001) return `${native.toFixed(4)} ${NATIVE_SYMBOL}`;
+  return `${native.toFixed(6)} ${NATIVE_SYMBOL}`;
 }
 
-function formatBnbAvailable(bnb: number): string {
-  return formatHeaderBalanceBnb(bnb);
+function formatNativeAvailable(native: number): string {
+  return formatHeaderBalanceNative(native);
 }
 
 function ChevronDownIcon({ open }: { open: boolean }) {
@@ -111,16 +111,16 @@ function WalletMenu({
         type="button"
         onClick={onToggleBalanceUnit}
         className="mt-1 block text-left transition hover:text-pump-accent"
-        aria-label={showBnb ? "Show balance in USD" : "Show balance in BNB"}
+        aria-label={showBnb ? "Show balance in USD" : `Show balance in ${NATIVE_SYMBOL}`}
       >
         <span className="financial-value text-2xl font-semibold text-pump-text">
-          {showBnb ? formatHeaderBalanceBnb(bnbAmount) : formatHeaderBalanceUsd(usdAmount)}
+          {showBnb ? formatHeaderBalanceNative(bnbAmount) : formatHeaderBalanceUsd(usdAmount)}
         </span>
       </button>
       <p className="mt-0.5 text-caption text-pump-muted">
         {showBnb
           ? `${formatHeaderBalanceUsd(usdAmount)} available`
-          : `${formatBnbAvailable(bnbAmount)} available`}
+          : `${formatNativeAvailable(bnbAmount)} available`}
       </p>
 
       <button
@@ -216,7 +216,7 @@ function ConnectedWalletButton({ address }: { address: string }) {
   const bnbAmount = balance ? Number(formatEther(balance.value)) : 0;
   const usdAmount = bnbToUsd(bnbAmount, bnbUsd);
   const balanceLabel = showBnb
-    ? formatHeaderBalanceBnb(bnbAmount)
+    ? formatHeaderBalanceNative(bnbAmount)
     : formatHeaderBalanceUsd(usdAmount);
 
   useEffect(() => {

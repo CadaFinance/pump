@@ -18,7 +18,7 @@ import { type ReactNode, useCallback, useEffect, useState } from "react";
 import { parseEther } from "viem";
 import { useOpenConnectModal } from "@/hooks/useOpenConnectModal";
 import { useAccount, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
-import { contracts, shortAddress } from "@/config/chain";
+import { contracts, NATIVE_SYMBOL, shortAddress } from "@/config/chain";
 import { pumpAirdropManagerAbi } from "@/lib/abis/pump-airdrop-manager";
 import type {
   AirdropDetail,
@@ -337,7 +337,7 @@ function RewardCell({
     (isBnb ? (
       <span className="inline-flex shrink-0 items-center gap-1">
         <BnbRewardIcon size={compact ? 12 : 14} />
-        <span className="text-caption font-medium text-pump-text">BNB</span>
+        <span className="text-caption font-medium text-pump-text">{NATIVE_SYMBOL}</span>
       </span>
     ) : (
       <TokenSymbolInline
@@ -389,7 +389,7 @@ function ClaimRewardAmount({
       {isBnb ? (
         <span className="inline-flex items-center gap-1.5 text-body-sm text-pump-muted">
           <BnbRewardIcon size={size === "lg" ? 20 : 16} />
-          BNB
+          {NATIVE_SYMBOL}
         </span>
       ) : (
         <TokenSymbolInline
@@ -435,7 +435,7 @@ function ViewerRankBanner({
           {!detail.rewardToken ? (
             <>
               <BnbRewardIcon size={14} />
-              <span>BNB</span>
+              <span>{NATIVE_SYMBOL}</span>
             </>
           ) : (
             <TokenSymbolInline
@@ -922,7 +922,7 @@ function OnchainRequirementsContent({
             <RuleProgressRow
               label="Min buy volume"
               rule={progress.minBuy}
-              unit="BNB"
+              unit={NATIVE_SYMBOL}
               tokenAddress={linkedToken}
               buyMode="bnb"
               returnTo={returnTo}

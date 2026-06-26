@@ -8,7 +8,7 @@ import {
   useWaitForTransactionReceipt,
   useWriteContract,
 } from "wagmi";
-import { contracts, pumpChain } from "@/config/chain";
+import { contracts, NATIVE_SYMBOL, pumpChain } from "@/config/chain";
 import { useBnbUsdPrice } from "@/hooks/useBnbUsdPrice";
 import { bondingCurveManagerAbi } from "@/lib/bonding-curve";
 import { ModalPortal } from "@/components/ui/ModalPortal";
@@ -140,7 +140,7 @@ export function ClaimCreatorFeesModal({
               <td className="financial-value">
                 {formatUsdReadable(totalUsd, { compact: true })}{" "}
                 <span className="text-caption text-pump-muted">
-                  ({formatFeeBnb(totalBnb)} BNB)
+                  ({formatFeeBnb(totalBnb)} {NATIVE_SYMBOL})
                 </span>
               </td>
             </tr>
@@ -149,7 +149,7 @@ export function ClaimCreatorFeesModal({
               <td className="financial-value">
                 {formatUsdReadable(bnbToUsd(claimedBnb, bnbUsd), { compact: true })}{" "}
                 <span className="text-caption text-pump-muted">
-                  ({formatFeeBnb(claimedBnb)} BNB)
+                  ({formatFeeBnb(claimedBnb)} {NATIVE_SYMBOL})
                 </span>
               </td>
             </tr>
@@ -158,7 +158,7 @@ export function ClaimCreatorFeesModal({
               <td className="financial-value">
                 {formatUsdReadable(bnbToUsd(pendingBnb, bnbUsd), { compact: true })}{" "}
                 <span className="text-caption text-pump-muted">
-                  ({formatFeeBnb(pendingBnb)} BNB)
+                  ({formatFeeBnb(pendingBnb)} {NATIVE_SYMBOL})
                 </span>
               </td>
             </tr>

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Settings2 } from "lucide-react";
+import { NATIVE_SYMBOL } from "@/config/chain";
 import { dismissHoldingsSwipeHint } from "@/components/portfolio/HoldingSwipeRow";
 import { ICON_STROKE } from "@/lib/icons";
 import {
@@ -56,7 +57,7 @@ export function ArenaSwipeTradeBar() {
           <span className="font-medium text-pump-success">
             <span className="hidden lg:inline">Buy </span>
             {prefs.buyAmountBnb}
-            <span className="hidden lg:inline"> BNB</span>
+            <span className="hidden lg:inline"> {NATIVE_SYMBOL}</span>
           </span>
           <span className="text-pump-muted/45"> · </span>
           <span className="font-medium text-pump-danger">
@@ -90,7 +91,7 @@ export function ArenaSwipeTradeBar() {
             <p className="text-caption font-medium text-pump-text">Quick trade amounts</p>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-1">
               <label className="space-y-1">
-                <span className="field-label text-[10px]">Buy amount (BNB)</span>
+                <span className="field-label text-[10px]">Buy amount ({NATIVE_SYMBOL})</span>
                 <input
                   type="text"
                   inputMode="decimal"

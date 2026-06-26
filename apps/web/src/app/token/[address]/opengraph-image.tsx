@@ -1,4 +1,5 @@
 import { ImageResponse } from "next/og";
+import { NATIVE_SYMBOL } from "@/config/chain";
 import { normalizeAddressParam } from "@/lib/address";
 import { getTokenByAddress } from "@/lib/db/launchpad";
 
@@ -15,9 +16,9 @@ const flex = "flex" as const;
 function formatMcapBnb(value: string): string {
   const n = Number(value);
   if (!Number.isFinite(n) || n <= 0) return "—";
-  if (n >= 1000) return `${(n / 1000).toFixed(2)}K BNB`;
-  if (n >= 1) return `${n.toFixed(2)} BNB`;
-  return `${n.toFixed(4)} BNB`;
+  if (n >= 1000) return `${(n / 1000).toFixed(2)}K ${NATIVE_SYMBOL}`;
+  if (n >= 1) return `${n.toFixed(2)} ${NATIVE_SYMBOL}`;
+  return `${n.toFixed(4)} ${NATIVE_SYMBOL}`;
 }
 
 async function loadLogoSrc(logoUrl: string | null): Promise<string | null> {

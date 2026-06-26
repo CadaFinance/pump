@@ -47,7 +47,7 @@ import {
   tradeTraceStep,
 } from "@/lib/trade-timing";
 import { usePumpWallet } from "@/components/wallet/PumpWalletProvider";
-import { contracts, pumpChain } from "@/config/chain";
+import { contracts, NATIVE_SYMBOL, pumpChain } from "@/config/chain";
 import { erc20Abi, maxUint256 } from "@/lib/abis/erc20";
 import { memeTokenAbi } from "@/lib/abis/meme-token";
 import { buildPermitTypedData, canUseErc20Permit, PERMIT_ALLOWANCE_MAX, permitDeadline } from "@/lib/erc20-permit";
@@ -148,7 +148,7 @@ function formatGasCostLabel(gasCostWei: bigint, bnbUsd: number | null): string {
   const usdValue = bnbUsd ? bnbToUsd(bnb, bnbUsd) : null;
   const usdLabel =
     usdValue != null ? formatUsdReadable(usdValue, { fallback: "" }) : null;
-  return usdLabel ? `≈ ${bnbStr} BNB (${usdLabel})` : `≈ ${bnbStr} BNB`;
+  return usdLabel ? `≈ ${bnbStr} ${NATIVE_SYMBOL} (${usdLabel})` : `≈ ${bnbStr} ${NATIVE_SYMBOL}`;
 }
 
 const GAS_PROBE_BNB_WEI = parseEther("0.001");
@@ -835,7 +835,7 @@ export function TradePanel({
     activeInputMode === "usd"
       ? "USD"
       : activeInputMode === "bnb"
-        ? "BNB"
+        ? NATIVE_SYMBOL
         : symbol;
 
   const conversionParts: string[] = [];
@@ -843,7 +843,7 @@ export function TradePanel({
     if (buyInputMode === "token") {
       if (buyCostWei > 0n) {
         conversionParts.push(
-          `≈ ${formatBnbReadable(Number(formatEther(buyCostWei)))} BNB`
+          `≈ ${formatBnbReadable(Number(formatEther(buyCostWei)))} ${NATIVE_SYMBOL}`
         );
       }
       if (amountUsdLabel) {
@@ -852,7 +852,7 @@ export function TradePanel({
     } else {
       if (Number(amount) > 0) {
         if (buyInputMode === "usd") {
-          conversionParts.push(`≈ ${formatBnbReadable(Number(amount))} BNB`);
+          conversionParts.push(`≈ ${formatBnbReadable(Number(amount))} ${NATIVE_SYMBOL}`);
         } else if (amountUsdLabel) {
           conversionParts.push(`≈ ${amountUsdLabel}`);
         }
@@ -867,7 +867,7 @@ export function TradePanel({
     if (sellInputMode === "token") {
       if (estimatedOut > 0n) {
         conversionParts.push(
-          `≈ ${formatBnbReadable(Number(formatEther(estimatedOut)))} BNB`
+          `≈ ${formatBnbReadable(Number(formatEther(estimatedOut)))} ${NATIVE_SYMBOL}`
         );
       }
       if (amountUsdLabel) {
@@ -876,7 +876,7 @@ export function TradePanel({
     } else {
       if (Number(amount) > 0) {
         if (sellInputMode === "usd") {
-          conversionParts.push(`≈ ${formatBnbReadable(Number(amount))} BNB`);
+          conversionParts.push(`≈ ${formatBnbReadable(Number(amount))} ${NATIVE_SYMBOL}`);
         } else if (amountUsdLabel) {
           conversionParts.push(`≈ ${amountUsdLabel}`);
         }
@@ -893,7 +893,7 @@ export function TradePanel({
       : estimatedOut > 0n
         ? formatBnbReadable(Number(formatEther(estimatedOut)))
         : "0";
-  const receiveUnit = side === "buy" ? symbol : "BNB";
+  const receiveUnit = side === "buy" ? symbol : NATIVE_SYMBOL;
 
   const minReceivedWei = useMemo(() => {
     if (side === "buy") {
@@ -910,7 +910,7 @@ export function TradePanel({
   const minReceivedLabel =
     side === "buy"
       ? `${formatReceiveAmount(formatUnits(minReceivedWei, 18))} ${symbol}`
-      : `${formatBnbReadable(Number(formatEther(minReceivedWei)))} BNB`;
+      : `${formatBnbReadable(Number(formatEther(minReceivedWei)))} ${NATIVE_SYMBOL}`;
 
   const buySliderPct = useMemo(() => {
     if (side !== "buy" || maxBuySpendWei === 0n) return 0;
@@ -1117,7 +1117,7 @@ export function TradePanel({
     }
     if (wrongChain || paused || maxBuySpendWei === 0n) {
       if (isConnected && maxBuySpendWei === 0n) {
-        setError("Not enough BNB left after gas.");
+        setError(`Not enough ${NATIVE_SYMBOL} left after gas.`);
       }
       return;
     }
@@ -1171,7 +1171,7 @@ export function TradePanel({
       return;
     }
     if (bnbBalance !== undefined && bnbBalance.value < sellGasReserveWei) {
-      setError("Not enough BNB for gas.");
+      setError(`Not enough ${NATIVE_SYMBOL} for gas.`);
       return;
     }
 
@@ -1701,11 +1701,11 @@ export function TradePanel({
           buyGasReserveWei
         );
         if (submitValue === 0n) {
-          setError("Insufficient BNB for trade and gas.");
+          setError(`Insufficient ${NATIVE_SYMBOL} for trade and gas.`);
           return;
         }
         if (bnbBalance !== undefined && submitValue + buyGasReserveWei > bnbBalance.value) {
-          setError("Insufficient BNB for trade and gas.");
+          setError(`Insufficient ${NATIVE_SYMBOL} for trade and gas.`);
           return;
         }
 
@@ -1744,7 +1744,7 @@ export function TradePanel({
           tradeTraceStep("ux.confirm_modal.open");
           setPendingTrade({
             side: "buy",
-            spendLabel: `${formatBnbReadable(Number(formatEther(submitValue)))} BNB`,
+            spendLabel: `${formatBnbReadable(Number(formatEther(submitValue)))} ${NATIVE_SYMBOL}`,
             receiveLabel: `${formatReceiveAmount(formatUnits(tokenOut, 18))} ${symbol}`,
             buyParams,
           });
@@ -1768,7 +1768,7 @@ export function TradePanel({
         return;
       }
       if (bnbBalance !== undefined && bnbBalance.value < sellGasReserveWei) {
-        setError("Insufficient BNB for gas.");
+        setError(`Insufficient ${NATIVE_SYMBOL} for gas.`);
         return;
       }
 
@@ -1795,7 +1795,7 @@ export function TradePanel({
           setPendingTrade({
             side: "sell",
             spendLabel: `${formatReceiveAmount(formatUnits(sellTokenWei, 18))} ${symbol}`,
-            receiveLabel: `${formatBnbReadable(Number(formatEther(sellQuoteOut)))} BNB`,
+            receiveLabel: `${formatBnbReadable(Number(formatEther(sellQuoteOut)))} ${NATIVE_SYMBOL}`,
             sellParams: baseSellParams,
             usePermit: false,
           });
@@ -1824,7 +1824,7 @@ export function TradePanel({
         setPendingTrade({
           side: "sell",
           spendLabel: `${formatReceiveAmount(formatUnits(sellTokenWei, 18))} ${symbol}`,
-          receiveLabel: `${formatBnbReadable(Number(formatEther(sellQuoteOut)))} BNB`,
+          receiveLabel: `${formatBnbReadable(Number(formatEther(sellQuoteOut)))} ${NATIVE_SYMBOL}`,
           sellParams: baseSellParams,
           usePermit,
         });
@@ -1950,11 +1950,11 @@ export function TradePanel({
     if (tradeInFlightRef.current) return;
     if (needsBnbFunding) {
       openFundChoice({
-        title: "Add BNB to trade",
+        title: `Add ${NATIVE_SYMBOL} to trade`,
         message:
           side === "buy"
-            ? "You need more BNB on BSC to complete this buy, including network fees."
-            : "You need a small BNB balance to pay network fees for this sell.",
+            ? `You need more ${NATIVE_SYMBOL} on Base to complete this buy, including network fees.`
+            : `You need a small ${NATIVE_SYMBOL} balance to pay network fees for this sell.`,
       });
       return;
     }
@@ -2004,8 +2004,8 @@ export function TradePanel({
       ? "Switch to BSC Testnet"
       : needsBnbFunding
         ? side === "buy"
-          ? "Add BNB to buy"
-          : "Add BNB for gas"
+          ? `Add ${NATIVE_SYMBOL} to buy`
+          : `Add ${NATIVE_SYMBOL} for gas`
         : insufficientBalance
           ? insufficientTokenOnly
             ? "Insufficient token balance"

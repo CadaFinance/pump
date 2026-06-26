@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
+import { NATIVE_SYMBOL } from "@/config/chain";
 import { normalizeAddressParam } from "@/lib/address";
 import {
   ensureFirstSmartBuyAward,
@@ -57,7 +58,7 @@ export async function GET(request: NextRequest) {
           progress: {
             current: volumeBnb,
             target: VOLUME_MONSTER_TARGET,
-            unit: "BNB",
+            unit: NATIVE_SYMBOL,
           },
         };
       }
@@ -68,7 +69,7 @@ export async function GET(request: NextRequest) {
           progress: {
             current: 0,
             target: FIRST_SMART_BUY_MIN_BNB,
-            unit: "BNB",
+            unit: NATIVE_SYMBOL,
           },
         };
       }

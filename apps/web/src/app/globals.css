@@ -932,9 +932,33 @@ code,
     border-color: rgb(var(--pump-danger));
   }
 
-  .trade-action-zone {
+  .trade-action-zone,
+  .form-action-zone {
     border-top: 1px solid rgb(var(--pump-border) / 0.35);
     padding: 0.875rem 1rem 1rem;
+  }
+
+  .native-logo {
+    opacity: 0.92;
+  }
+
+  [data-theme="dark"] .native-logo,
+  [data-theme="navy"] .native-logo,
+  [data-theme="slate"] .native-logo {
+    filter: brightness(0) invert(1);
+  }
+
+  .form-submit-button--loading {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    cursor: wait;
+  }
+
+  .form-submit-button--loading:disabled {
+    opacity: 1;
+    cursor: wait;
   }
 
   .trade-execution-status {

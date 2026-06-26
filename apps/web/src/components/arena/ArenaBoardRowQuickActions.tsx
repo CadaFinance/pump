@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { NATIVE_SYMBOL } from "@/config/chain";
 import {
   ARENA_QUICK_TRADE_CHANGE_EVENT,
   DEFAULT_ARENA_QUICK_TRADE,
@@ -38,7 +39,7 @@ export function ArenaBoardRowQuickActions({ onBuy, onSell }: ArenaBoardRowQuickA
         }}
         className="arena-board-quick-btn arena-board-quick-btn--buy"
       >
-        Buy {prefs.buyAmountBnb} BNB
+        Buy {prefs.buyAmountBnb} {NATIVE_SYMBOL}
       </button>
       <button
         type="button"

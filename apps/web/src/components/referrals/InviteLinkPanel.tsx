@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { shortAddress } from "@/config/chain";
+import { NATIVE_SYMBOL, shortAddress } from "@/config/chain";
 import { formatUsdReadable } from "@/lib/format-usd";
 import { bnbToUsd } from "@/lib/format-usd";
 
@@ -56,7 +56,7 @@ export function InviteLinkPanel({
       <p className="mt-2 text-caption text-pump-muted">
         {inviteCount} invite{inviteCount === 1 ? "" : "s"} ·{" "}
         {formatUsdReadable(volumeUsd, { compact: true })} ref volume (
-        {formatVolumeBnb(referralVolumeBnb)} BNB)
+        {formatVolumeBnb(referralVolumeBnb)} {NATIVE_SYMBOL})
       </p>
       <p className="mt-0.5 text-caption text-pump-muted">
         Share with {shortAddress(address)} as referrer — friends must link before their first trade.

@@ -44,6 +44,10 @@ function chainMeta(chainId: number): {
 
 const meta = chainMeta(CHAIN_ID);
 
+export const NATIVE_SYMBOL = meta.nativeSymbol;
+export const NATIVE_NAME = meta.nativeName;
+export const CHAIN_DISPLAY_NAME = meta.name;
+
 export const pumpChain = defineChain({
   id: CHAIN_ID,
   name: meta.name,

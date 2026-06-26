@@ -1,4 +1,5 @@
 import { parseEther, formatEther } from "viem";
+import { NATIVE_SYMBOL } from "@/config/chain";
 import { rewardAmountForRank } from "@/lib/airdrop-distribution";
 import type { AirdropDisplayStatus } from "@/lib/airdrop-status";
 import { bnbToUsd } from "@/lib/format-usd";
@@ -11,7 +12,7 @@ type AirdropRewardMeta = {
 };
 
 export function rewardAssetLabel(item: Pick<AirdropRewardMeta, "rewardToken" | "rewardSymbol">): string {
-  if (!item.rewardToken) return "BNB";
+  if (!item.rewardToken) return NATIVE_SYMBOL;
   return item.rewardSymbol ? `$${item.rewardSymbol}` : "Token";
 }
 
@@ -45,7 +46,7 @@ export function formatAirdropReward(
   opts: { isBnb: boolean; symbol?: string | null }
 ): string {
   const compact = formatAirdropRewardCompact(value);
-  if (opts.isBnb) return `${compact} BNB`;
+  if (opts.isBnb) return `${compact} ${NATIVE_SYMBOL}`;
   if (opts.symbol) return `${compact} $${opts.symbol}`;
   return `${compact} tokens`;
 }

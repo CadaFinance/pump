@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useMemo, useState, type ReactNode } from "react";
 import type { TokenListItem } from "@/lib/db/launchpad";
+import { NATIVE_SYMBOL } from "@/config/chain";
 import { BnbLogo } from "@/components/token/BnbLogo";
 import { TokenAvatar } from "@/components/token/TokenAvatar";
 import { ModalPortal } from "@/components/ui/ModalPortal";
@@ -122,8 +123,8 @@ function BnbPickerRow({
     >
       <BnbLogo size={36} />
       <div className="min-w-0 flex-1">
-        <p className="truncate text-body-sm font-medium text-pump-text">BNB</p>
-        <p className="truncate text-caption text-pump-muted">Native BNB</p>
+        <p className="truncate text-body-sm font-medium text-pump-text">{NATIVE_SYMBOL}</p>
+        <p className="truncate text-caption text-pump-muted">Native {NATIVE_SYMBOL}</p>
       </div>
       {showBalance ? (
         <div className="shrink-0 text-right">
@@ -266,8 +267,8 @@ export function RewardAssetPicker({
           <>
             <BnbLogo size={28} />
             <div className="min-w-0 flex-1">
-              <p className="truncate text-body-sm font-medium text-pump-text">BNB</p>
-              <p className="truncate text-caption text-pump-muted">Native BNB</p>
+              <p className="truncate text-body-sm font-medium text-pump-text">{NATIVE_SYMBOL}</p>
+              <p className="truncate text-caption text-pump-muted">Native {NATIVE_SYMBOL}</p>
             </div>
             {displayBnbBalance ? (
               <span className="financial-value shrink-0 text-caption tabular-nums text-pump-muted">
@@ -332,7 +333,7 @@ export function RewardAssetPicker({
                     {modalTitle}
                   </h2>
                   <p className="mt-1 text-caption text-pump-muted">
-                    BNB or a platform token from your wallet.
+                    {NATIVE_SYMBOL} or a platform token from your wallet.
                   </p>
                 </div>
                 <button
@@ -349,7 +350,7 @@ export function RewardAssetPicker({
                 type="search"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search BNB or tokens"
+                placeholder={`Search ${NATIVE_SYMBOL} or tokens`}
                 className="field-input mt-4 h-10 bg-pump-surface/75"
                 autoFocus
               />

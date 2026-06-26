@@ -1,4 +1,5 @@
 import { formatEther, type Address, type PublicClient } from "viem";
+import { NATIVE_SYMBOL } from "@/config/chain";
 import { createPumpPublicClient } from "@/lib/aa/kernel-account";
 import { bufferedGasCostWei } from "@/lib/aa/gas-buffer";
 
@@ -27,7 +28,7 @@ export async function assertScwReadyForUserOp(
     const have = formatEther(balance);
     const need = formatEther(required);
     throw new Error(
-      `Smart wallet needs BNB for this trade. Have ${have} BNB, need about ${need} BNB (trade + gas) at ${scwAddress}. Deposit via Wallet → Deposit.`
+      `Smart wallet needs ${NATIVE_SYMBOL} for this trade. Have ${have} ${NATIVE_SYMBOL}, need about ${need} ${NATIVE_SYMBOL} (trade + gas) at ${scwAddress}. Deposit via Wallet → Deposit.`
     );
   }
 }

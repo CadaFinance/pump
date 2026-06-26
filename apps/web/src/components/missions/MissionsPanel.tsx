@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useOpenConnectModal } from "@/hooks/useOpenConnectModal";
 import { useAccount } from "wagmi";
+import { NATIVE_SYMBOL } from "@/config/chain";
 import {
   listPendingMissionKeys,
   type OptimisticActivity,
@@ -381,7 +382,7 @@ export function MissionsPanel() {
               <span>
                 Vol{" "}
                 <span className="financial-value font-medium text-pump-text">
-                  {data.tradingVolumeBnb.toFixed(2)} BNB
+                  {data.tradingVolumeBnb.toFixed(2)} {NATIVE_SYMBOL}
                 </span>
               </span>
               <span className="text-pump-muted/40">·</span>

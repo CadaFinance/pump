@@ -103,7 +103,7 @@ function WithdrawForm({ onClose }: { onClose: () => void }) {
     try {
       value = parseEther(amount.trim() || "0");
     } catch {
-      setError("Enter a valid BNB amount.");
+      setError(`Enter a valid ${pumpChain.nativeCurrency.symbol} amount.`);
       return;
     }
     if (value <= 0n) {
@@ -126,7 +126,7 @@ function WithdrawForm({ onClose }: { onClose: () => void }) {
     <form onSubmit={(e) => void onSubmit(e)} className="mt-4 space-y-4">
       <p className="text-caption text-pump-muted">
         Transfer {pumpChain.nativeCurrency.symbol} from your Pump smart wallet to an external
-        address. Gas is paid from your smart wallet BNB balance.
+        address. Gas is paid from your smart wallet {pumpChain.nativeCurrency.symbol} balance.
       </p>
 
       <div>

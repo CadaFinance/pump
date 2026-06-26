@@ -1,6 +1,8 @@
 "use client";
 
 import type { TokenListItem } from "@/lib/db/launchpad";
+import { NATIVE_SYMBOL } from "@/config/chain";
+import { BnbLogo } from "@/components/token/BnbLogo";
 import { TokenAvatar } from "@/components/token/TokenAvatar";
 
 function PoolTokenAvatar({
@@ -90,7 +92,7 @@ export function AirdropQualifyRulesEditor({
           <div className="min-w-0 flex-1">
             <p className="text-body-sm text-pump-text">
               Buy at least{" "}
-              <span className="font-semibold text-pump-accent">BNB</span>
+              <span className="font-semibold text-pump-accent">{NATIVE_SYMBOL}</span>
               {" of "}
               <span className="font-semibold text-pump-accent">${symbol}</span>
             </p>
@@ -98,16 +100,19 @@ export function AirdropQualifyRulesEditor({
               During the qualify window on the bonding curve
             </p>
             <div className="relative mt-2">
+              <div className="pointer-events-none absolute inset-y-0 left-3 flex items-center">
+                <BnbLogo size={18} />
+              </div>
               <input
                 id="minBuy"
                 inputMode="decimal"
-                className="field-input financial-value pr-14"
+                className="field-input financial-value pl-10 pr-14"
                 value={minBuyBnb}
                 onChange={(e) => onMinBuyChange(e.target.value)}
                 placeholder="0.01"
               />
               <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-caption font-medium text-pump-muted">
-                BNB
+                {NATIVE_SYMBOL}
               </span>
             </div>
             <p className="mt-1 field-hint">
@@ -155,7 +160,7 @@ export function AirdropQualifyRulesPreview({
         {hasHold && hasBuy ? <span className="text-pump-muted"> · </span> : null}
         {hasBuy ? (
           <>
-            Buy ≥ {minBuyBnb} BNB <span className="text-pump-muted">of</span>{" "}
+            Buy ≥ {minBuyBnb} {NATIVE_SYMBOL} <span className="text-pump-muted">of</span>{" "}
             <span className="font-medium text-pump-accent">${symbol}</span>
           </>
         ) : null}

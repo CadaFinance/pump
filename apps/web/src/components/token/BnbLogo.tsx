@@ -1,6 +1,6 @@
-import Image from "next/image";
-import bnbLogoSrc from "@/app/logos/bnb-bnb-logo.png";
+import { NativeLogo } from "@/components/token/NativeLogo";
 
+/** @deprecated Use NativeLogo — kept for existing imports. */
 export function BnbLogo({
   size = 28,
   className = "",
@@ -8,13 +8,5 @@ export function BnbLogo({
   size?: number;
   className?: string;
 }) {
-  return (
-    <Image
-      src={bnbLogoSrc}
-      alt="BNB"
-      width={size}
-      height={size}
-      className={`shrink-0 rounded-full ${className}`}
-    />
-  );
+  return <NativeLogo size={size} className={className} />;
 }

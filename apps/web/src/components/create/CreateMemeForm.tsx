@@ -13,7 +13,7 @@ import {
 } from "wagmi";
 import { useKernelWriteContract } from "@/hooks/useKernelWriteContract";
 import { formatTradeError } from "@/lib/trade-errors";
-import { contracts, pumpChain } from "@/config/chain";
+import { contracts, NATIVE_SYMBOL, pumpChain } from "@/config/chain";
 import { memeFactoryAbi } from "@/lib/abis/meme-factory";
 import {
   bondingCurveManagerAbi,
@@ -40,6 +40,7 @@ import {
   TokenAmountDisplay,
 } from "@/components/token/AssetAmountDisplay";
 import { TokenLaunchSuccessModal } from "@/components/create/TokenLaunchSuccessModal";
+import { FormExecutionStatus } from "@/components/ui/FormExecutionStatus";
 import { DEFAULT_MIN_INITIAL_BUY_BNB } from "@/lib/platform-settings";
 import { formatCampaignAmount, formatCampaignAmountInput } from "@/lib/airdrop-board-format";
 import { useCreateGasReserve } from "@/hooks/useCreateGasReserve";
@@ -469,8 +470,8 @@ export function CreateMemeForm() {
 
   function openLaunchFundingModal() {
     openFundChoice({
-      title: "Add BNB to launch",
-      message: `You need ${formatCampaignAmount(bnbShortfallWei)} more BNB for the create fee, initial buy, and gas.`,
+      title: `Add ${NATIVE_SYMBOL} to launch`,
+      message: `You need ${formatCampaignAmount(bnbShortfallWei)} more ${NATIVE_SYMBOL} for the create fee, initial buy, and gas.`,
     });
   }
 
@@ -556,7 +557,7 @@ export function CreateMemeForm() {
       return;
     }
     if (initialBuyWei < minInitialBuyWei) {
-      setError(`Initial buy is required (minimum ${minInitialBuyBnb} BNB).`);
+      setError(`Initial buy is required (minimum ${minInitialBuyBnb} ${NATIVE_SYMBOL}).`);
       return;
     }
     if (minInitialBuyTokens === 0n) {
@@ -601,14 +602,32 @@ export function CreateMemeForm() {
     router.push(`/token/${launchSuccess.tokenAddress}`);
   }
 
+  const formSubmitPhase =
+    isPending && !isConfirming && !launchFinalizing
+      ? "submitting"
+      : isConfirming || launchFinalizing
+        ? "confirming"
+        : null;
+  const formSubmitPending = formSubmitPhase !== null;
+  const formStatusDetail =
+    formSubmitPhase === "submitting"
+      ? "Signing and submitting your launch transaction"
+      : formSubmitPhase === "confirming"
+        ? launchFinalizing
+          ? "Finalizing token metadata on-chain"
+          : "Awaiting on-chain confirmation"
+        : null;
+
   const submitLabel = !isConnected
     ? "Connect wallet"
     : wrongChain
       ? "Switch to Base Sepolia"
       : needsBnbFunding
-        ? "Add BNB to launch"
-        : isBusy
-          ? "Creating…"
+        ? `Add ${NATIVE_SYMBOL} to launch`
+        : formSubmitPending
+          ? formSubmitPhase === "submitting"
+            ? "Processing"
+            : "Confirming"
           : "Create + Launch";
 
   const submitDisabled = isConnected && (wrongChain || isBusy || !contractsReady);
@@ -731,7 +750,7 @@ export function CreateMemeForm() {
                 className="field-input financial-value w-full pl-11 pr-14"
               />
               <div className="pointer-events-none absolute inset-y-0 right-3 flex items-center">
-                <span className="text-caption font-medium text-pump-muted">BNB</span>
+                <span className="text-caption font-medium text-pump-muted">{NATIVE_SYMBOL}</span>
               </div>
             </div>
 
@@ -760,8 +779,8 @@ export function CreateMemeForm() {
                       aria-label="Initial buy amount slider"
                       aria-valuetext={
                         initialBuySliderPct >= 100
-                          ? `Max (${maxInitialBuyLabel} BNB)`
-                          : `${initialBuySliderPct}% between ${minInitialBuyBnb} and ${maxInitialBuyLabel} BNB`
+                          ? `Max (${maxInitialBuyLabel} ${NATIVE_SYMBOL})`
+                          : `${initialBuySliderPct}% between ${minInitialBuyBnb} and ${maxInitialBuyLabel} ${NATIVE_SYMBOL}`
                       }
                     />
                   </div>
@@ -782,10 +801,10 @@ export function CreateMemeForm() {
             ) : null}
 
             <p className="mt-2 field-hint">
-              Minimum {minInitialBuyBnb} BNB. A larger initial buy launches your coin at a higher
+              Minimum {minInitialBuyBnb} {NATIVE_SYMBOL}. A larger initial buy launches your coin at a higher
               starting price.
               {!isConnected ? (
-                <span className="mt-1 block">Connect wallet to use your BNB balance on the slider.</span>
+                <span className="mt-1 block">Connect wallet to use your {NATIVE_SYMBOL} balance on the slider.</span>
               ) : bnbBalanceLoading ? (
                 <span className="mt-1 block text-pump-muted">Loading wallet balance…</span>
               ) : null}
@@ -944,13 +963,17 @@ export function CreateMemeForm() {
             totalValue={totalValue}
           />
 
-          {displayError ? <p className="notice-error mt-4">{displayError}</p> : null}
+          {displayError ? (
+            <div className="notice-error mt-4 px-3 py-2 text-caption" role="alert">
+              {displayError}
+            </div>
+          ) : null}
 
           {txHash ? (
             <p className="mt-4 field-hint break-all">
               Tx: {txHash}
               {isConfirming
-                ? " — confirming…"
+                ? " — confirming"
                 : uploadStatus
                   ? ` — ${uploadStatus}`
                   : launchSuccess
@@ -959,13 +982,26 @@ export function CreateMemeForm() {
             </p>
           ) : null}
 
-          <button
-            type="submit"
-            disabled={submitDisabled}
-            className="primary-button mt-4 w-full"
-          >
-            {submitLabel}
-          </button>
+          <div className="form-action-zone mt-4 -mx-4 px-4 md:-mx-5 md:px-5">
+            {formSubmitPending && formStatusDetail ? (
+              <FormExecutionStatus phase={formSubmitPhase} detail={formStatusDetail} />
+            ) : null}
+            <button
+              type="submit"
+              disabled={submitDisabled}
+              aria-busy={formSubmitPending}
+              className={`primary-button w-full${formSubmitPending ? " form-submit-button--loading" : ""}`}
+            >
+              {formSubmitPending ? (
+                <>
+                  <span className="trade-submit-spinner" aria-hidden />
+                  <span>{submitLabel}</span>
+                </>
+              ) : (
+                submitLabel
+              )}
+            </button>
+          </div>
 
           {wrongChain ? (
             <p className="mt-3 field-hint text-pump-warning">Switch to Base Sepolia to launch.</p>
@@ -1011,13 +1047,15 @@ export function CreateMemeForm() {
             className="primary-button min-h-11 shrink-0 px-4 text-caption"
           >
             {isBusy
-              ? "Creating…"
+              ? formSubmitPhase === "submitting"
+                ? "Processing"
+                : "Confirming"
               : !isConnected
                 ? "Connect"
                 : wrongChain
                   ? "Switch net"
                   : needsBnbFunding
-                    ? "Add BNB"
+                    ? `Add ${NATIVE_SYMBOL}`
                     : "Launch"}
           </button>
         </div>

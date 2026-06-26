@@ -1,4 +1,5 @@
 import { parseEther } from "viem";
+import { NATIVE_SYMBOL } from "@/config/chain";
 import type { TradeItem } from "@/lib/db/launchpad";
 import {
   DEFAULT_VIRTUAL_TOKEN_RESERVE,
@@ -1056,8 +1057,8 @@ export function formatChartPrice(value: number, currency: "bnb" | "usd" | "mcap"
   if (currency === "usd" || currency === "mcap") {
     return formatPumpSubscriptPrice(value, "$");
   }
-  if (value >= 0.001) return `${value.toFixed(6)} BNB`;
-  return formatPumpSubscriptPrice(value, "").replace(/^\$/, "") + " BNB";
+  if (value >= 0.001) return `${value.toFixed(6)} ${NATIVE_SYMBOL}`;
+  return formatPumpSubscriptPrice(value, "").replace(/^\$/, "") + ` ${NATIVE_SYMBOL}`;
 }
 
 /** LWC custom price format — `base` (1/minMove) must be a power of 10 or tick math throws "unexpected base". */
@@ -1138,7 +1139,7 @@ export function chartPriceFormatFromBase(
         return formatPumpSubscriptPrice(price * usdRate, "$");
       }
       if (price >= 0.001) return price.toFixed(Math.min(6, precision));
-      return formatPumpSubscriptPrice(price, "") + " BNB";
+      return formatPumpSubscriptPrice(price, "") + ` ${NATIVE_SYMBOL}`;
     },
   };
 }

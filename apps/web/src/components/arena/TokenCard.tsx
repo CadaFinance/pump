@@ -4,15 +4,16 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { TokenListItem } from "@/lib/db/launchpad";
 import { TokenAvatar } from "@/components/token/TokenAvatar";
+import { NATIVE_SYMBOL } from "@/config/chain";
 import { useBnbUsdPrice } from "@/hooks/useBnbUsdPrice";
 import { bnbToUsd, formatUsd } from "@/lib/format-usd";
 
-function formatCompactBnb(value: number): string {
+function formatCompactNative(value: number): string {
   if (!Number.isFinite(value)) return "—";
-  if (value >= 1_000) return `${(value / 1_000).toFixed(2)}K BNB`;
-  if (value >= 1) return `${value.toFixed(2)} BNB`;
-  if (value > 0) return `${value.toFixed(4)} BNB`;
-  return "0 BNB";
+  if (value >= 1_000) return `${(value / 1_000).toFixed(2)}K ${NATIVE_SYMBOL}`;
+  if (value >= 1) return `${value.toFixed(2)} ${NATIVE_SYMBOL}`;
+  if (value > 0) return `${value.toFixed(4)} ${NATIVE_SYMBOL}`;
+  return `0 ${NATIVE_SYMBOL}`;
 }
 
 function shortenAddress(address: string): string {
@@ -54,7 +55,7 @@ export function TokenCard({ token }: { token: TokenListItem }) {
           <p className="financial-value mt-1 text-base font-semibold text-pump-text">
             {marketCapUsd != null ? (formatUsd(marketCapUsd, { compact: true }) ?? "—") : "—"}
           </p>
-          <p className="mt-1 text-xs text-pump-muted">{formatCompactBnb(marketCapBnb)}</p>
+          <p className="mt-1 text-xs text-pump-muted">{formatCompactNative(marketCapBnb)}</p>
         </div>
         <div className="rounded-md border border-pump-border/15 bg-pump-surface/40 p-3">
           <p className="text-[11px] uppercase tracking-wide text-pump-muted">Holders</p>

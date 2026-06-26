@@ -9,7 +9,7 @@ import {
   useWaitForTransactionReceipt,
   useWriteContract,
 } from "wagmi";
-import { contracts, pumpChain, shortAddress } from "@/config/chain";
+import { contracts, NATIVE_SYMBOL, pumpChain, shortAddress } from "@/config/chain";
 import { useBnbUsdPrice } from "@/hooks/useBnbUsdPrice";
 import { bondingCurveManagerAbi } from "@/lib/bonding-curve";
 import { buildReferralInviteUrl, truncateReferralInviteUrl } from "@/lib/referral-link";
@@ -162,7 +162,7 @@ export function ClaimReferrerFeesModal({
               <td className="financial-value">
                 {formatUsdReadable(totalUsd, { compact: true })}{" "}
                 <span className="text-caption text-pump-muted">
-                  ({formatFeeBnb(totalBnb)} BNB)
+                  ({formatFeeBnb(totalBnb)} {NATIVE_SYMBOL})
                 </span>
               </td>
             </tr>
@@ -171,7 +171,7 @@ export function ClaimReferrerFeesModal({
               <td className="financial-value">
                 {formatUsdReadable(bnbToUsd(claimedBnb, bnbUsd), { compact: true })}{" "}
                 <span className="text-caption text-pump-muted">
-                  ({formatFeeBnb(claimedBnb)} BNB)
+                  ({formatFeeBnb(claimedBnb)} {NATIVE_SYMBOL})
                 </span>
               </td>
             </tr>
@@ -180,7 +180,7 @@ export function ClaimReferrerFeesModal({
               <td className="financial-value">
                 {formatUsdReadable(bnbToUsd(pendingBnb, bnbUsd), { compact: true })}{" "}
                 <span className="text-caption text-pump-muted">
-                  ({formatFeeBnb(pendingBnb)} BNB)
+                  ({formatFeeBnb(pendingBnb)} {NATIVE_SYMBOL})
                 </span>
               </td>
             </tr>
@@ -193,7 +193,7 @@ export function ClaimReferrerFeesModal({
               <td className="financial-value">
                 {formatUsdReadable(volumeUsd, { compact: true })}{" "}
                 <span className="text-caption text-pump-muted">
-                  ({formatVolumeBnb(referralVolumeBnb)} BNB)
+                  ({formatVolumeBnb(referralVolumeBnb)} {NATIVE_SYMBOL})
                 </span>
               </td>
             </tr>

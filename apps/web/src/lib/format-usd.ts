@@ -1,4 +1,5 @@
 import { formatPumpSubscriptPrice } from "@/lib/candles";
+import { NATIVE_SYMBOL } from "@/config/chain";
 
 /** Default meme total supply on bonding curves. */
 export const DEFAULT_TOKEN_TOTAL_SUPPLY = 1_000_000_000;
@@ -242,8 +243,8 @@ export function formatBnbWithUsd(
 ): { bnb: string; usd: string | null } {
   const bnb =
     bnbAmount >= 1_000
-      ? `${bnbAmount.toLocaleString(undefined, { maximumFractionDigits: 4 })} BNB`
-      : `${bnbAmount.toFixed(bnbAmount >= 1 ? 4 : 6)} BNB`;
+      ? `${bnbAmount.toLocaleString(undefined, { maximumFractionDigits: 4 })} ${NATIVE_SYMBOL}`
+      : `${bnbAmount.toFixed(bnbAmount >= 1 ? 4 : 6)} ${NATIVE_SYMBOL}`;
 
   const usdValue = bnbToUsd(bnbAmount, bnbUsd);
   return { bnb, usd: usdValue != null ? formatUsd(usdValue, opts) : null };
