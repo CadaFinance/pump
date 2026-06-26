@@ -749,7 +749,7 @@ export function ArenaListClient({
         const body = await queryClient.fetchQuery({
           queryKey: arenaBoardQueryKey(boardParams),
           queryFn: () => fetchArenaBoard(boardParams),
-          staleTime: 2_000,
+          staleTime: options.silent ? 2_000 : 0,
         });
 
         if (requestBoardKey !== currentBoardKeyRef.current) {
@@ -801,7 +801,9 @@ export function ArenaListClient({
         setLoadedBoardKey(requestBoardKey);
         setError(null);
       } catch (err) {
-        if (!hadData) {
+        if (hadData) {
+          console.error("[arena] silent board refetch failed:", err);
+        } else {
           setTokens(null);
           setError(err instanceof Error ? err.message : "Failed to load tokens");
         }

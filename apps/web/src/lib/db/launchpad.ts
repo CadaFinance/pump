@@ -412,11 +412,11 @@ const TOKEN_LIST_SELECT_BOARD_STATS = `
         (${SQL_BONDING_MARK_CAP_ZUG}),
         0
       )::text AS ath_market_cap_zug,
-      COALESCE(mts.trade_count, COALESCE(tbs.trade_count, b.trade_count, 0)) AS trade_count,
-      COALESCE(mts.volume_24h_zug, tbs.volume_24h_zug::text, '0') AS volume_24h_zug,
-      COALESCE(mts.volume_24h_prev_zug, tbs.volume_24h_prev_zug::text, '0') AS volume_24h_prev_zug,
-      COALESCE(mts.trade_count_24h_ago, tbs.trade_count_24h_ago, 0) AS trade_count_24h_ago,
-      COALESCE(mts.traders_24h, tbs.traders_24h, 0) AS traders_24h,
+      COALESCE(mts.trade_count, ts.trade_count, COALESCE(tbs.trade_count, b.trade_count, 0)) AS trade_count,
+      COALESCE(mts.volume_24h_zug::text, ts.volume_24h_zug, tbs.volume_24h_zug::text, '0') AS volume_24h_zug,
+      COALESCE(mts.volume_24h_prev_zug::text, ts.volume_24h_prev_zug, tbs.volume_24h_prev_zug::text, '0') AS volume_24h_prev_zug,
+      COALESCE(mts.trade_count_24h_ago, ts.trade_count_24h_ago, tbs.trade_count_24h_ago, 0) AS trade_count_24h_ago,
+      COALESCE(mts.traders_24h, ts.traders_24h, tbs.traders_24h, 0) AS traders_24h,
       CASE
         WHEN mpa.price_1h_ago IS NOT NULL AND mpa.price_1h_ago > 0
           THEN ((((${SQL_BONDING_MARK_PRICE_ZUG}) - mpa.price_1h_ago) / mpa.price_1h_ago) * 100)::text
@@ -441,6 +441,7 @@ const TOKEN_LIST_SELECT_BOARD_STATS = `
     FROM base_tokens bt
     LEFT JOIN bonding_states b ON b.token_address = bt.address
     LEFT JOIN token_board_stats tbs ON tbs.token_address = bt.address
+    LEFT JOIN trade_stats ts ON ts.token_address = bt.address
     LEFT JOIN mv_token_trade_stats mts ON mts.token_address = bt.address
     LEFT JOIN mv_token_price_anchors mpa ON mpa.token_address = bt.address
 `;
@@ -450,7 +451,8 @@ function buildTokenListSelectSql(baseTokensInner: string): string {
     return `
     WITH base_tokens AS (
       ${baseTokensInner}
-    )
+    ),
+    ${TOKEN_TRADE_STATS_CTE}
     ${TOKEN_LIST_SELECT_BOARD_STATS}`;
   }
 
@@ -966,6 +968,8 @@ export type TokenDetail = TokenListItem & {
   tokenSold: string;
   tradeCount: number;
   lastPriceBnb: string;
+  virtualZugReserveBnb?: string;
+  virtualTokenReserve?: string;
 };
 
 export async function upsertTokenMetadata(input: {
@@ -1072,6 +1076,8 @@ export async function getTokenByAddress(address: string): Promise<TokenDetail | 
     token_sold: string;
     trade_count: number;
     last_price_zug: string;
+    virtual_zug_reserve: string;
+    virtual_token_reserve: string;
     creator_follower_count: number;
   }>(
     `
@@ -1089,12 +1095,14 @@ export async function getTokenByAddress(address: string): Promise<TokenDetail | 
       t.launch_tx_hash,
       COALESCE(b.progress_bps, 0) AS progress_bps,
       COALESCE(b.reserve_zug, 0)::text AS reserve_zug,
-      COALESCE(b.market_cap_zug, 0)::text AS market_cap_zug,
+      COALESCE((${SQL_BONDING_MARK_CAP_ZUG}), 0)::text AS market_cap_zug,
       COALESCE(b.holder_count, 0) AS holder_count,
       COALESCE(b.target_zug, 0)::text AS target_zug,
       COALESCE(b.token_sold, 0)::text AS token_sold,
       COALESCE(b.trade_count, 0) AS trade_count,
       COALESCE((${SQL_BONDING_MARK_PRICE_ZUG}), 0)::text AS last_price_zug,
+      COALESCE(b.virtual_zug_reserve, ${BONDING_VIRTUAL_BNB_HUMAN})::text AS virtual_zug_reserve,
+      COALESCE(b.virtual_token_reserve, ${BONDING_TOKEN_SUPPLY_HUMAN})::text AS virtual_token_reserve,
       COALESCE((
         SELECT COUNT(*)::int
         FROM creator_follows cf
@@ -1131,6 +1139,8 @@ export async function getTokenByAddress(address: string): Promise<TokenDetail | 
     tokenSold: row.token_sold,
     tradeCount: row.trade_count,
     lastPriceBnb: row.last_price_zug,
+    virtualZugReserveBnb: row.virtual_zug_reserve,
+    virtualTokenReserve: row.virtual_token_reserve,
   };
 }
 

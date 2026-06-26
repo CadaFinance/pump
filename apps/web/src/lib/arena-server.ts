@@ -1,4 +1,3 @@
-import { cacheLife, cacheTag } from "next/cache";
 import { fetchBnbUsdPrice } from "@/lib/bnb-price-server";
 import { useRedisArenaCache } from "@/lib/db/perf-flags";
 import {
@@ -49,17 +48,6 @@ export type ArenaHomeFetchOptions = {
   filter?: ArenaBoardFilter;
   airdropAddresses?: string[];
 };
-
-function arenaCacheTag(options: ArenaHomeFetchOptions): string {
-  const filter = options.filter ?? "new";
-  const sortKey = options.sortKey ?? "age";
-  const sortDir = options.sortDir ?? "desc";
-  const airdropKey =
-    options.airdropAddresses && options.airdropAddresses.length > 0
-      ? [...options.airdropAddresses].sort().join(",")
-      : "";
-  return `arena:${filter}:${sortKey}:${sortDir}:${options.limit ?? ARENA_HOME_LIMIT}:${airdropKey}`;
-}
 
 /**
  * Fresh arena board from PostgreSQL — same SQL path as portfolio launched tokens.
@@ -133,14 +121,9 @@ async function loadArenaHomePayloadCached(
   return payload;
 }
 
-/** SSR arena board — short-lived cache for first paint only. */
+/** SSR arena board — Redis hot cache only (no Next.js cross-request cache). */
 export async function fetchArenaHomePayload(
   options: ArenaHomeFetchOptions = {}
 ): Promise<ArenaHomePayload> {
-  "use cache";
-  cacheTag("arena");
-  cacheTag(arenaCacheTag(options));
-  cacheLife({ stale: 2, revalidate: 2, expire: 10 });
-
   return loadArenaHomePayloadCached(options);
 }
