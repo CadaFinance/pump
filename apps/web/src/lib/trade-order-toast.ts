@@ -5,6 +5,11 @@ import { playTradeSound } from "@/lib/trade-sounds";
 
 const TRADE_ORDER_PREFIX = "trade-order-";
 const TRADE_AGGREGATE_ID = "trade-orders-aggregate";
+const TRADE_BATCH_SUCCESS_ID = "trade-batch-success";
+
+/** Terminal success toast — short, auto-dismiss (Phantom/Binance pattern). */
+const SUCCESS_DURATION_MS = 2_500;
+const BATCH_WINDOW_MS = 3_000;
 
 type PendingMeta = {
   side: "buy" | "sell";
@@ -19,12 +24,20 @@ const pendingMeta = new Map<string, PendingMeta>();
 const txHashToPendingId = new Map<string, string>();
 const userOpToPendingId = new Map<string, string>();
 
+let batchConfirmCount = 0;
+let batchConfirmTimer: ReturnType<typeof setTimeout> | null = null;
+
 function tradeOrderToastId(pendingId: string): string {
   return `${TRADE_ORDER_PREFIX}${pendingId}`;
 }
 
 function sideTitle(side: "buy" | "sell", symbol: string): string {
   return side === "buy" ? `Buy ${symbol}` : `Sell ${symbol}`;
+}
+
+function resetBatchConfirmWindow(): void {
+  batchConfirmCount = 0;
+  batchConfirmTimer = null;
 }
 
 function refreshAggregateToast(): void {
@@ -42,11 +55,10 @@ function finishTradeOrderToast(
   pendingId: string,
   tone: "success" | "error",
   title: string,
-  description: string,
+  description: string | undefined,
   durationMs: number
 ): void {
-  const toastId = tradeOrderToastId(pendingId);
-  toast.update(toastId, {
+  toast.update(tradeOrderToastId(pendingId), {
     tone,
     title,
     description,
@@ -101,6 +113,7 @@ export function trackTradeOrderSubmitted(
   symbol: string,
   userOpHash?: Hash
 ): void {
+  if (isTradeOrderSettled(pendingId)) return;
   activeTradeOrders.add(pendingId);
   pendingMeta.set(pendingId, { side, symbol, userOpHash, txHash: pendingMeta.get(pendingId)?.txHash });
   if (userOpHash) registerTradeOrderUserOp(pendingId, userOpHash);
@@ -115,6 +128,7 @@ export function trackTradeOrderSubmitted(
 }
 
 export function trackTradeOrderIncluded(pendingId: string, txHash: string): void {
+  if (isTradeOrderSettled(pendingId)) return;
   registerTradeOrderTxHash(pendingId, txHash as Hash);
   toast.update(tradeOrderToastId(pendingId), {
     description: "Confirming on-chain…",
@@ -135,15 +149,28 @@ export function trackTradeOrderConfirmed(
     refreshAggregateToast();
     return;
   }
+
   settledTradeOrders.add(pendingId);
   activeTradeOrders.delete(pendingId);
-  finishTradeOrderToast(
-    pendingId,
-    "success",
-    side === "buy" ? `Buy ${symbol} confirmed` : `Sell ${symbol} confirmed`,
-    "Balances and chart will update shortly.",
-    3_500
-  );
+
+  batchConfirmCount += 1;
+  if (batchConfirmTimer != null) clearTimeout(batchConfirmTimer);
+  batchConfirmTimer = setTimeout(resetBatchConfirmWindow, BATCH_WINDOW_MS);
+
+  const title = side === "buy" ? `Buy ${symbol} confirmed` : `Sell ${symbol} confirmed`;
+
+  if (batchConfirmCount >= 2) {
+    for (const id of settledTradeOrders) {
+      toast.dismiss(tradeOrderToastId(id));
+    }
+    toast.success(`${batchConfirmCount} orders confirmed`, undefined, {
+      id: TRADE_BATCH_SUCCESS_ID,
+      durationMs: SUCCESS_DURATION_MS,
+    });
+  } else {
+    finishTradeOrderToast(pendingId, "success", title, undefined, SUCCESS_DURATION_MS);
+  }
+
   playTradeSound(side === "buy" ? "buy_confirmed" : "sell_confirmed");
   refreshAggregateToast();
 }
