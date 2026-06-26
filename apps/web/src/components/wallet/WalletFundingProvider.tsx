@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import { WalletFundingModal } from "@/components/wallet/WalletFundingModal";
+import { startScwDepositWatch } from "@/lib/scw-balance-sync";
 
 export type WalletFundingView = "choice" | "deposit" | "withdraw";
 
@@ -49,6 +50,7 @@ export function WalletFundingProvider({ children }: { children: ReactNode }) {
     setCanReturnToChoice(false);
     setView("deposit");
     setOpen(true);
+    startScwDepositWatch();
   }, []);
 
   const openWithdraw = useCallback(() => {

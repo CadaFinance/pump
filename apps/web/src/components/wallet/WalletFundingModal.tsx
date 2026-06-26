@@ -11,6 +11,7 @@ import { ModalPortal } from "@/components/ui/ModalPortal";
 import { usePumpWallet } from "@/components/wallet/PumpWalletProvider";
 import { formatTradeError } from "@/lib/trade-errors";
 import type { WalletFundingOptions, WalletFundingView } from "@/components/wallet/WalletFundingProvider";
+import { invalidateScwBalance, startScwDepositWatch } from "@/lib/scw-balance-sync";
 
 const ICON_STROKE = 1.75;
 
@@ -28,6 +29,10 @@ function DepositView({ address, onClose }: { address: string; onClose: () => voi
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
+    startScwDepositWatch();
+  }, [address]);
+
+  useEffect(() => {
     let cancelled = false;
     void QRCode.toDataURL(address, { margin: 1, width: 200 }).then((url) => {
       if (!cancelled) setQrDataUrl(url);
@@ -40,7 +45,10 @@ function DepositView({ address, onClose }: { address: string; onClose: () => voi
   async function onCopy() {
     const ok = await copyToClipboard(address);
     setCopied(ok);
-    if (ok) setTimeout(() => setCopied(false), 2000);
+    if (ok) {
+      startScwDepositWatch();
+      setTimeout(() => setCopied(false), 2000);
+    }
   }
 
   return (
@@ -115,6 +123,7 @@ function WithdrawForm({ onClose }: { onClose: () => void }) {
     try {
       const hash = await withdraw(trimmed, value);
       setTxHash(hash);
+      invalidateScwBalance();
     } catch (err) {
       setError(formatTradeError(err));
     } finally {
@@ -194,6 +203,12 @@ export function WalletFundingModal({
   onViewChange,
 }: WalletFundingModalProps) {
   const { authenticated, scwAddress } = usePumpWallet();
+
+  useEffect(() => {
+    if (open && view === "deposit") {
+      startScwDepositWatch();
+    }
+  }, [open, view]);
 
   if (!open) return null;
 

@@ -7,6 +7,7 @@ import { isPumpAuthConfigured } from "@/lib/auth-config";
 import { wagmiConfig } from "@/lib/wagmi";
 import { PumpWalletProvider, PumpWalletProviderStub } from "@/components/wallet/PumpWalletProvider";
 import { PumpWagmiSetup } from "@/components/wallet/PumpWagmiSetup";
+import { ScwBalanceSync } from "@/components/wallet/ScwBalanceSync";
 import { WalletFundingProvider } from "@/components/wallet/WalletFundingProvider";
 
 function MissingAuthConfig({ children }: { children: ReactNode }) {
@@ -57,6 +58,7 @@ export function Web3Provider({ children }: { children: ReactNode }) {
       <WagmiProvider config={wagmiConfig} reconnectOnMount={false}>
         <PumpWalletProvider>
           <PumpWagmiSetup />
+          <ScwBalanceSync />
           <WalletFundingProvider>{children}</WalletFundingProvider>
         </PumpWalletProvider>
       </WagmiProvider>

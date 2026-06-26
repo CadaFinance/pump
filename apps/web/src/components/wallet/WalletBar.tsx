@@ -3,8 +3,10 @@
 import { useEffect, useRef, useState, type MouseEvent } from "react";
 import Link from "next/link";
 import { formatEther } from "viem";
-import { useAccount, useBalance } from "wagmi";
-import { pumpChain, NATIVE_SYMBOL, shortAddress } from "@/config/chain";
+import { useAccount } from "wagmi";
+import { useScwBalance } from "@/hooks/useScwBalance";
+import { startScwDepositWatch } from "@/lib/scw-balance-sync";
+import { NATIVE_SYMBOL, shortAddress } from "@/config/chain";
 import { UserAvatar } from "@/components/user/UserAvatar";
 import { useUserAvatar } from "@/components/user/UserAvatarProvider";
 import { useBnbUsdPrice } from "@/hooks/useBnbUsdPrice";
@@ -98,7 +100,10 @@ function WalletMenu({
     event.stopPropagation();
     const ok = await copyToClipboard(address);
     setCopied(ok);
-    if (ok) setTimeout(() => setCopied(false), 2000);
+    if (ok) {
+      startScwDepositWatch();
+      setTimeout(() => setCopied(false), 2000);
+    }
   }
 
   return (
@@ -205,13 +210,7 @@ function ConnectedWalletButton({ address }: { address: string }) {
   const [open, setOpen] = useState(false);
   const [showBnb, setShowBnb] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
-  const { data: balance } = useBalance({
-    address: address as `0x${string}`,
-    chainId: pumpChain.id,
-    query: {
-      refetchInterval: open ? 20_000 : false,
-    },
-  });
+  const { data: balance } = useScwBalance(address as `0x${string}`);
 
   const bnbAmount = balance ? Number(formatEther(balance.value)) : 0;
   const usdAmount = bnbToUsd(bnbAmount, bnbUsd);

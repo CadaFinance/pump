@@ -28,6 +28,7 @@ import {
 } from "@/lib/trade-optimistic-guard";
 import { loadTradeAutoConfirm, saveTradeAutoConfirm } from "@/lib/trade-confirm-storage";
 import { instantTradeGateMessage, isTransientInstantGateReason } from "@/lib/trade-instant-copy";
+import { invalidateScwBalance } from "@/lib/scw-balance-sync";
 import {
   isTradeOrderSettled,
   resolvePendingIdFromTxHash,
@@ -1384,6 +1385,7 @@ export function TradePanel({
       const t0 = performance.now();
       tradeTraceStep("ux.refetch_balances.start");
       await Promise.all([refetchBnbBalance(), refetchBalance(), refetchAllowance()]);
+      invalidateScwBalance();
       tradeTraceStep("ux.refetch_balances.done", {
         ms: Math.round(performance.now() - t0),
       });
