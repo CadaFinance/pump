@@ -1,7 +1,6 @@
 "use client";
 
-import { NativeCurrencyLogo } from "@/components/token/NativeCurrencyLogo";
-import { NATIVE_SYMBOL } from "@/lib/native-currency";
+import { BnbLogo } from "@/components/token/BnbLogo";
 import { TokenAvatar } from "@/components/token/TokenAvatar";
 
 export function BnbAmountDisplay({
@@ -18,7 +17,7 @@ export function BnbAmountDisplay({
   return (
     <span className="inline-flex min-w-0 max-w-full items-center justify-end gap-1.5">
       <span className={`shrink-0 ${amountClassName}`}>{amount}</span>
-      <NativeAssetChip size={logoSize} symbolClassName={symbolClassName} />
+      <BnbAssetChip size={logoSize} symbolClassName={symbolClassName} />
     </span>
   );
 }
@@ -57,7 +56,7 @@ export function TokenAmountDisplay({
   );
 }
 
-export function NativeAssetChip({
+export function BnbAssetChip({
   size = 18,
   symbolClassName = "text-caption font-medium text-pump-muted",
   className = "",
@@ -68,14 +67,11 @@ export function NativeAssetChip({
 }) {
   return (
     <span className={`inline-flex shrink-0 items-center gap-1 ${className}`}>
-      <NativeCurrencyLogo size={size} />
-      <span className={symbolClassName}>{NATIVE_SYMBOL}</span>
+      <BnbLogo size={size} />
+      <span className={symbolClassName}>BNB</span>
     </span>
   );
 }
-
-/** @deprecated Use NativeAssetChip */
-export const BnbAssetChip = NativeAssetChip;
 
 export function TokenAssetChip({
   address,
@@ -118,7 +114,7 @@ export function BnbAmountLabel({
   return (
     <span className="inline-flex items-center gap-1 tabular-nums">
       <span>{amount}</span>
-      <NativeCurrencyLogo size={logoSize} />
+      <BnbLogo size={logoSize} />
     </span>
   );
 }

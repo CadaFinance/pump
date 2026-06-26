@@ -1,11 +1,15 @@
 import { fetchNativeUsdPrice } from "@/lib/native-usd-price";
 
-/** Live native/USD (ETH on Base) — legacy name kept for imports. */
+/** @deprecated Use fetchNativeUsdPrice — kept for legacy imports. Returns chain-native/USD (ETH on Base). */
 export async function fetchBnbUsdPrice(): Promise<{
   bnbUsd: number | null;
   quote: "USDT";
   source: "cache" | "binance" | "unavailable";
 }> {
-  const { nativeUsd, quote, source } = await fetchNativeUsdPrice();
-  return { bnbUsd: nativeUsd, quote, source };
+  const { nativeUsd, source } = await fetchNativeUsdPrice();
+  return {
+    bnbUsd: nativeUsd,
+    quote: "USDT",
+    source,
+  };
 }

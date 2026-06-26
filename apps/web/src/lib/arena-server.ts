@@ -1,5 +1,5 @@
 import { cacheLife, cacheTag } from "next/cache";
-import { fetchBnbUsdPrice } from "@/lib/bnb-price-server";
+import { fetchNativeUsdPrice } from "@/lib/native-usd-price";
 import { useRedisArenaCache } from "@/lib/db/perf-flags";
 import {
   readArenaHomeCache,
@@ -30,7 +30,9 @@ export type ArenaHomePayload = {
   topByMcap: TokenListItem[];
   koth: KothSummary | null;
   meta: ArenaListMeta;
+  /** Chain native/USD (ETH on Base). Legacy field name kept for API compat. */
   bnbUsd: number | null;
+  nativeUsd: number | null;
 };
 
 function filterCountKey(
@@ -62,15 +64,15 @@ function arenaCacheTag(options: ArenaHomeFetchOptions): string {
   return `arena:${filter}:${sortKey}:${sortDir}:${options.limit ?? ARENA_HOME_LIMIT}:${airdropKey}`;
 }
 
-export type ArenaHomeLoadOptions = ArenaHomeFetchOptions & {
-  /** Skip Redis hot cache — API + post-trade refresh must read live DB. */
-  skipCache?: boolean;
-};
-
-/** Live DB read — same path as Portfolio `listTokensByCreator` / token detail. */
-export async function loadArenaHomePayloadFromDb(
-  options: ArenaHomeLoadOptions = {}
+/** Server-side arena board payload — SSR home page + shared with /api/tokens. */
+export async function fetchArenaHomePayload(
+  options: ArenaHomeFetchOptions = {}
 ): Promise<ArenaHomePayload> {
+  "use cache";
+  cacheTag("arena");
+  cacheTag(arenaCacheTag(options));
+  cacheLife({ stale: 2, revalidate: 2, expire: 10 });
+
   const limit = options.limit ?? ARENA_HOME_LIMIT;
   const sortKey = options.sortKey ?? "age";
   const sortDir = options.sortDir ?? "desc";
@@ -85,12 +87,12 @@ export async function loadArenaHomePayloadFromDb(
     airdropAddresses,
   };
 
-  if (!options.skipCache && useRedisArenaCache()) {
+  if (useRedisArenaCache()) {
     const cached = await readArenaHomeCache(fetchOptions);
     if (cached) return cached;
   }
 
-  const [tokens, topByMcapFromDb, koth, filterCounts, bnbPrice] = await Promise.all([
+  const [tokens, topByMcapFromDb, koth, filterCounts, nativePrice] = await Promise.all([
     listArenaBoardTokens({
       limit,
       offset: 0,
@@ -99,15 +101,16 @@ export async function loadArenaHomePayloadFromDb(
       filter,
       airdropAddresses,
     }),
-    options.skipCache || !useRedisArenaCache()
-      ? listTopTokensByMcap(TOP_MCAP_LIMIT)
-      : (async () => {
-          const cachedTop = await readTopMcapCache(TOP_MCAP_LIMIT);
-          return cachedTop ?? listTopTokensByMcap(TOP_MCAP_LIMIT);
-        })(),
+    (async () => {
+      if (useRedisArenaCache()) {
+        const cachedTop = await readTopMcapCache(TOP_MCAP_LIMIT);
+        if (cachedTop) return cachedTop;
+      }
+      return listTopTokensByMcap(TOP_MCAP_LIMIT);
+    })(),
     getKothSummary(RECENT_STRIP_DESKTOP),
     getArenaFilterCounts(airdropAddresses),
-    fetchBnbUsdPrice(),
+    fetchNativeUsdPrice(),
   ]);
 
   const filteredTotal = filterCounts[filterCountKey(filter)];
@@ -123,10 +126,11 @@ export async function loadArenaHomePayloadFromDb(
     topByMcap: topByMcapFromDb,
     koth,
     meta,
-    bnbUsd: bnbPrice.bnbUsd,
+    bnbUsd: nativePrice.nativeUsd,
+    nativeUsd: nativePrice.nativeUsd,
   };
 
-  if (!options.skipCache && useRedisArenaCache()) {
+  if (useRedisArenaCache()) {
     await Promise.all([
       writeArenaHomeCache(fetchOptions, payload),
       writeTopMcapCache(TOP_MCAP_LIMIT, topByMcapFromDb),
@@ -134,16 +138,4 @@ export async function loadArenaHomePayloadFromDb(
   }
 
   return payload;
-}
-
-/** Cached SSR shell — client/API use `loadArenaHomePayloadFromDb({ skipCache: true })`. */
-export async function fetchArenaHomePayload(
-  options: ArenaHomeFetchOptions = {}
-): Promise<ArenaHomePayload> {
-  "use cache";
-  cacheTag("arena");
-  cacheTag(arenaCacheTag(options));
-  cacheLife({ stale: 2, revalidate: 2, expire: 10 });
-
-  return loadArenaHomePayloadFromDb(options);
 }

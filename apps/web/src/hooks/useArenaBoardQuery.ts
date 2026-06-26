@@ -15,7 +15,7 @@ export function useArenaBoardQuery(
     queryKey: arenaBoardQueryKey(params),
     queryFn: () => fetchArenaBoard(params),
     placeholderData: keepPreviousData,
-    staleTime: 0,
+    staleTime: 2_000,
     enabled: options?.enabled ?? true,
   });
 }

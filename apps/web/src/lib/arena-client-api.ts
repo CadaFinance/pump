@@ -21,6 +21,7 @@ export type ArenaBoardResponse = {
     filterCounts: ArenaFilterCounts;
   };
   bnbUsd: number | null;
+  nativeUsd?: number | null;
 };
 
 export function arenaBoardQueryKey(params: ArenaBoardQueryParams): readonly unknown[] {
@@ -69,6 +70,7 @@ export async function fetchArenaBoard(
       hasMore: false,
       filterCounts: { all: 0, new: 0, movers: 0, kothContenders: 0, hasAirdrop: 0 },
     },
-    bnbUsd: body.bnbUsd ?? null,
+    bnbUsd: body.bnbUsd ?? body.nativeUsd ?? null,
+    nativeUsd: body.nativeUsd ?? body.bnbUsd ?? null,
   };
 }

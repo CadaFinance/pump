@@ -72,3 +72,34 @@ export async function fetchNativeUsdPrice(
     return { nativeUsd: null, quote: "USDT", source: "unavailable", pair, symbol };
   }
 }
+
+/** Reject stale SSR/cache rates from the wrong Binance pair (BNB on Base, etc.). */
+export function isPlausibleNativeUsdForChain(
+  nativeUsd: number,
+  chainId = CHAIN_ID
+): boolean {
+  if (!Number.isFinite(nativeUsd) || nativeUsd <= 0) return false;
+  const { symbol } = nativeUsdPairForChain(chainId);
+  if (symbol === "ETH") return nativeUsd >= 900;
+  return nativeUsd <= 1_200;
+}
+
+/** Client display: prefer live hook oracle; fall back to SSR/API seed only when live is unavailable. */
+export function resolveDisplayNativeUsd(
+  liveNativeUsd: number | null | undefined,
+  seededNativeUsd: number | null | undefined,
+  chainId = CHAIN_ID
+): number | null {
+  if (typeof liveNativeUsd === "number" && Number.isFinite(liveNativeUsd) && liveNativeUsd > 0) {
+    return liveNativeUsd;
+  }
+  if (
+    typeof seededNativeUsd === "number" &&
+    Number.isFinite(seededNativeUsd) &&
+    seededNativeUsd > 0 &&
+    isPlausibleNativeUsdForChain(seededNativeUsd, chainId)
+  ) {
+    return seededNativeUsd;
+  }
+  return null;
+}

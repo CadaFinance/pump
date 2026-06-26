@@ -1,6 +1,20 @@
-import { NativeCurrencyLogo } from "@/components/token/NativeCurrencyLogo";
+import Image from "next/image";
+import bnbLogoSrc from "@/app/logos/bnb-bnb-logo.png";
 
-/** @deprecated Use NativeCurrencyLogo — app native currency is ETH on Base. */
-export function BnbLogo(props: { size?: number; className?: string }) {
-  return <NativeCurrencyLogo {...props} />;
+export function BnbLogo({
+  size = 28,
+  className = "",
+}: {
+  size?: number;
+  className?: string;
+}) {
+  return (
+    <Image
+      src={bnbLogoSrc}
+      alt="BNB"
+      width={size}
+      height={size}
+      className={`shrink-0 rounded-full ${className}`}
+    />
+  );
 }
