@@ -49,25 +49,27 @@ export function arenaWsSpotPriceBnb(
 }
 
 /**
- * Same mark-cap as API SQL (`spot × 1B supply`).
- * Never uses reserve-only with implicit sold=0 — that understates spot and caused MCAP dip-then-rise.
+ * Same mark-cap as API SQL — prefers stored marketCapZug from indexer, then calculates from spot.
+ * This ensures consistency between SSR (DB) and WS (real-time) data sources.
  */
 export function bondingMarkCapBnbFromWs(
   bonding: NonNullable<ArenaTradeWsPayload["bonding"]>,
   previousMarketCapBnb?: string | number | null
 ): string | null {
+  // Prefer stored market_cap_zug from bonding_states (same as SQL COALESCE priority)
+  const mcapCol = Number(bonding.marketCapZug);
+  if (Number.isFinite(mcapCol) && mcapCol > 0) {
+    const prev = Number(previousMarketCapBnb);
+    if (isMcapJumpSane(prev, mcapCol)) return String(mcapCol);
+  }
+
+  // Fall back to calculated spot price (reserve + virtual_reserve) / (supply - sold) * 1B
   const spot = arenaWsSpotPriceBnb(bonding);
   if (spot > 0) {
     const mcap = String(spot * BONDING_TOKEN_SUPPLY_HUMAN);
     const prev = Number(previousMarketCapBnb);
     if (isMcapJumpSane(prev, Number(mcap))) return mcap;
     if (!Number.isFinite(prev) || prev <= 0) return mcap;
-  }
-
-  const mcapCol = Number(bonding.marketCapZug);
-  if (Number.isFinite(mcapCol) && mcapCol > 0) {
-    const prev = Number(previousMarketCapBnb);
-    if (isMcapJumpSane(prev, mcapCol)) return String(mcapCol);
   }
 
   return null;
