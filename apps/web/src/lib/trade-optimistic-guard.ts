@@ -19,8 +19,6 @@ export type InstantTradeGateInput = {
   side: "buy" | "sell";
   paused: boolean;
   wrongChain: boolean;
-  balancePending: boolean;
-  gasLoading: boolean;
   needsLegacyApproval: boolean;
   sellUsesPermit: boolean;
   allowanceSufficient: boolean;
@@ -103,8 +101,6 @@ export function evaluateInstantTradeGate(
 ): InstantTradeGateResult {
   if (input.wrongChain) return { ok: false, reason: "wrong_chain" };
   if (input.paused) return { ok: false, reason: "paused" };
-  if (input.balancePending) return { ok: false, reason: "balance_pending" };
-  if (input.gasLoading) return { ok: false, reason: "gas_loading" };
   if (input.bnbBalance === undefined && input.availableBnbBalance === undefined) {
     return { ok: false, reason: "bnb_unknown" };
   }

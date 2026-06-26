@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from "react";
+﻿import { useEffect, useRef, useState } from "react";
 import { usePublicClient } from "wagmi";
 import { contracts, pumpChain } from "@/config/chain";
 import { erc20Abi, maxUint256 } from "@/lib/abis/erc20";
@@ -41,6 +41,8 @@ export function useTradeGasEstimate(params: UseTradeGasEstimateParams) {
   const publicClient = usePublicClient({ chainId: pumpChain.id });
   const [gasCostWei, setGasCostWei] = useState<bigint | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const gasCostWeiRef = useRef<bigint | null>(null);
+  gasCostWeiRef.current = gasCostWei;
 
   useEffect(() => {
     if (!params.enabled || !publicClient) {
@@ -52,7 +54,9 @@ export function useTradeGasEstimate(params: UseTradeGasEstimateParams) {
     let cancelled = false;
 
     const timer = setTimeout(async () => {
-      setIsLoading(true);
+      if (gasCostWeiRef.current == null) {
+        setIsLoading(true);
+      }
 
       try {
         const gasPricePromise = publicClient.getGasPrice();

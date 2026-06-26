@@ -23,7 +23,7 @@ import {
   type InstantTradeGateSell,
 } from "@/lib/trade-optimistic-guard";
 import { loadTradeAutoConfirm, saveTradeAutoConfirm } from "@/lib/trade-confirm-storage";
-import { instantTradeGateMessage } from "@/lib/trade-instant-copy";
+import { instantTradeGateMessage, isTransientInstantGateReason } from "@/lib/trade-instant-copy";
 import {
   isTradeOrderSettled,
   resolvePendingIdFromTxHash,
@@ -834,8 +834,6 @@ export function TradePanel({
       side,
       paused,
       wrongChain,
-      balancePending,
-      gasLoading,
       needsLegacyApproval,
       sellUsesPermit,
       allowanceSufficient,
@@ -861,8 +859,6 @@ export function TradePanel({
     side,
     paused,
     wrongChain,
-    balancePending,
-    gasLoading,
     needsLegacyApproval,
     sellUsesPermit,
     allowanceSufficient,
@@ -1599,6 +1595,15 @@ export function TradePanel({
     });
   }
 
+  function notifyInstantGateFailure(gate: InstantTradeGateResult & { ok: false }): void {
+    if (isTransientInstantGateReason(gate.reason)) {
+      tradeTraceStep("ux.optimistic.skipped.silent", { reason: gate.reason });
+      return;
+    }
+    tradeTraceStep("ux.optimistic.skipped", { reason: gate.reason });
+    toast.error("Order not sent", instantTradeGateMessage(gate.reason));
+  }
+
   function tryDispatchInstantTrade(
     buyParams?: SessionBuyParams,
     sellParams?: SessionSellParams,
@@ -1606,8 +1611,7 @@ export function TradePanel({
   ): boolean {
     const gate = evaluateLiveInstantGate();
     if (!gate.ok) {
-      tradeTraceStep("ux.optimistic.skipped", { reason: gate.reason });
-      toast.error("Order not sent", instantTradeGateMessage(gate.reason));
+      notifyInstantGateFailure(gate);
       return false;
     }
     if (gate.side === "buy" && buyParams) {
@@ -1811,10 +1815,11 @@ export function TradePanel({
 
         const gate = evaluateLiveInstantGate();
         if (!gate.ok || gate.side !== "buy") {
-          toast.error(
-            "Order not sent",
-            instantTradeGateMessage(!gate.ok ? gate.reason : "quote_zero")
-          );
+          if (!gate.ok) {
+            notifyInstantGateFailure(gate);
+          } else {
+            toast.error("Order not sent", instantTradeGateMessage("quote_zero"));
+          }
           return;
         }
 

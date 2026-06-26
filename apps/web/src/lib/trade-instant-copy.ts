@@ -1,5 +1,15 @@
 import { NATIVE_SYMBOL } from "@/config/chain";
 
+/** Transient states — skip trade silently (no error toast spam during rapid-fire). */
+export function isTransientInstantGateReason(reason: string): boolean {
+  return (
+    reason === "gas_loading" ||
+    reason === "balance_pending" ||
+    reason === "bnb_unknown" ||
+    reason === "token_unknown"
+  );
+}
+
 export function instantTradeGateMessage(reason: string): string {
   switch (reason) {
     case "zero_amount":
