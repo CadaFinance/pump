@@ -1,5 +1,6 @@
 import { explorerTxUrl } from "@/config/chain";
 import { toast } from "@/lib/toast";
+import { playTradeSound } from "@/lib/trade-sounds";
 
 const TRADE_ORDER_PREFIX = "trade-order-";
 const TRADE_AGGREGATE_ID = "trade-orders-aggregate";
@@ -20,9 +21,25 @@ function refreshAggregateToast(): void {
     toast.dismiss(TRADE_AGGREGATE_ID);
     return;
   }
-  const title = `${count} orders confirming`;
-  const description = "Settling on-chain in the background.";
-  toast.loading(title, description, { id: TRADE_AGGREGATE_ID });
+  toast.loading(`${count} orders confirming`, "Settling on-chain in the background.", {
+    id: TRADE_AGGREGATE_ID,
+  });
+}
+
+function finishTradeOrderToast(
+  pendingId: string,
+  tone: "success" | "error",
+  title: string,
+  description: string,
+  durationMs: number
+): void {
+  const toastId = tradeOrderToastId(pendingId);
+  toast.dismiss(toastId);
+  if (tone === "success") {
+    toast.success(title, description, { durationMs });
+  } else {
+    toast.error(title, description, { durationMs });
+  }
 }
 
 export function trackTradeOrderPending(
@@ -48,6 +65,7 @@ export function trackTradeOrderSubmitted(
     title: sideTitle(side, symbol),
     description: "Confirming on-chain…",
     persistent: true,
+    action: undefined,
   });
   refreshAggregateToast();
 }
@@ -67,17 +85,21 @@ export function trackTradeOrderConfirmed(
   symbol: string
 ): void {
   activeTradeOrders.delete(pendingId);
-  toast.success(
+  finishTradeOrderToast(
+    pendingId,
+    "success",
     side === "buy" ? `Buy ${symbol} confirmed` : `Sell ${symbol} confirmed`,
     "Balances and chart will update shortly.",
-    { id: tradeOrderToastId(pendingId), durationMs: 3_500 }
+    3_500
   );
+  playTradeSound(side === "buy" ? "buy_confirmed" : "sell_confirmed");
   refreshAggregateToast();
 }
 
 export function trackTradeOrderFailed(pendingId: string, message: string): void {
   activeTradeOrders.delete(pendingId);
-  toast.error("Order failed", message, { id: tradeOrderToastId(pendingId), durationMs: 6_000 });
+  finishTradeOrderToast(pendingId, "error", "Order failed", message, 6_000);
+  playTradeSound("trade_failed");
   refreshAggregateToast();
 }
 

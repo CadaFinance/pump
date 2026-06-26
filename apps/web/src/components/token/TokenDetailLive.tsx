@@ -454,6 +454,7 @@ export function TokenDetailLive({
 
   const applyOptimisticFromReceipt = useCallback(
     async (payload: TradeConfirmedPayload) => {
+      if (!payload.receipt) return;
       let blockTimeIso: string | undefined;
       try {
         const block = await publicClient.getBlock({

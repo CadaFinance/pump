@@ -42,25 +42,27 @@ export function ToastHost() {
       }
 
       if (event.type === "update") {
+        let mergedForTimer: ToastItem | null = null;
         setItems((prev) => {
           const existing = prev.find((t) => t.id === event.id);
-          if (!existing) {
-            const created = {
-              id: event.id,
-              tone: event.patch.tone ?? "info",
-              title: event.patch.title ?? "",
-              description: event.patch.description,
-              durationMs: event.patch.durationMs ?? 4_000,
-              persistent: event.patch.persistent,
-              action: event.patch.action,
-            } satisfies ToastItem;
-            scheduleDismiss(created);
-            return [created, ...prev].slice(0, MAX_VISIBLE);
+          const merged: ToastItem = existing
+            ? { ...existing, ...event.patch }
+            : {
+                id: event.id,
+                tone: event.patch.tone ?? "info",
+                title: event.patch.title ?? "",
+                description: event.patch.description,
+                durationMs: event.patch.durationMs ?? 4_000,
+                persistent: event.patch.persistent,
+                action: event.patch.action,
+              };
+          mergedForTimer = merged;
+          if (existing) {
+            return prev.map((t) => (t.id === event.id ? merged : t));
           }
-          const merged = { ...existing, ...event.patch };
-          scheduleDismiss(merged);
-          return prev.map((t) => (t.id === event.id ? merged : t));
+          return [merged, ...prev].slice(0, MAX_VISIBLE);
         });
+        if (mergedForTimer) scheduleDismiss(mergedForTimer);
         return;
       }
 

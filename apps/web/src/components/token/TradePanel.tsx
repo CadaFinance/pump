@@ -109,7 +109,7 @@ const CURVE_POLL_MS = 4_000;
 export type TradeConfirmedPayload = {
   txHash: string;
   side: Side;
-  receipt: TransactionReceipt;
+  receipt?: TransactionReceipt;
 };
 
 export type TradeSubmittedPayload = {
@@ -282,6 +282,7 @@ export function TradePanel({
   const pendingTradeSideRef = useRef<"buy" | "sell" | null>(null);
   /** Persists until trade confirm completes — fallback receipt hook uses this when kernel omits receipt. */
   const awaitingConfirmSideRef = useRef<"buy" | "sell" | null>(null);
+  const awaitingConfirmPendingIdRef = useRef<string | null>(null);
   const legacyPendingIdRef = useRef<string | null>(null);
   const legacyApproveChainRef = useRef(false);
   const pendingSellRef = useRef<{ amountWei: bigint; minBnbOut: bigint } | null>(null);
@@ -578,8 +579,9 @@ export function TradePanel({
     if (fallbackReceipt.transactionHash.toLowerCase() !== txHash.toLowerCase()) return;
     if (handledReceiptHashRef.current?.toLowerCase() === txHash.toLowerCase()) return;
     const side = awaitingConfirmSideRef.current;
-    if (!side) return;
-    handleBuySellConfirmed("fallback", side, { hash: txHash, receipt: fallbackReceipt });
+    const pendingId = awaitingConfirmPendingIdRef.current;
+    if (!side || !pendingId) return;
+    handleBuySellConfirmed(pendingId, side, { hash: txHash, receipt: fallbackReceipt });
   }, [fallbackReceipt, kernelReceipt, txHash]);
 
   useEffect(() => {
@@ -1309,33 +1311,28 @@ export function TradePanel({
     side: "buy" | "sell",
     result: KernelTransactionResult
   ) {
-    const activeReceipt = result.receipt;
-    if (!activeReceipt?.transactionHash) return;
-    if (handledReceiptHashRef.current === activeReceipt.transactionHash) return;
+    const txHash = result.receipt?.transactionHash ?? result.hash;
+    if (!txHash) return;
+    if (handledReceiptHashRef.current?.toLowerCase() === txHash.toLowerCase()) return;
 
-    if (activeReceipt.status !== "success") {
+    const activeReceipt = result.receipt;
+
+    if (activeReceipt && activeReceipt.status !== "success") {
       handledReceiptHashRef.current = activeReceipt.transactionHash;
       failTradeTrace("chain.receipt_reverted", new Error("Transaction reverted on-chain"));
       rollbackInstantOptimistic(pendingId);
-      if (pendingId !== "fallback") {
-        trackTradeOrderFailed(
-          pendingId,
-          "Transaction reverted on-chain. Check balance and token status."
-        );
-      } else {
-        toast.error(
-          "Order failed",
-          "Transaction reverted on-chain. Check balance and token status."
-        );
-      }
+      trackTradeOrderFailed(
+        pendingId,
+        "Transaction reverted on-chain. Check balance and token status."
+      );
       if (pendingTradeCount(pendingLedgerRef.current) === 0) reset();
+      awaitingConfirmSideRef.current = null;
+      awaitingConfirmPendingIdRef.current = null;
       return;
     }
 
-    handledReceiptHashRef.current = activeReceipt.transactionHash;
-    if (pendingId !== "fallback") {
-      releasePendingReservation(pendingId);
-    }
+    handledReceiptHashRef.current = txHash;
+    releasePendingReservation(pendingId);
     if (pendingTradeReferrerRef.current) {
       clearStoredReferrer();
       pendingTradeReferrerRef.current = null;
@@ -1344,7 +1341,7 @@ export function TradePanel({
     const quoteUsd = quoteUsdAtSubmitRef.current;
     quoteUsdAtSubmitRef.current = null;
 
-    if (quoteUsd != null && quoteUsd > 0 && bnbUsd != null && bnbUsd > 0) {
+    if (activeReceipt && quoteUsd != null && quoteUsd > 0 && bnbUsd != null && bnbUsd > 0) {
       const parsed = parseTradesFromReceipt(activeReceipt, tokenAddress);
       const trade = parsed[0];
       if (trade) {
@@ -1370,22 +1367,16 @@ export function TradePanel({
       }
     }
 
-    if (pendingId !== "fallback") {
-      trackTradeOrderConfirmed(pendingId, side, symbol);
-    } else {
-      toast.success(
-        side === "buy" ? "Buy confirmed" : "Sell confirmed",
-        "Balances and chart will update shortly."
-      );
-    }
+    trackTradeOrderConfirmed(pendingId, side, symbol);
 
     onTradeConfirmed?.({
-      txHash: activeReceipt.transactionHash,
+      txHash,
       side,
       receipt: activeReceipt,
     });
 
     awaitingConfirmSideRef.current = null;
+    awaitingConfirmPendingIdRef.current = null;
     void (async () => {
       const t0 = performance.now();
       tradeTraceStep("ux.refetch_balances.start");
@@ -1395,8 +1386,8 @@ export function TradePanel({
       });
       endTradeTrace("ui.trade_complete", {
         side,
-        txHash: activeReceipt.transactionHash,
-        blockNumber: activeReceipt.blockNumber.toString(),
+        txHash,
+        blockNumber: activeReceipt?.blockNumber.toString() ?? "unknown",
       });
       if (pendingTradeCount(pendingLedgerRef.current) === 0) reset();
     })();
@@ -1627,6 +1618,7 @@ export function TradePanel({
     side: "buy" | "sell"
   ): KernelTradeWriteCallbacks {
     awaitingConfirmSideRef.current = side;
+    awaitingConfirmPendingIdRef.current = pendingId;
     return {
       onSubmitted: ({ userOpHash: submittedHash }) => {
         trackTradeOrderSubmitted(pendingId, side, symbol);
