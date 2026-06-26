@@ -1,14 +1,16 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { formatEther, formatUnits, parseEther, parseSignature, parseUnits } from "viem";
+import { encodeFunctionData, formatEther, formatUnits, parseEther, parseSignature, parseUnits } from "viem";
 import type { Address, TransactionReceipt } from "viem";
 import { useOpenConnectModal } from "@/hooks/useOpenConnectModal";
 import type { SessionBuyParams, SessionSellParams } from "@/hooks/useSessionTrade";
 import { useWalletFunding } from "@/components/wallet/WalletFundingProvider";
 import { TradeConfirmModal } from "@/components/token/TradeConfirmModal";
 import { assertScwReadyForUserOp } from "@/lib/aa/scw-preflight";
-import { bufferCostWei, bufferedGasCostWei } from "@/lib/aa/gas-buffer";
+import { estimateKernelUserOpPrefundWei } from "@/lib/aa/estimate-kernel-user-op-prefund";
+import { bufferedGasCostWei } from "@/lib/aa/gas-buffer";
+import { userOpPrefundFromCallGasEstimate } from "@/lib/aa/user-op-prefund";
 import {
   buildOptimisticBuyPreview,
   buildOptimisticSellPreview,
@@ -731,31 +733,21 @@ export function TradePanel({
     needsApproval: needsLegacyApproval,
   });
 
-  const estimatedGasWei = useMemo(() => {
+  const userOpPrefundWei = useMemo(() => {
     if (gasCostWei != null && gasCostWei > 0n) return gasCostWei;
     if (gasPrice != null && gasPrice > 0n) {
-      const gasUnits =
+      const callGas =
         side === "buy"
           ? BUY_GAS_FALLBACK
           : SELL_GAS_FALLBACK + (needsLegacyApproval ? APPROVE_GAS_FALLBACK : 0n);
-      return gasUnits * gasPrice;
+      return userOpPrefundFromCallGasEstimate(callGas, gasPrice);
     }
     return 0n;
   }, [gasCostWei, gasPrice, side, needsLegacyApproval]);
 
-  /** On-chain estimate + % buffer for Max / balance checks (not shown in UI). */
-  const gasReserveWei = useMemo(
-    () => bufferCostWei(estimatedGasWei),
-    [estimatedGasWei]
-  );
-
-  const buyGasReserveWei = side === "buy" ? gasReserveWei : 0n;
-  const sellGasReserveWei = side === "sell" ? gasReserveWei : 0n;
-
-  const legacyApproveGasReserveWei = useMemo(() => {
-    if (!needsLegacyApproval || gasPrice == null || gasPrice <= 0n) return 0n;
-    return bufferCostWei(APPROVE_GAS_FALLBACK * gasPrice);
-  }, [needsLegacyApproval, gasPrice]);
+  const buyGasReserveWei = side === "buy" ? userOpPrefundWei : 0n;
+  const sellGasReserveWei = side === "sell" ? userOpPrefundWei : 0n;
+  const legacyApproveGasReserveWei = 0n;
 
   const maxBuySpendWei = useMemo(() => {
     if (!isConnected || bnbBalance === undefined) return 0n;
@@ -857,7 +849,7 @@ export function TradePanel({
       sellGasReserveWei,
       legacyApproveGasReserveWei,
       maxBuySpendWei: liveMaxBuy,
-      gasPriceWei: gasPrice,
+      maxFeePerGasWei: gasPrice,
     });
   };
 
@@ -986,8 +978,8 @@ export function TradePanel({
   const gasCostLabel =
     gasLoading && gasCostWei == null
       ? "…"
-      : estimatedGasWei > 0n
-        ? formatGasCostLabel(estimatedGasWei, bnbUsd)
+      : userOpPrefundWei > 0n
+        ? formatGasCostLabel(userOpPrefundWei, bnbUsd)
         : "—";
 
   const slippagePct = Number(SLIPPAGE_BPS) / 100;
@@ -1441,12 +1433,32 @@ export function TradePanel({
     });
   }
 
+  async function resolveBuyUserOpPrefundWei(buyParams: SessionBuyParams): Promise<bigint> {
+    const buyData = encodeFunctionData({
+      abi: bondingCurveManagerAbi,
+      functionName: buyParams.referrer ? "buyWithReferrer" : "buy",
+      args: buyParams.referrer
+        ? [buyParams.tokenAddress, buyParams.minTokenOut, buyParams.referrer]
+        : [buyParams.tokenAddress, buyParams.minTokenOut],
+    });
+
+    if (kernelClient?.account) {
+      return estimateKernelUserOpPrefundWei(kernelClient, {
+        to: contracts.bondingCurveManager,
+        data: buyData,
+        value: buyParams.value,
+      });
+    }
+
+    return computeConservativeBuyGasReserve(buyGasReserveWei, gasPrice);
+  }
+
   async function hardValidateBeforeSend(
     pendingId: string,
     tradeSide: "buy" | "sell",
     callValueWei: bigint,
-    sellAmountWei?: bigint,
-    extraGasReserveWei = 0n
+    userOpPrefundWei: bigint,
+    sellAmountWei?: bigint
   ) {
     if (!address || bnbBalance === undefined) {
       throw new Error("Wallet balance not ready.");
@@ -1460,8 +1472,6 @@ export function TradePanel({
       tradeSide === "sell" && tokenBalance !== undefined
         ? availableTokenExcluding(pendingLedgerRef.current, tokenBalance, pendingId)
         : tokenBalance;
-    const gasReserve =
-      (tradeSide === "buy" ? buyGasReserveWei : sellGasReserveWei) + extraGasReserveWei;
 
     await hardValidateInstantTrade({
       scwAddress: address,
@@ -1470,11 +1480,7 @@ export function TradePanel({
       bnbBalanceWei: bnbWei,
       tokenBalanceWei: tokenWei,
       sellTokenWei: sellAmountWei,
-      gasReserveWei: gasReserve,
-      gasPriceWei: gasPrice,
-      needsLegacyApproval: tradeSide === "sell" && needsLegacyApproval,
-      legacyApproveGasReserveWei:
-        tradeSide === "sell" ? legacyApproveGasReserveWei : undefined,
+      userOpPrefundWei,
       publicClient: fastTradeConfirm ? createTradeHttpPublicClient() : undefined,
     });
   }
@@ -1482,11 +1488,11 @@ export function TradePanel({
   function dispatchInstantBuy(buyParams: SessionBuyParams, gate: InstantTradeGateBuy) {
     if (!address || !bondingCurve) return;
     const pendingId = createOptimisticPendingId();
-    const buyGasReserved = computeConservativeBuyGasReserve(buyGasReserveWei, gasPrice);
+    const panelPrefund = computeConservativeBuyGasReserve(buyGasReserveWei, gasPrice);
     commitPendingReservation(
       pendingId,
       "buy",
-      gate.submitValue + buyGasReserved,
+      gate.submitValue + panelPrefund,
       0n
     );
     trackTradeOrderPending(pendingId, "buy", symbol);
@@ -1504,7 +1510,8 @@ export function TradePanel({
     queueMicrotask(() => {
       void (async () => {
         try {
-          await hardValidateBeforeSend(pendingId, "buy", buyParams.value);
+          const userOpPrefund = await resolveBuyUserOpPrefundWei(buyParams);
+          await hardValidateBeforeSend(pendingId, "buy", buyParams.value, userOpPrefund);
           await submitBuyWriteContract(pendingId, buyParams);
         } catch (err) {
           handleInstantTradeFailure(pendingId, err);
@@ -1541,7 +1548,13 @@ export function TradePanel({
     queueMicrotask(() => {
       void (async () => {
         try {
-          await hardValidateBeforeSend(pendingId, "sell", 0n, sellParams.amountWei);
+          await hardValidateBeforeSend(
+            pendingId,
+            "sell",
+            0n,
+            sellGasReserveWei,
+            sellParams.amountWei
+          );
           await submitSellWriteContract(pendingId, sellParams, usePermit);
         } catch (err) {
           handleInstantTradeFailure(pendingId, err);
@@ -1559,7 +1572,7 @@ export function TradePanel({
     commitPendingReservation(
       pendingId,
       "sell",
-      sellGasReserveWei + legacyApproveGasReserveWei,
+      sellGasReserveWei,
       gate.sellTokenWei
     );
     trackTradeOrderPending(pendingId, "sell", symbol);
@@ -1586,8 +1599,8 @@ export function TradePanel({
             pendingId,
             "sell",
             0n,
-            sellParams.amountWei,
-            legacyApproveGasReserveWei
+            sellGasReserveWei,
+            sellParams.amountWei
           );
           legacyApproveChainRef.current = true;
           tradeTraceStep("ux.legacy_approve.start");

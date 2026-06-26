@@ -1,13 +1,24 @@
 ﻿import { useEffect, useRef, useState } from "react";
+import { encodeFunctionData } from "viem";
 import { usePublicClient } from "wagmi";
+import { usePumpWallet } from "@/components/wallet/PumpWalletProvider";
 import { contracts, pumpChain } from "@/config/chain";
+import { estimateKernelUserOpPrefundWei } from "@/lib/aa/estimate-kernel-user-op-prefund";
+import { resolveTradeUserOpGasPrice } from "@/lib/aa/pimlico-gas-price";
+import {
+  DEFAULT_APPROVE_CALL_GAS,
+  DEFAULT_BUY_CALL_GAS,
+  DEFAULT_SELL_CALL_GAS,
+  userOpPrefundFromCallGasEstimate,
+} from "@/lib/aa/user-op-prefund";
 import { erc20Abi, maxUint256 } from "@/lib/abis/erc20";
 import { bondingCurveManagerAbi, minOutWithSlippage } from "@/lib/bonding-curve";
 
 const ESTIMATE_DEBOUNCE_MS = 120;
-export const BUY_GAS_FALLBACK = 130_000n;
-export const SELL_GAS_FALLBACK = 150_000n;
-export const APPROVE_GAS_FALLBACK = 55_000n;
+
+export const BUY_GAS_FALLBACK = DEFAULT_BUY_CALL_GAS;
+export const SELL_GAS_FALLBACK = DEFAULT_SELL_CALL_GAS;
+export const APPROVE_GAS_FALLBACK = DEFAULT_APPROVE_CALL_GAS;
 
 type Side = "buy" | "sell";
 type BuyInputMode = "usd" | "bnb" | "token";
@@ -37,8 +48,16 @@ async function estimateGasOrFallback(
   }
 }
 
+async function resolveMaxFeePerGas(
+  getGasPrice: () => Promise<bigint>
+): Promise<bigint> {
+  const fees = await resolveTradeUserOpGasPrice(getGasPrice);
+  return fees.maxFeePerGas;
+}
+
 export function useTradeGasEstimate(params: UseTradeGasEstimateParams) {
   const publicClient = usePublicClient({ chainId: pumpChain.id });
+  const { kernelClient } = usePumpWallet();
   const [gasCostWei, setGasCostWei] = useState<bigint | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const gasCostWeiRef = useRef<bigint | null>(null);
@@ -60,21 +79,20 @@ export function useTradeGasEstimate(params: UseTradeGasEstimateParams) {
 
       try {
         const gasPricePromise = publicClient.getGasPrice();
+        const maxFeePromise = resolveMaxFeePerGas(() => gasPricePromise);
 
         if (!params.address) {
-          const gasPrice = await gasPricePromise;
-          const totalGas =
+          const maxFeePerGas = await maxFeePromise;
+          const callGas =
             params.side === "buy"
-              ? BUY_GAS_FALLBACK
-              : APPROVE_GAS_FALLBACK + SELL_GAS_FALLBACK;
+              ? DEFAULT_BUY_CALL_GAS
+              : DEFAULT_APPROVE_CALL_GAS + DEFAULT_SELL_CALL_GAS;
 
           if (!cancelled) {
-            setGasCostWei(totalGas * gasPrice);
+            setGasCostWei(userOpPrefundFromCallGasEstimate(callGas, maxFeePerGas));
           }
           return;
         }
-
-        let totalGas = 0n;
 
         if (params.side === "buy") {
           const buyValue =
@@ -91,7 +109,23 @@ export function useTradeGasEstimate(params: UseTradeGasEstimateParams) {
               ? minOutWithSlippage(params.targetTokenWei)
               : minOutWithSlippage(params.buyQuoteOut ?? 1n);
 
-          totalGas = await estimateGasOrFallback(
+          const buyData = encodeFunctionData({
+            abi: bondingCurveManagerAbi,
+            functionName: "buy",
+            args: [params.tokenAddress, minTokenOut],
+          });
+
+          if (kernelClient?.account) {
+            const prefund = await estimateKernelUserOpPrefundWei(kernelClient, {
+              to: contracts.bondingCurveManager,
+              data: buyData,
+              value: buyValue,
+            });
+            if (!cancelled) setGasCostWei(prefund);
+            return;
+          }
+
+          const callGas = await estimateGasOrFallback(
             () =>
               publicClient.estimateContractGas({
                 account: params.address,
@@ -101,16 +135,35 @@ export function useTradeGasEstimate(params: UseTradeGasEstimateParams) {
                 args: [params.tokenAddress, minTokenOut],
                 value: buyValue,
               }),
-            BUY_GAS_FALLBACK
+            DEFAULT_BUY_CALL_GAS
           );
-        } else {
-          if (params.targetTokenWei === 0n) {
-            throw new Error("missing sell amount");
+          const maxFeePerGas = await maxFeePromise;
+          if (!cancelled) {
+            setGasCostWei(userOpPrefundFromCallGasEstimate(callGas, maxFeePerGas));
           }
+          return;
+        }
 
-          const minBnbOut = minOutWithSlippage(params.sellQuoteOut ?? 1n);
+        if (params.targetTokenWei === 0n) {
+          throw new Error("missing sell amount");
+        }
 
-          if (params.needsApproval) {
+        const minBnbOut = minOutWithSlippage(params.sellQuoteOut ?? 1n);
+        let totalPrefund = 0n;
+
+        if (params.needsApproval) {
+          const approveData = encodeFunctionData({
+            abi: erc20Abi,
+            functionName: "approve",
+            args: [contracts.bondingCurveManager, maxUint256],
+          });
+
+          if (kernelClient?.account) {
+            totalPrefund += await estimateKernelUserOpPrefundWei(kernelClient, {
+              to: params.tokenAddress,
+              data: approveData,
+            });
+          } else {
             const approveGas = await estimateGasOrFallback(
               () =>
                 publicClient.estimateContractGas({
@@ -120,11 +173,25 @@ export function useTradeGasEstimate(params: UseTradeGasEstimateParams) {
                   functionName: "approve",
                   args: [contracts.bondingCurveManager, maxUint256],
                 }),
-              APPROVE_GAS_FALLBACK
+              DEFAULT_APPROVE_CALL_GAS
             );
-            totalGas += approveGas;
+            const maxFeePerGas = await maxFeePromise;
+            totalPrefund += userOpPrefundFromCallGasEstimate(approveGas, maxFeePerGas);
           }
+        }
 
+        const sellData = encodeFunctionData({
+          abi: bondingCurveManagerAbi,
+          functionName: "sell",
+          args: [params.tokenAddress, params.targetTokenWei, minBnbOut],
+        });
+
+        if (kernelClient?.account) {
+          totalPrefund += await estimateKernelUserOpPrefundWei(kernelClient, {
+            to: contracts.bondingCurveManager,
+            data: sellData,
+          });
+        } else {
           const sellGas = await estimateGasOrFallback(
             () =>
               publicClient.estimateContractGas({
@@ -134,15 +201,14 @@ export function useTradeGasEstimate(params: UseTradeGasEstimateParams) {
                 functionName: "sell",
                 args: [params.tokenAddress, params.targetTokenWei, minBnbOut],
               }),
-            SELL_GAS_FALLBACK
+            DEFAULT_SELL_CALL_GAS
           );
-          totalGas += sellGas;
+          const maxFeePerGas = await maxFeePromise;
+          totalPrefund += userOpPrefundFromCallGasEstimate(sellGas, maxFeePerGas);
         }
 
-        const gasPrice = await gasPricePromise;
-
         if (!cancelled) {
-          setGasCostWei(totalGas * gasPrice);
+          setGasCostWei(totalPrefund);
         }
       } catch {
         if (!cancelled) {
@@ -161,6 +227,7 @@ export function useTradeGasEstimate(params: UseTradeGasEstimateParams) {
     };
   }, [
     publicClient,
+    kernelClient,
     params.enabled,
     params.address,
     params.side,

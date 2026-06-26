@@ -25,6 +25,12 @@ export function formatTradeError(err: unknown): string {
   if (lower.includes("insufficient funds")) {
     return `Insufficient ${NATIVE_SYMBOL} balance for this trade.`;
   }
+  if (
+    lower.includes("smart account does not have sufficient funds") ||
+    lower.includes("required prefund")
+  ) {
+    return `Smart wallet needs more ${NATIVE_SYMBOL} for trade amount + UserOp gas. Deposit via Wallet → Deposit, or lower the buy amount.`;
+  }
   if (lower.includes("pausedorgraduated") || lower.includes("paused()")) {
     return "Trading is closed for this token.";
   }

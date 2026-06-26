@@ -1,5 +1,4 @@
-import {
-  createKernelAccountClient,
+import { createKernelAccountClient,
   type KernelAccountClient,
 } from "@zerodev/sdk";
 import { getEntryPoint, KERNEL_V3_1 } from "@zerodev/sdk/constants";
@@ -16,24 +15,16 @@ import { createBundlerTransport } from "@/lib/aa/bundler-transport";
 import { resolveTradeUserOpGasPrice, resolveUserOpGasPrice } from "@/lib/aa/pimlico-gas-price";
 import { sendKernelTransaction } from "@/lib/aa/send-kernel-transaction";
 import { assertScwReadyForUserOp } from "@/lib/aa/scw-preflight";
+import {
+  bumpGasLimit,
+  MIN_VERIFICATION_GAS,
+  MIN_VERIFICATION_GAS_DEPLOY,
+  MIN_CALL_GAS_LIMIT,
+  MIN_PRE_VERIFICATION_GAS,
+} from "@/lib/aa/user-op-prefund";
 
 export const entryPoint = getEntryPoint("0.7");
 export const kernelVersion = KERNEL_V3_1;
-
-/** Skandha can underestimate Kernel deploy + ECDSA validation on BSC (AA26). */
-const GAS_BUFFER_NUM = 13n;
-const GAS_BUFFER_DEN = 10n;
-const MIN_VERIFICATION_GAS = 150_000n;
-const MIN_VERIFICATION_GAS_DEPLOY = 400_000n;
-
-function maxBigInt(a: bigint, b: bigint): bigint {
-  return a > b ? a : b;
-}
-
-function bumpGasLimit(value: bigint, floor: bigint): bigint {
-  const buffered = (value * GAS_BUFFER_NUM) / GAS_BUFFER_DEN;
-  return maxBigInt(buffered, floor);
-}
 
 function userOpNeedsAccountDeploy(userOp: {
   factory?: Address | null;
@@ -68,8 +59,8 @@ function createKernelUserOperationConfig(
     return {
       ...userOp,
       verificationGasLimit: bumpGasLimit(gas.verificationGasLimit, vglFloor),
-      callGasLimit: bumpGasLimit(gas.callGasLimit, 80_000n),
-      preVerificationGas: bumpGasLimit(gas.preVerificationGas, 40_000n),
+      callGasLimit: bumpGasLimit(gas.callGasLimit, MIN_CALL_GAS_LIMIT),
+      preVerificationGas: bumpGasLimit(gas.preVerificationGas, MIN_PRE_VERIFICATION_GAS),
     };
   }) as typeof viemPrepareUserOperation;
 

@@ -1,10 +1,10 @@
 import { formatEther, type Address, type PublicClient } from "viem";
 import { NATIVE_SYMBOL } from "@/config/chain";
 import { createPumpPublicClient } from "@/lib/aa/kernel-account";
-import { bufferedGasCostWei } from "@/lib/aa/gas-buffer";
-
-/** Rough AA relay floor when no explicit estimate is available. */
-const MIN_USER_OP_GAS_UNITS = 200_000n;
+import {
+  DEFAULT_BUY_CALL_GAS,
+  userOpPrefundFromCallGasEstimate,
+} from "@/lib/aa/user-op-prefund";
 
 export async function getScwNativeBalance(
   scwAddress: Address,
@@ -25,7 +25,10 @@ export async function assertScwReadyForUserOp(
   const gasReserve =
     gasReserveWei != null && gasReserveWei > 0n
       ? gasReserveWei
-      : bufferedGasCostWei(MIN_USER_OP_GAS_UNITS, await client.getGasPrice());
+      : userOpPrefundFromCallGasEstimate(
+          DEFAULT_BUY_CALL_GAS,
+          await client.getGasPrice()
+        );
   const required = callValueWei + gasReserve;
 
   if (balance < required) {

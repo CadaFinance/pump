@@ -1,19 +1,15 @@
-import { parseGwei } from "viem";
 import type { Address, PublicClient } from "viem";
 import { NATIVE_SYMBOL } from "@/config/chain";
-import { bufferedGasCostWei } from "@/lib/aa/gas-buffer";
 import { assertScwReadyForUserOp } from "@/lib/aa/scw-preflight";
+import {
+  DEFAULT_BUY_CALL_GAS,
+  userOpPrefundFromCallGasEstimate,
+} from "@/lib/aa/user-op-prefund";
 import {
   quoteBuyFromCurveState,
   quoteSellFromCurveState,
   type BondingCurveState,
 } from "@/lib/bonding-curve";
-
-/** Extra gas headroom on top of buffered estimate — stale gasPrice / AA simulate slack. */
-export const INSTANT_TRADE_GAS_HEADROOM_BPS = 2_000n; // +20%
-
-const SCW_MIN_GAS_UNITS = 200_000n;
-const MIN_GAS_PRICE_WEI = parseGwei("0.1");
 
 export type InstantTradeGateInput = {
   side: "buy" | "sell";
@@ -32,12 +28,13 @@ export type InstantTradeGateInput = {
   availableBnbBalance?: bigint;
   /** Spendable token balance after in-flight trade reservations. */
   availableTokenBalance?: bigint;
+  /** Kernel UserOp prefund wei (verification + call + preVerification) × maxFeePerGas. */
   buyGasReserveWei: bigint;
   sellGasReserveWei: bigint;
-  /** Extra gas when sell requires a separate ERC20 approve tx (SCW path). */
+  /** Extra prefund when sell requires a separate ERC20 approve UserOp (SCW path). */
   legacyApproveGasReserveWei?: bigint;
   maxBuySpendWei: bigint;
-  gasPriceWei?: bigint;
+  maxFeePerGasWei?: bigint;
 };
 
 export type InstantTradeGateBuy = {
@@ -66,102 +63,63 @@ export type InstantTradeGateResult =
   | InstantTradeGateSell
   | InstantTradeGateFail;
 
-function gasReserveWithHeadroom(reserveWei: bigint): bigint {
-  if (reserveWei <= 0n) return 0n;
-  return (reserveWei * (10_000n + INSTANT_TRADE_GAS_HEADROOM_BPS)) / 10_000n;
-}
-
-function scwGasFloor(gasPriceWei?: bigint): bigint {
-  const price =
-    gasPriceWei != null && gasPriceWei > 0n ? gasPriceWei : MIN_GAS_PRICE_WEI;
-  return bufferedGasCostWei(SCW_MIN_GAS_UNITS, price);
-}
-
-function conservativeGasReserve(
+function tradeUserOpPrefundWei(
   side: "buy" | "sell",
   input: InstantTradeGateInput
 ): bigint {
-  const panelReserve =
+  const panelPrefund =
     side === "buy" ? input.buyGasReserveWei : input.sellGasReserveWei;
   const legacyApprove =
     side === "sell" && input.needsLegacyApproval
       ? (input.legacyApproveGasReserveWei ?? 0n)
       : 0n;
-  const floor = scwGasFloor(input.gasPriceWei);
-  const base = panelReserve + legacyApprove > floor ? panelReserve + legacyApprove : floor;
-  return gasReserveWithHeadroom(base);
+  return panelPrefund + legacyApprove;
 }
 
-function stubGateInput(
-  partial: Pick<
-    InstantTradeGateInput,
-    "side" | "buyGasReserveWei" | "sellGasReserveWei" | "gasPriceWei"
-  > &
-    Partial<
-      Pick<InstantTradeGateInput, "needsLegacyApproval" | "legacyApproveGasReserveWei">
-    >
-): InstantTradeGateInput {
-  return {
-    side: partial.side,
-    paused: false,
-    wrongChain: false,
-    needsLegacyApproval: partial.needsLegacyApproval ?? false,
-    sellUsesPermit: false,
-    allowanceSufficient: true,
-    buyCostWei: partial.side === "buy" ? 1n : 0n,
-    sellTokenWei: partial.side === "sell" ? 1n : 0n,
-    buyGasReserveWei: partial.buyGasReserveWei,
-    sellGasReserveWei: partial.sellGasReserveWei,
-    legacyApproveGasReserveWei: partial.legacyApproveGasReserveWei,
-    maxBuySpendWei: 0n,
-    gasPriceWei: partial.gasPriceWei,
-  };
+function fallbackBuyPrefundWei(maxFeePerGasWei?: bigint): bigint {
+  if (maxFeePerGasWei == null || maxFeePerGasWei <= 0n) return 0n;
+  return userOpPrefundFromCallGasEstimate(DEFAULT_BUY_CALL_GAS, maxFeePerGasWei);
 }
 
-/** Gas headroom used by the instant gate — Max buy must reserve the same amount. */
+/** UserOp prefund reserved for a buy — same value the gate uses for Max / balance checks. */
 export function computeConservativeBuyGasReserve(
   buyGasReserveWei: bigint,
-  gasPriceWei?: bigint
+  maxFeePerGasWei?: bigint
 ): bigint {
-  return conservativeGasReserve(
-    "buy",
-    stubGateInput({ side: "buy", buyGasReserveWei, sellGasReserveWei: 0n, gasPriceWei })
-  );
+  if (buyGasReserveWei > 0n) return buyGasReserveWei;
+  return fallbackBuyPrefundWei(maxFeePerGasWei);
 }
 
-/** Same conservative gas reserve as the instant gate for sells. */
 export function computeConservativeSellGasReserve(
   sellGasReserveWei: bigint,
-  gasPriceWei?: bigint,
+  maxFeePerGasWei?: bigint,
   legacyApproveGasReserveWei?: bigint,
   needsLegacyApproval = false
 ): bigint {
-  return conservativeGasReserve(
-    "sell",
-    stubGateInput({
-      side: "sell",
-      buyGasReserveWei: 0n,
-      sellGasReserveWei,
-      gasPriceWei,
-      legacyApproveGasReserveWei,
-      needsLegacyApproval,
-    })
-  );
+  const sellPrefund =
+    sellGasReserveWei > 0n
+      ? sellGasReserveWei
+      : fallbackBuyPrefundWei(maxFeePerGasWei);
+  const approvePrefund =
+    needsLegacyApproval && legacyApproveGasReserveWei != null
+      ? legacyApproveGasReserveWei
+      : 0n;
+  return sellPrefund + approvePrefund;
 }
 
-/** Max ETH spend for buy that still passes the instant gate (balance − conservative gas). */
+/** Max ETH spend for buy that still passes the instant gate (balance − UserOp prefund). */
 export function computeMaxBuySpendWei(
   availableNativeWei: bigint,
   buyGasReserveWei: bigint,
-  gasPriceWei?: bigint
+  maxFeePerGasWei?: bigint
 ): bigint {
-  const gasReserve = computeConservativeBuyGasReserve(buyGasReserveWei, gasPriceWei);
-  if (availableNativeWei <= gasReserve) return 0n;
-  return availableNativeWei - gasReserve;
+  const prefund = computeConservativeBuyGasReserve(buyGasReserveWei, maxFeePerGasWei);
+  if (availableNativeWei <= prefund) return 0n;
+  return availableNativeWei - prefund;
 }
 
 /**
- * Synchronous gate — only returns ok when cached balances + gas math pass with headroom.
+ * Synchronous gate — only returns ok when cached balances + UserOp prefund math pass.
  * Used for 0ms optimistic UI; must pair with `hardValidateInstantTrade` before send.
  */
 export function evaluateInstantTradeGate(
@@ -176,8 +134,8 @@ export function evaluateInstantTradeGate(
     return { ok: false, reason: "curve_unavailable" };
   }
 
-  const gasReserve = conservativeGasReserve(input.side, input);
-  if (gasReserve <= 0n) return { ok: false, reason: "gas_reserve_unknown" };
+  const prefund = tradeUserOpPrefundWei(input.side, input);
+  if (prefund <= 0n) return { ok: false, reason: "gas_reserve_unknown" };
 
   const nativeBalance = input.availableBnbBalance ?? input.bnbBalance!;
   const tokenBalance = input.availableTokenBalance ?? input.tokenBalance;
@@ -187,7 +145,7 @@ export function evaluateInstantTradeGate(
     const submitValue =
       input.buyCostWei > input.maxBuySpendWei ? input.maxBuySpendWei : input.buyCostWei;
     if (submitValue <= 0n) return { ok: false, reason: "insufficient_bnb" };
-    if (submitValue + gasReserve > nativeBalance) {
+    if (submitValue + prefund > nativeBalance) {
       return { ok: false, reason: "insufficient_bnb_gas" };
     }
 
@@ -206,12 +164,12 @@ export function evaluateInstantTradeGate(
   if (input.sellTokenWei > tokenBalance) {
     return { ok: false, reason: "insufficient_token" };
   }
-  if (nativeBalance < gasReserve) {
+  if (nativeBalance < prefund) {
     return { ok: false, reason: "insufficient_gas" };
   }
 
   if (input.needsLegacyApproval) {
-    // SCW cannot EIP-2612 permit — approve + sell; gas reserve includes both txs.
+    // SCW cannot EIP-2612 permit — approve + sell; prefund includes both UserOps.
   } else if (input.sellUsesPermit) {
     // Permit signs in background — allowance not required on-chain yet.
   } else if (!input.allowanceSufficient) {
@@ -241,11 +199,8 @@ export type HardValidateInstantTradeInput = {
   bnbBalanceWei: bigint;
   tokenBalanceWei?: bigint;
   sellTokenWei?: bigint;
-  /** Panel gas estimate (pre-buffer) — paired with gasPriceWei for conservative reserve. */
-  gasReserveWei: bigint;
-  gasPriceWei?: bigint;
-  needsLegacyApproval?: boolean;
-  legacyApproveGasReserveWei?: bigint;
+  /** UserOp prefund wei from prepareUserOperation or panel estimate. */
+  userOpPrefundWei: bigint;
   publicClient?: PublicClient;
 };
 
@@ -253,18 +208,13 @@ export type HardValidateInstantTradeInput = {
 export async function hardValidateInstantTrade(
   input: HardValidateInstantTradeInput
 ): Promise<void> {
-  const gasReserve =
-    input.side === "buy"
-      ? computeConservativeBuyGasReserve(input.gasReserveWei, input.gasPriceWei)
-      : computeConservativeSellGasReserve(
-          input.gasReserveWei,
-          input.gasPriceWei,
-          input.legacyApproveGasReserveWei,
-          input.needsLegacyApproval
-        );
+  const prefund = input.userOpPrefundWei;
+  if (prefund <= 0n) {
+    throw new Error("Network fee estimate unavailable.");
+  }
 
   if (input.side === "buy") {
-    if (input.callValueWei + gasReserve > input.bnbBalanceWei) {
+    if (input.callValueWei + prefund > input.bnbBalanceWei) {
       throw new Error(`Insufficient ${NATIVE_SYMBOL} for trade and gas.`);
     }
   } else {
@@ -273,7 +223,7 @@ export async function hardValidateInstantTrade(
     if (input.tokenBalanceWei !== undefined && sellWei > input.tokenBalanceWei) {
       throw new Error("Insufficient token balance.");
     }
-    if (input.bnbBalanceWei < gasReserve) {
+    if (input.bnbBalanceWei < prefund) {
       throw new Error(`Insufficient ${NATIVE_SYMBOL} for network fees.`);
     }
   }
@@ -282,7 +232,7 @@ export async function hardValidateInstantTrade(
     input.scwAddress,
     input.side === "buy" ? input.callValueWei : 0n,
     input.publicClient,
-    gasReserve
+    prefund
   );
 }
 
