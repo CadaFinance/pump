@@ -1,5 +1,6 @@
 import {
   BONDING_TOKEN_SUPPLY_HUMAN,
+  BONDING_VIRTUAL_BNB_HUMAN,
   spotPriceBnbFromBondingDecimals,
 } from "@/lib/bonding-curve";
 import type { TokenListItem } from "@/lib/db/launchpad";
@@ -13,6 +14,8 @@ export type ArenaTradeWsPayload = {
     marketCapZug?: string;
     lastPriceZug?: string;
     spotPriceZug?: string;
+    virtualZugReserve?: string;
+    virtualTokenReserve?: string;
     progressBps?: number;
     tradeCount?: number;
     holderCount?: number;
@@ -27,17 +30,31 @@ function bondingFieldPresent(value: string | undefined): boolean {
   return value != null && value !== "" && Number.isFinite(Number(value));
 }
 
-/** Marginal spot BNB/token from WS bonding fields (human DB decimals). */
+/**
+ * Marginal spot from WS — same formula as portfolio SQL (`SQL_BONDING_MARK_PRICE_ZUG`).
+ * Uses per-token virtual reserves when indexer sends them.
+ */
 export function arenaWsSpotPriceBnb(
   bonding: NonNullable<ArenaTradeWsPayload["bonding"]>
 ): number {
   if (bondingFieldPresent(bonding.reserveZug) && bondingFieldPresent(bonding.tokenSold)) {
-    return spotPriceBnbFromBondingDecimals(bonding.reserveZug, bonding.tokenSold);
+    const virtualZug = bondingFieldPresent(bonding.virtualZugReserve)
+      ? Number(bonding.virtualZugReserve)
+      : BONDING_VIRTUAL_BNB_HUMAN;
+    const virtualToken = bondingFieldPresent(bonding.virtualTokenReserve)
+      ? Number(bonding.virtualTokenReserve)
+      : BONDING_TOKEN_SUPPLY_HUMAN;
+    return spotPriceBnbFromBondingDecimals(
+      bonding.reserveZug,
+      bonding.tokenSold,
+      virtualZug,
+      virtualToken
+    );
   }
 
-  const lastSpot = Number(bonding.lastPriceZug);
-  if (Number.isFinite(lastSpot) && lastSpot > 0 && lastSpot < 1) {
-    return lastSpot;
+  const spotPublished = Number(bonding.spotPriceZug ?? bonding.lastPriceZug);
+  if (Number.isFinite(spotPublished) && spotPublished > 0) {
+    return spotPublished;
   }
 
   const mcap = Number(bonding.marketCapZug);
@@ -48,27 +65,12 @@ export function arenaWsSpotPriceBnb(
   return 0;
 }
 
-/**
- * Same mark-cap as API SQL / portfolio launched tokens.
- * Prefer indexer-published marketCapZug (DB bonding_states) over client reserve replay —
- * replay uses default virtual reserves and can understate MCAP vs SQL.
- */
+/** Mark cap = spot × 1B supply — matches portfolio / listTokensByCreator SQL. */
 export function bondingMarkCapBnbFromWs(
   bonding: NonNullable<ArenaTradeWsPayload["bonding"]>,
   previousMarketCapBnb?: string | number | null
 ): string | null {
   const prev = Number(previousMarketCapBnb);
-
-  const mcapCol = Number(bonding.marketCapZug);
-  if (Number.isFinite(mcapCol) && mcapCol > 0) {
-    if (isMcapJumpSane(prev, mcapCol)) return String(mcapCol);
-  }
-
-  const spotPublished = Number(bonding.spotPriceZug ?? bonding.lastPriceZug);
-  if (Number.isFinite(spotPublished) && spotPublished > 0) {
-    const mcap = spotPublished * BONDING_TOKEN_SUPPLY_HUMAN;
-    if (isMcapJumpSane(prev, mcap)) return String(mcap);
-  }
 
   const spot = arenaWsSpotPriceBnb(bonding);
   if (spot > 0) {
@@ -77,6 +79,7 @@ export function bondingMarkCapBnbFromWs(
     if (!Number.isFinite(prev) || prev <= 0) return String(mcap);
   }
 
+  const mcapCol = Number(bonding.marketCapZug);
   if (Number.isFinite(mcapCol) && mcapCol > 0 && isMcapJumpSane(prev, mcapCol)) {
     return String(mcapCol);
   }
@@ -91,7 +94,7 @@ function isMcapJumpSane(previous: number, next: number): boolean {
   return ratio <= MCAP_JUMP_REJECT_RATIO && ratio >= 1 / MCAP_JUMP_REJECT_RATIO;
 }
 
-/** Apply indexer WS trade payload to a board row without full refetch. */
+/** Patch tx/holder fields only — MCAP/ATH/vol come from API refetch (same SQL as portfolio). */
 export function patchTokenFromArenaTrade(
   token: TokenListItem,
   payload: ArenaTradeWsPayload
@@ -102,25 +105,12 @@ export function patchTokenFromArenaTrade(
   const bonding = payload.bonding;
   if (!bonding) return null;
 
-  const nextMcap =
-    bondingMarkCapBnbFromWs(bonding, token.marketCapBnb) ?? token.marketCapBnb;
-
-  const nextMcapNum = Number(nextMcap);
-  const prevAth = Number(token.athMarketCapBnb ?? token.marketCapBnb ?? 0);
-  const nextAth =
-    Number.isFinite(nextMcapNum) && nextMcapNum > 0 && nextMcapNum > prevAth
-      ? String(nextMcapNum)
-      : token.athMarketCapBnb;
-
   return {
     ...token,
     progressBps: bonding.progressBps ?? token.progressBps,
     reserveBnb: bonding.reserveZug ?? token.reserveBnb,
-    marketCapBnb: nextMcap,
-    athMarketCapBnb: nextAth,
     tradeCount: bonding.tradeCount ?? token.tradeCount,
     holderCount: bonding.holderCount ?? token.holderCount,
-    volume24hBnb: bonding.volume24hZug ?? token.volume24hBnb,
     traders24h: bonding.traders24h ?? token.traders24h,
   };
 }

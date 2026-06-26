@@ -107,15 +107,19 @@ export function patchTokenDetailFromWsTrade(
   };
 }
 
-/** Spot from bonding WS — prefer indexer fields over default-virtual reserve replay. */
+/** Spot from bonding WS — per-token virtual reserves when present (matches portfolio SQL). */
 export function wsBondingSpotPriceBnb(
-  bonding: { reserveZug?: string; tokenSold?: string; lastPriceZug?: string; marketCapZug?: string; spotPriceZug?: string } | undefined
+  bonding: {
+    reserveZug?: string;
+    tokenSold?: string;
+    lastPriceZug?: string;
+    marketCapZug?: string;
+    spotPriceZug?: string;
+    virtualZugReserve?: string;
+    virtualTokenReserve?: string;
+  } | undefined
 ): number {
   if (!bonding) return 0;
-  const spotPublished = Number(bonding.spotPriceZug ?? bonding.lastPriceZug);
-  if (Number.isFinite(spotPublished) && spotPublished > 0) return spotPublished;
-  const mcap = Number(bonding.marketCapZug);
-  if (Number.isFinite(mcap) && mcap > 0) return mcap / BONDING_TOKEN_SUPPLY_HUMAN;
   return arenaWsSpotPriceBnb(bonding);
 }
 

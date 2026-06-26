@@ -23,23 +23,23 @@ SELECT
   b.token_address,
   CASE
     WHEN (1000000000::numeric - COALESCE(b.token_sold, 0)) > 0
-    THEN ((5::numeric + COALESCE(b.reserve_zug, 0))
-         / (1000000000::numeric - COALESCE(b.token_sold, 0)))
+    THEN ((COALESCE(b.virtual_zug_reserve, 5)::numeric + COALESCE(b.reserve_zug, 0))
+         / (COALESCE(b.virtual_token_reserve, 1000000000)::numeric - COALESCE(b.token_sold, 0)))
          * 1000000000
     ELSE COALESCE(b.market_cap_zug, 0)
   END AS market_cap_zug,
   CASE
     WHEN (1000000000::numeric - COALESCE(b.token_sold, 0)) > 0
-    THEN (5::numeric + COALESCE(b.reserve_zug, 0))
-         / (1000000000::numeric - COALESCE(b.token_sold, 0))
+    THEN (COALESCE(b.virtual_zug_reserve, 5)::numeric + COALESCE(b.reserve_zug, 0))
+         / (COALESCE(b.virtual_token_reserve, 1000000000)::numeric - COALESCE(b.token_sold, 0))
     ELSE COALESCE(b.last_price_zug, 0)
   END AS spot_price_zug,
   GREATEST(
     COALESCE(b.market_cap_zug, 0),
     CASE
       WHEN (1000000000::numeric - COALESCE(b.token_sold, 0)) > 0
-      THEN ((5::numeric + COALESCE(b.reserve_zug, 0))
-           / (1000000000::numeric - COALESCE(b.token_sold, 0)))
+      THEN ((COALESCE(b.virtual_zug_reserve, 5)::numeric + COALESCE(b.reserve_zug, 0))
+           / (COALESCE(b.virtual_token_reserve, 1000000000)::numeric - COALESCE(b.token_sold, 0)))
            * 1000000000
       ELSE 0
     END

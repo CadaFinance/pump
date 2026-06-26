@@ -118,8 +118,8 @@ function touchPrices(open: number, spotBefore: number, spotAfter: number): {
   };
 }
 
-async function readBondingVirtualReserves(
-  client: pg.PoolClient,
+export async function readBondingVirtualReserves(
+  client: pg.Pool | pg.PoolClient,
   tokenAddress: string
 ): Promise<{ virtualZug: bigint; virtualToken: bigint }> {
   const defaults = virtualReserves();

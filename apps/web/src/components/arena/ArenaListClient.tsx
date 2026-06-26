@@ -835,6 +835,7 @@ export function ArenaListClient({
   loadFavoriteTokensRef.current = loadFavoriteTokens;
 
   const lastArenaWsSeqRef = useRef(0);
+  const tradeRefetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const applyArenaWsMessages = useCallback(
     (messages: unknown[]) => {
@@ -846,23 +847,18 @@ export function ArenaListClient({
         if (payload.type === "trade" && payload.tokenAddress && tokensRef.current) {
           const { next, changed } = patchArenaTokenList(tokensRef.current, payload);
           if (changed) {
-            const addr = payload.tokenAddress.toLowerCase();
-            const oldToken = tokensRef.current.find((t) => t.address.toLowerCase() === addr);
-            const newToken = next.find((t) => t.address.toLowerCase() === addr);
-            if (oldToken && newToken) {
-              const prevMcap = Number(oldToken.marketCapBnb);
-              const nextMcap = Number(newToken.marketCapBnb);
-              if (Number.isFinite(prevMcap) && Number.isFinite(nextMcap) && prevMcap !== nextMcap) {
-                triggerFlash(`${addr}:mcap`, nextMcap > prevMcap ? "up" : "down");
-              }
-              snapAnimatedCapsForToken(newToken);
-            }
             setTokens(next);
             setTopByMcap((prev) => {
               const { next: patchedTop, changed: topChanged } = patchArenaTokenList(prev, payload);
               return topChanged ? patchedTop : prev;
             });
           }
+          // MCAP/ATH/vol windows: same SQL as portfolio — refetch board, do not trust WS mcap replay.
+          if (tradeRefetchTimerRef.current) clearTimeout(tradeRefetchTimerRef.current);
+          tradeRefetchTimerRef.current = setTimeout(() => {
+            tradeRefetchTimerRef.current = null;
+            void loadRef.current(listLimitRef.current, { silent: true });
+          }, 300);
           continue;
         }
 
@@ -879,6 +875,12 @@ export function ArenaListClient({
     },
     [triggerFlash, snapAnimatedCapsForToken]
   );
+
+  useEffect(() => {
+    return () => {
+      if (tradeRefetchTimerRef.current) clearTimeout(tradeRefetchTimerRef.current);
+    };
+  }, []);
 
   const queueArenaWsMessage = useRafMessageQueue(applyArenaWsMessages);
 
