@@ -15,6 +15,8 @@ import {
   type OptimisticTradePreview,
 } from "@/lib/trade-optimistic-preview";
 import {
+  computeConservativeBuyGasReserve,
+  computeMaxBuySpendWei,
   createOptimisticPendingId,
   evaluateInstantTradeGate,
   hardValidateInstantTrade,
@@ -758,9 +760,8 @@ export function TradePanel({
   const maxBuySpendWei = useMemo(() => {
     if (!isConnected || bnbBalance === undefined) return 0n;
     const effective = effectiveNativeBalance(pendingLedgerRef.current, bnbBalance.value);
-    if (effective <= buyGasReserveWei) return 0n;
-    return effective - buyGasReserveWei;
-  }, [isConnected, bnbBalance, buyGasReserveWei, pendingReservationTick]);
+    return computeMaxBuySpendWei(effective, buyGasReserveWei, gasPrice);
+  }, [isConnected, bnbBalance, buyGasReserveWei, gasPrice, pendingReservationTick]);
 
   const maxSellTokenWei = useMemo(() => {
     if (!isConnected || tokenBalance === undefined || tokenBalance === 0n) {
@@ -833,8 +834,8 @@ export function TradePanel({
         ? effectiveTokenBalance(pendingLedgerRef.current, tokenBalance)
         : undefined;
     const liveMaxBuy =
-      availableNative !== undefined && availableNative > buyGasReserveWei
-        ? availableNative - buyGasReserveWei
+      availableNative !== undefined
+        ? computeMaxBuySpendWei(availableNative, buyGasReserveWei, gasPrice)
         : 0n;
 
     return evaluateInstantTradeGate({
@@ -1477,10 +1478,11 @@ export function TradePanel({
   function dispatchInstantBuy(buyParams: SessionBuyParams, gate: InstantTradeGateBuy) {
     if (!address || !bondingCurve) return;
     const pendingId = createOptimisticPendingId();
+    const buyGasReserved = computeConservativeBuyGasReserve(buyGasReserveWei, gasPrice);
     commitPendingReservation(
       pendingId,
       "buy",
-      gate.submitValue + buyGasReserveWei,
+      gate.submitValue + buyGasReserved,
       0n
     );
     trackTradeOrderPending(pendingId, "buy", symbol);
@@ -1956,17 +1958,27 @@ export function TradePanel({
     void submitTrade();
   }, [side, sellTokenWei, sellQuoteOut, buyCostWei, balancePending]);
 
+  const buyGateBlocked =
+    side === "buy" &&
+    isConnected &&
+    !wrongChain &&
+    buyCostWei > 0n &&
+    !instantTradeGate.ok &&
+    !isTransientInstantGateReason(instantTradeGate.reason);
+
   const submitActionLabel = !isConnected
     ? "Sign in to trade"
     : wrongChain
       ? "Switch to Base Sepolia"
       : showInsufficientTokenBalance
         ? "Insufficient balance"
-        : showDepositCta
-          ? `Deposit ${NATIVE_SYMBOL}`
-          : side === "buy"
-            ? "Buy"
-            : "Sell";
+        : buyGateBlocked
+          ? `Not enough ${NATIVE_SYMBOL}`
+          : showDepositCta
+            ? `Deposit ${NATIVE_SYMBOL}`
+            : side === "buy"
+              ? "Buy"
+              : "Sell";
 
   const hardSubmitDisabled = isConnected && (wrongChain || paused);
   const submitButtonClass = showDepositCta
@@ -1975,7 +1987,7 @@ export function TradePanel({
       ? "trade-submit-button--sell"
       : "trade-submit-button--buy";
   const submitDisabled =
-    hardSubmitDisabled || showInsufficientTokenBalance;
+    hardSubmitDisabled || showInsufficientTokenBalance || buyGateBlocked;
 
   const canUseMaxBuy =
     side === "buy" &&

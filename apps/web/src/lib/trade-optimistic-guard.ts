@@ -92,6 +92,38 @@ function conservativeGasReserve(
   return gasReserveWithHeadroom(base);
 }
 
+/** Gas headroom used by the instant gate — Max buy must reserve the same amount. */
+export function computeConservativeBuyGasReserve(
+  buyGasReserveWei: bigint,
+  gasPriceWei?: bigint
+): bigint {
+  return conservativeGasReserve("buy", {
+    side: "buy",
+    paused: false,
+    wrongChain: false,
+    needsLegacyApproval: false,
+    sellUsesPermit: false,
+    allowanceSufficient: true,
+    buyCostWei: 1n,
+    sellTokenWei: 0n,
+    buyGasReserveWei,
+    sellGasReserveWei: 0n,
+    maxBuySpendWei: 0n,
+    gasPriceWei,
+  });
+}
+
+/** Max ETH spend for buy that still passes the instant gate (balance − conservative gas). */
+export function computeMaxBuySpendWei(
+  availableNativeWei: bigint,
+  buyGasReserveWei: bigint,
+  gasPriceWei?: bigint
+): bigint {
+  const gasReserve = computeConservativeBuyGasReserve(buyGasReserveWei, gasPriceWei);
+  if (availableNativeWei <= gasReserve) return 0n;
+  return availableNativeWei - gasReserve;
+}
+
 /**
  * Synchronous gate — only returns ok when cached balances + gas math pass with headroom.
  * Used for 0ms optimistic UI; must pair with `hardValidateInstantTrade` before send.
