@@ -225,6 +225,12 @@ function formatReceiveAmount(value: string | number): string {
   return n.toLocaleString(undefined, { maximumFractionDigits: 6 });
 }
 
+function formatTokenAvailableBalance(value: string | number): string {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return "0";
+  return Math.floor(n).toLocaleString(undefined, { maximumFractionDigits: 0 });
+}
+
 function ChevronDownIcon({ open }: { open: boolean }) {
   return (
     <svg
@@ -1049,7 +1055,7 @@ export function TradePanel({
 
     if (tokenBalance === undefined) return "…";
     if (sellInputMode === "token") {
-      return `${formatReceiveAmount(formatUnits(maxSellTokenWei, 18))} ${symbol}`;
+      return `${formatTokenAvailableBalance(formatUnits(maxSellTokenWei, 18))} ${symbol}`;
     }
     if (!bondingCurve || protocolFeeBps === undefined) return "…";
     if (sellInputMode === "bnb") {
