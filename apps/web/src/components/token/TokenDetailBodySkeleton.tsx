@@ -23,34 +23,36 @@ export function TokenDetailBodySkeleton() {
   );
 
   return (
-    <div
-      className="token-page pb-[var(--mobile-token-footer-height)] lg:pb-0"
-      aria-busy="true"
-      aria-label="Loading token"
-    >
+    <div className="token-page" aria-busy="true" aria-label="Loading token">
       <div className="token-page-grid">
         <div className="token-page-stack token-page-stack--main">
-          {toolbarSkeleton}
-          <SkeletonChartPanel />
-          <section className="panel-surface overflow-hidden">
-            <div className="border-b border-pump-border/15 px-3 py-2">
-              <Skeleton className="h-7 w-32 rounded-md" />
-            </div>
-            <div className="sheet-list">
-              {Array.from({ length: 5 }).map((_, index) => (
-                <div
-                  key={index}
-                  className="flex items-center justify-between gap-3 px-3 py-2.5 md:px-4"
-                >
-                  <div className="flex min-w-0 items-center gap-2">
-                    <Skeleton variant="circle" className="h-6 w-6" />
-                    <Skeleton className="h-4 w-24" />
-                  </div>
-                  <Skeleton variant="line" className="h-3 w-16" />
+          <div className="shrink-0">{toolbarSkeleton}</div>
+          <div className="token-page-chart-slot">
+            <SkeletonChartPanel />
+          </div>
+          <div className="token-page-tape-slot">
+            <section className="panel-surface token-trade-tape overflow-hidden">
+              <div className="shrink-0 border-b border-pump-border/15 px-3 py-2">
+                <Skeleton className="h-7 w-32 rounded-md" />
+              </div>
+              <div className="token-trade-tape__scroll">
+                <div className="sheet-list">
+                  {Array.from({ length: 5 }).map((_, index) => (
+                    <div
+                      key={index}
+                      className="flex items-center justify-between gap-3 px-3 py-2.5 md:px-4"
+                    >
+                      <div className="flex min-w-0 items-center gap-2">
+                        <Skeleton variant="circle" className="h-6 w-6" />
+                        <Skeleton className="h-4 w-24" />
+                      </div>
+                      <Skeleton variant="line" className="h-3 w-16" />
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          </section>
+              </div>
+            </section>
+          </div>
         </div>
 
         <aside className="token-page-stack token-page-stack--aside hidden lg:flex">

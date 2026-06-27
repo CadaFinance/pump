@@ -349,30 +349,31 @@ export function TradeTape({
   }, [fetchHoldersPage, holdersRefreshKey]);
 
   return (
-    <section className="panel-surface overflow-hidden">
-      <div className="border-b border-pump-border/15 px-3 py-2">
+    <section className="panel-surface token-trade-tape overflow-hidden">
+      <div className="shrink-0 border-b border-pump-border/15 px-3 py-2">
         <div className="segment-control w-fit" role="tablist" aria-label="Trades and holders">
-            <button
-              type="button"
-              role="tab"
-              aria-selected={tab === "trades"}
-              onClick={() => setTab("trades")}
-              className={tab === "trades" ? "chip-button chip-button-active" : "chip-button"}
-            >
-              Trades
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={tab === "holders"}
-              onClick={() => setTab("holders")}
-              className={tab === "holders" ? "chip-button chip-button-active" : "chip-button"}
-            >
-              Holders
-            </button>
-          </div>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === "trades"}
+            onClick={() => setTab("trades")}
+            className={tab === "trades" ? "chip-button chip-button-active" : "chip-button"}
+          >
+            Trades
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === "holders"}
+            onClick={() => setTab("holders")}
+            className={tab === "holders" ? "chip-button chip-button-active" : "chip-button"}
+          >
+            Holders
+          </button>
         </div>
+      </div>
 
+      <div className="token-trade-tape__scroll">
         {tab === "holders" ? (
           !holdersReady ? (
             <p className="px-4 py-6 text-body-sm text-pump-muted">Verifying holders on-chain…</p>
@@ -534,6 +535,7 @@ export function TradeTape({
             </div>
           </div>
         )}
+      </div>
     </section>
   );
 }

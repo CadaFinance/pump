@@ -76,6 +76,8 @@ type PriceChartProps = {
   currentMcapUsd?: number | null;
   volume24hBnb?: number;
   price24hChangePct?: number | null;
+  /** Fill parent flex slot (token detail fixed viewport). */
+  fillContainer?: boolean;
 };
 
 const POLL_MS = 4_000;
@@ -162,6 +164,11 @@ function chartHeightPx(): number {
   return 280;
 }
 
+function resolveChartHeight(el: HTMLElement | null, fillContainer: boolean): number {
+  if (fillContainer && el && el.clientHeight > 0) return el.clientHeight;
+  return chartHeightPx();
+}
+
 function formatOhlc(
   value: number,
   currency: "usd" | "mcap",
@@ -243,6 +250,7 @@ export function PriceChart({
   currentMcapUsd = null,
   volume24hBnb = 0,
   price24hChangePct = null,
+  fillContainer = false,
 }: PriceChartProps) {
   const { theme } = useTheme();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -602,7 +610,7 @@ export function PriceChart({
     const el = containerRef.current;
     if (!el || chartRef.current) return;
 
-    const height = chartHeightPx();
+    const height = resolveChartHeight(el, fillContainer);
     const bgColor = `rgb(${cssVar("--pump-card", "16 27 44")})`;
     const textColor = `rgb(${cssVar("--pump-muted", "142 157 181")})`;
     const borderColor = `rgb(${cssVar("--pump-border", "96 116 148")} / 0.22)`;
@@ -712,7 +720,7 @@ export function PriceChart({
     const ro = new ResizeObserver(() => {
       if (!el) return;
       const width = el.clientWidth;
-      chart.applyOptions({ width, height: chartHeightPx() });
+      chart.applyOptions({ width, height: resolveChartHeight(el, fillContainer) });
       if (width > 0 && shouldFitViewportRef.current) {
         requestAnimationFrame(() => {
           scheduleFitViewportRef.current();
@@ -729,7 +737,7 @@ export function PriceChart({
       volumeSeriesRef.current = null;
       setReady(false);
     };
-  }, []);
+  }, [fillContainer]);
 
   useEffect(() => {
     if (!chartRef.current || !candleSeriesRef.current) return;
@@ -908,10 +916,17 @@ export function PriceChart({
 
   const showEmpty = !loading && !error && candles.length === 0;
   const showError = !loading && error && candles.length === 0;
+  const chromeBlockClass = fillContainer ? "shrink-0" : "";
 
   return (
-    <section className="panel-surface overflow-hidden">
-      <div className="px-4 py-2.5 md:py-3">
+    <section
+      className={
+        fillContainer
+          ? "panel-surface flex min-h-0 flex-1 flex-col overflow-hidden"
+          : "panel-surface overflow-hidden"
+      }
+    >
+      <div className={`px-4 py-2.5 md:py-3 ${chromeBlockClass}`}>
         <div className="flex flex-col gap-1">
           <div className="flex items-center justify-between gap-2">
             <p className="section-label leading-none">
@@ -966,7 +981,7 @@ export function PriceChart({
         </div>
       </div>
 
-      <div className="flex items-center justify-between gap-2 border-t border-pump-border/10 px-3 py-2.5">
+      <div className={`flex items-center justify-between gap-2 border-t border-pump-border/10 px-3 py-2.5 ${chromeBlockClass}`}>
         <div className="min-w-0 flex-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <div className="inline-flex min-w-max items-center gap-2">
             <div className="segment-control">
@@ -1004,7 +1019,7 @@ export function PriceChart({
       </div>
 
       {displayCandle ? (
-        <div className="financial-value flex items-center gap-x-3 overflow-x-auto border-t border-pump-border/10 px-3 py-1.5 text-[11px] text-pump-muted [scrollbar-width:none] md:gap-x-4 md:py-2 md:text-xs [&::-webkit-scrollbar]:hidden">
+        <div className={`financial-value flex items-center gap-x-3 overflow-x-auto border-t border-pump-border/10 px-3 py-1.5 text-[11px] text-pump-muted [scrollbar-width:none] md:gap-x-4 md:py-2 md:text-xs [&::-webkit-scrollbar]:hidden ${chromeBlockClass}`}>
           <span className="shrink-0">
             O <span className="text-pump-text">{formatOhlc(displayCandle.open, currency, bnbUsd)}</span>
           </span>
@@ -1024,7 +1039,7 @@ export function PriceChart({
       ) : null}
 
       {/* Chart container always mounted so lightweight-charts can init on first load */}
-      <div className="relative">
+      <div className={fillContainer ? "relative min-h-0 flex-1" : "relative"}>
         {(loading && candles.length === 0) || showEmpty || showError ? (
           <div className="absolute inset-0 z-10 flex items-center justify-center bg-pump-card/92 px-4 text-center text-sm">
             {loading && candles.length === 0 ? (
@@ -1038,8 +1053,8 @@ export function PriceChart({
         ) : null}
         <div
           ref={containerRef}
-          className="w-full"
-          style={{ height: chartHeightPx() }}
+          className="h-full w-full"
+          style={fillContainer ? undefined : { height: chartHeightPx() }}
         />
       </div>
     </section>

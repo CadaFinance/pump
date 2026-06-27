@@ -26,13 +26,15 @@ export function AppShellFrame({ children, wide = false, pathname }: AppShellFram
   const mainPadding = onTokenPage
     ? shellTokenPagePaddingClass
     : `py-5 md:py-8 md:pb-8 ${shellPaddingXClass}`;
-  const mainWidthClass = onTokenPage ? "w-full max-w-none" : `mx-auto w-full ${mainMaxWidth}`;
+  const mainLayoutClass = onTokenPage
+    ? "token-page-main w-full max-w-none"
+    : `mx-auto w-full flex-1 ${mainMaxWidth}`;
 
   return (
     <div className="flex min-h-screen flex-col">
       <AppHeaderView pathname={pathname} />
       <main
-        className={`flex-1 ${mainPadding} ${mobileBottomOffset} ${mainWidthClass}`}
+        className={`flex min-h-0 flex-col ${mainPadding} ${mobileBottomOffset} ${mainLayoutClass}`}
       >
         {children}
       </main>

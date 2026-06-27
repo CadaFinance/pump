@@ -711,6 +711,11 @@ export function TokenDetailLive({
   const favorited = isFavorite(tokenAddress);
   const creatorLabel = shortAddress(liveToken.creatorAddress);
 
+  useEffect(() => {
+    document.documentElement.classList.add("token-page-lock");
+    return () => document.documentElement.classList.remove("token-page-lock");
+  }, []);
+
   const creatorMeta = (
     <button
       type="button"
@@ -800,11 +805,13 @@ export function TokenDetailLive({
   );
 
   return (
-    <div className="token-page pb-[var(--mobile-token-footer-height)] lg:pb-0">
+    <div className="token-page">
       <div className="token-page-grid">
         <div className="token-page-stack token-page-stack--main">
-          {tokenToolbar}
-          <PriceChart
+          <div className="shrink-0">{tokenToolbar}</div>
+          <div className="token-page-chart-slot">
+            <PriceChart
+              fillContainer
               tokenAddress={tokenAddress}
               symbol={symbol}
               status={liveToken.status}
@@ -820,13 +827,17 @@ export function TokenDetailLive({
               currentMcapUsd={fdvUsd}
               volume24hBnb={volume24hBnb}
               price24hChangePct={change24h?.changePct ?? null}
-          />
+            />
+          </div>
 
           {indexerSyncing ? (
-            <p className="panel-surface px-3 py-1.5 text-caption text-pump-muted">Indexer syncing…</p>
+            <p className="panel-surface shrink-0 px-3 py-1.5 text-caption text-pump-muted">
+              Indexer syncing…
+            </p>
           ) : null}
 
-          <TradeTape
+          <div className="token-page-tape-slot">
+            <TradeTape
               tokenAddress={tokenAddress}
               creatorAddress={liveToken.creatorAddress}
               symbol={liveToken.symbol}
@@ -837,10 +848,11 @@ export function TokenDetailLive({
               currentPriceBnb={displayPrice}
               bnbUsd={bnbUsd}
               onAddressClick={setProfileAddress}
-          />
+            />
+          </div>
         </div>
 
-        <aside className="token-page-stack token-page-stack--aside lg:sticky lg:top-[4.75rem] lg:self-start">
+        <aside className="token-page-stack token-page-stack--aside hidden lg:flex">
           <div className="hidden lg:block">
             <TradePanel
               tokenAddress={tokenAddress as `0x${string}`}
