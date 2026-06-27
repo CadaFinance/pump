@@ -2,6 +2,8 @@
 export const shellMaxWidthClass = "max-w-[1600px]";
 export const shellWideMaxWidthClass = "max-w-[1920px]";
 export const shellPaddingXClass = "px-3 sm:px-4 md:px-5 lg:px-6";
+/** Equal compact inset for token detail (chart + trade terminal). */
+export const shellTokenPagePaddingClass = "p-2 sm:p-2.5 md:p-3";
 export const shellInnerClass = `mx-auto w-full ${shellMaxWidthClass} ${shellPaddingXClass}`;
 
 export function shellUsesWideLayout(pathname: string): boolean {

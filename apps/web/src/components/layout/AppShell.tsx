@@ -4,7 +4,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useLayoutEffect } from "react";
 import { AppHeaderView } from "@/components/layout/AppHeader";
 import { AppNavView } from "@/components/layout/AppNav";
-import { shellMaxWidthClassForPath, shellPaddingXClass, shellWideMaxWidthClass } from "@/components/layout/layout-shell";
+import { shellMaxWidthClassForPath, shellPaddingXClass, shellTokenPagePaddingClass, shellWideMaxWidthClass } from "@/components/layout/layout-shell";
 import { noteNavFromCurrentPath, syncNavHistory } from "@/lib/nav-history";
 
 type AppShellProps = {
@@ -23,13 +23,15 @@ export function AppShellFrame({ children, wide = false, pathname }: AppShellFram
   const mainMaxWidth = wide ? shellWideMaxWidthClass : shellMaxWidthClassForPath(pathname);
   const onTokenPage = pathname.startsWith("/token/");
   const mobileBottomOffset = onTokenPage ? "" : "pb-[var(--mobile-bottom-nav-height)]";
-  const mainPaddingY = onTokenPage ? "py-3 md:py-4" : "py-5 md:py-8";
+  const mainPadding = onTokenPage
+    ? shellTokenPagePaddingClass
+    : `py-5 md:py-8 md:pb-8 ${shellPaddingXClass}`;
 
   return (
     <div className="flex min-h-screen flex-col">
       <AppHeaderView pathname={pathname} />
       <main
-        className={`mx-auto w-full flex-1 ${mainPaddingY} ${mobileBottomOffset} md:pb-8 ${mainMaxWidth} ${shellPaddingXClass}`}
+        className={`mx-auto w-full flex-1 ${mainPadding} ${mobileBottomOffset} ${mainMaxWidth}`}
       >
         {children}
       </main>

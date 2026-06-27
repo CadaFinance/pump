@@ -759,8 +759,8 @@ export function TokenDetailLive({
   );
 
   return (
-    <div className="token-terminal pb-[var(--mobile-token-footer-height)] lg:pb-0">
-      <div className="token-detail-toolbar">
+    <div className="token-page pb-[var(--mobile-token-footer-height)] lg:pb-0">
+      <div className="token-detail-toolbar panel-surface">
         <div className="token-detail-toolbar__identity">
           <TokenAvatar
             address={liveToken.address}
@@ -799,10 +799,9 @@ export function TokenDetailLive({
         {toolbarActions}
       </div>
 
-      <div className="token-terminal-body">
-        <div className="token-terminal-col">
-          <div className="token-terminal-cell">
-            <PriceChart
+      <div className="token-page-grid">
+        <div className="token-page-stack">
+          <PriceChart
               tokenAddress={tokenAddress}
               symbol={symbol}
               status={liveToken.status}
@@ -818,15 +817,13 @@ export function TokenDetailLive({
               currentMcapUsd={fdvUsd}
               volume24hBnb={volume24hBnb}
               price24hChangePct={change24h?.changePct ?? null}
-            />
-          </div>
+          />
 
           {indexerSyncing ? (
-            <p className="bg-pump-card px-3 py-1.5 text-caption text-pump-muted">Indexer syncing…</p>
+            <p className="panel-surface px-3 py-1.5 text-caption text-pump-muted">Indexer syncing…</p>
           ) : null}
 
-          <div className="token-terminal-cell">
-            <TradeTape
+          <TradeTape
               tokenAddress={tokenAddress}
               creatorAddress={liveToken.creatorAddress}
               symbol={liveToken.symbol}
@@ -837,12 +834,11 @@ export function TokenDetailLive({
               currentPriceBnb={displayPrice}
               bnbUsd={bnbUsd}
               onAddressClick={setProfileAddress}
-            />
-          </div>
+          />
         </div>
 
-        <aside className="token-terminal-col lg:sticky lg:top-[4.75rem] lg:self-start">
-          <div className="token-terminal-cell hidden lg:block">
+        <aside className="token-page-stack lg:sticky lg:top-[4.75rem] lg:self-start">
+          <div className="hidden lg:block">
             <TradePanel
               tokenAddress={tokenAddress as `0x${string}`}
               symbol={symbol}
@@ -856,23 +852,19 @@ export function TokenDetailLive({
               chainCurveSnapshot={tradeCurveSnapshot}
             />
           </div>
-          <div className="token-terminal-cell">
-            <CreatorRewardsCard
+          <CreatorRewardsCard
               creatorAddress={liveToken.creatorAddress}
               launchTxHash={liveToken.launchTxHash}
               followerCount={liveToken.creatorFollowerCount}
               onAddressClick={setProfileAddress}
-            />
-          </div>
+          />
           {liveToken.description ? (
-            <div className="token-terminal-cell">
-              <section className="panel-surface p-4">
+            <section className="panel-surface p-4">
                 <p className="section-label">About</p>
                 <p className="mt-2 text-body-sm leading-relaxed text-pump-muted">
                   {liveToken.description}
                 </p>
-              </section>
-            </div>
+            </section>
           ) : null}
         </aside>
       </div>
