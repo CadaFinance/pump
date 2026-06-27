@@ -1088,36 +1088,45 @@ code,
 
   .trade-teeth-slider__frame {
     position: relative;
+    padding-top: 1.75rem;
+  }
+
+  .trade-teeth-stack {
+    position: relative;
     height: 0.875rem;
   }
 
   .trade-teeth-row {
     position: absolute;
     inset: 0;
-    z-index: 0;
     display: grid;
     grid-template-columns: repeat(100, minmax(0, 1fr));
     align-items: flex-end;
     pointer-events: none;
   }
 
+  .trade-teeth-row--fill {
+    z-index: 1;
+  }
+
+  .trade-teeth-row--idle .trade-teeth-tick {
+    background-color: rgb(var(--pump-border) / 0.5);
+  }
+
+  .trade-teeth-row--fill-buy .trade-teeth-tick {
+    background-color: rgb(var(--pump-success));
+  }
+
+  .trade-teeth-row--fill-sell .trade-teeth-tick {
+    background-color: rgb(var(--pump-danger));
+  }
+
   .trade-teeth-tick {
-    width: 1px;
+    display: block;
+    width: 2px;
+    max-width: 100%;
     justify-self: center;
     border-radius: 1px;
-    transition: background-color 60ms ease;
-  }
-
-  .trade-teeth-tick--idle {
-    background: rgb(var(--pump-border) / 0.45);
-  }
-
-  .trade-teeth-tick--active-buy {
-    background: rgb(var(--pump-success));
-  }
-
-  .trade-teeth-tick--active-sell {
-    background: rgb(var(--pump-danger));
   }
 
   .trade-teeth-tick--major {
@@ -1130,12 +1139,15 @@ code,
 
   .trade-teeth-slider__input {
     position: absolute;
-    inset: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
     z-index: 2;
     width: 100%;
     height: 0.875rem;
     margin: 0;
     cursor: pointer;
+    touch-action: none;
     background: transparent;
     -webkit-appearance: none;
     appearance: none;
@@ -1184,10 +1196,10 @@ code,
 
   .trade-teeth-tooltip {
     position: absolute;
-    bottom: calc(100% + 0.375rem);
+    top: 0;
     transform: translateX(-50%);
-    min-width: 1.75rem;
-    padding: 0.125rem 0.375rem;
+    min-width: 2.25rem;
+    padding: 0.1875rem 0.4375rem;
     border-radius: var(--radius-sm);
     font-size: var(--text-caption);
     font-weight: 600;
@@ -1197,18 +1209,19 @@ code,
     pointer-events: none;
     white-space: nowrap;
     z-index: 3;
+    box-shadow: 0 2px 8px rgb(var(--pump-shadow) / 0.35);
   }
 
   .trade-teeth-tooltip--buy {
     color: rgb(var(--pump-success));
     background: rgb(var(--pump-card));
-    border: 1px solid rgb(var(--pump-success) / 0.35);
+    border: 1px solid rgb(var(--pump-success) / 0.45);
   }
 
   .trade-teeth-tooltip--sell {
     color: rgb(var(--pump-danger));
     background: rgb(var(--pump-card));
-    border: 1px solid rgb(var(--pump-danger) / 0.35);
+    border: 1px solid rgb(var(--pump-danger) / 0.45);
   }
 
   @media (prefers-reduced-motion: reduce) {

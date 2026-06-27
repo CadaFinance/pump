@@ -1024,6 +1024,7 @@ export function TradePanel({
   const [buySliderPct, setBuySliderPct] = useState(0);
   const [sellSliderPct, setSellSliderPct] = useState(0);
   const [teethDragging, setTeethDragging] = useState(false);
+  const [teethDragPct, setTeethDragPct] = useState<number | null>(null);
   const sliderDraggingRef = useRef(false);
 
   useEffect(() => {
@@ -1031,6 +1032,7 @@ export function TradePanel({
     const endDrag = () => {
       sliderDraggingRef.current = false;
       setTeethDragging(false);
+      setTeethDragPct(null);
     };
     window.addEventListener("pointerup", endDrag);
     window.addEventListener("pointercancel", endDrag);
@@ -2163,12 +2165,20 @@ export function TradePanel({
   const sliderPct = side === "buy" ? buySliderPct : sellSliderPct;
   const canUseSlider = side === "buy" ? canUseMaxBuy : canUseMaxSell;
   const applySliderPercent = side === "buy" ? applyBuySliderPercent : applySellSliderPercent;
-  const teethTooltipLeft = sliderPct <= 4 ? 4 : sliderPct >= 96 ? 96 : sliderPct;
+  const displayTeethPct = teethDragPct ?? sliderPct;
+  const teethTooltipLeft =
+    displayTeethPct <= 4 ? 4 : displayTeethPct >= 96 ? 96 : displayTeethPct;
 
   function onTeethSliderPointerDown() {
     if (!canUseSlider) return;
     sliderDraggingRef.current = true;
     setTeethDragging(true);
+  }
+
+  function onTeethSliderInput(value: number) {
+    const clamped = Math.max(0, Math.min(100, value));
+    setTeethDragPct(clamped);
+    applySliderPercent(clamped);
   }
 
   return (
@@ -2284,22 +2294,33 @@ export function TradePanel({
                   style={{ left: `${teethTooltipLeft}%` }}
                   role="tooltip"
                 >
-                  {sliderPct}
+                  {displayTeethPct}%
                 </span>
               ) : null}
-              <div className="trade-teeth-row" aria-hidden>
-                {Array.from({ length: TRADE_TEETH_COUNT }, (_, index) => {
-                  const active = index < sliderPct;
-                  const isMajor = index % 10 === 9;
-                  return (
+              <div className="trade-teeth-stack" aria-hidden>
+                <div className="trade-teeth-row trade-teeth-row--idle">
+                  {Array.from({ length: TRADE_TEETH_COUNT }, (_, index) => (
                     <span
-                      key={index}
+                      key={`idle-${index}`}
                       className={`trade-teeth-tick${
-                        isMajor ? " trade-teeth-tick--major" : " trade-teeth-tick--minor"
-                      }${active ? ` trade-teeth-tick--active-${side}` : " trade-teeth-tick--idle"}`}
+                        index % 10 === 9 ? " trade-teeth-tick--major" : " trade-teeth-tick--minor"
+                      }`}
                     />
-                  );
-                })}
+                  ))}
+                </div>
+                <div
+                  className={`trade-teeth-row trade-teeth-row--fill trade-teeth-row--fill-${side}`}
+                  style={{ clipPath: `inset(0 ${100 - displayTeethPct}% 0 0)` }}
+                >
+                  {Array.from({ length: TRADE_TEETH_COUNT }, (_, index) => (
+                    <span
+                      key={`fill-${index}`}
+                      className={`trade-teeth-tick${
+                        index % 10 === 9 ? " trade-teeth-tick--major" : " trade-teeth-tick--minor"
+                      }`}
+                    />
+                  ))}
+                </div>
               </div>
               <input
                 type="range"
@@ -2308,8 +2329,8 @@ export function TradePanel({
                 step={1}
                 value={sliderPct}
                 onPointerDown={onTeethSliderPointerDown}
-                onChange={(e) => applySliderPercent(Number(e.target.value))}
-                onInput={(e) => applySliderPercent(Number(e.currentTarget.value))}
+                onChange={(e) => onTeethSliderInput(Number(e.target.value))}
+                onInput={(e) => onTeethSliderInput(Number(e.currentTarget.value))}
                 disabled={!canUseSlider}
                 className="trade-teeth-slider__input"
                 aria-label={side === "buy" ? "Buy amount slider" : "Sell amount slider"}
