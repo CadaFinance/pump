@@ -1,4 +1,4 @@
-﻿import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { encodeFunctionData } from "viem";
 import { usePublicClient } from "wagmi";
 import { usePumpWallet } from "@/components/wallet/PumpWalletProvider";

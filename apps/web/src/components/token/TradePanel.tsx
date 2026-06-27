@@ -245,7 +245,7 @@ function ChevronDownSmall() {
   );
 }
 
-const TRADE_RULER_TICK_COUNT = 21;
+const TRADE_TEETH_COUNT = 100;
 
 function TradeInputModeIcon({
   mode,
@@ -1023,9 +1023,26 @@ export function TradePanel({
   /** Slider tracks wallet % only when amount ≤ max; manual over-max decouples (Coinbase/Jupiter pattern). */
   const [buySliderPct, setBuySliderPct] = useState(0);
   const [sellSliderPct, setSellSliderPct] = useState(0);
+  const [teethDragging, setTeethDragging] = useState(false);
+  const sliderDraggingRef = useRef(false);
+
+  useEffect(() => {
+    if (!teethDragging) return;
+    const endDrag = () => {
+      sliderDraggingRef.current = false;
+      setTeethDragging(false);
+    };
+    window.addEventListener("pointerup", endDrag);
+    window.addEventListener("pointercancel", endDrag);
+    return () => {
+      window.removeEventListener("pointerup", endDrag);
+      window.removeEventListener("pointercancel", endDrag);
+    };
+  }, [teethDragging]);
 
   useEffect(() => {
     if (side !== "buy") return;
+    if (sliderDraggingRef.current) return;
     if (maxBuySpendWei === 0n || buyCostWei <= 0n) {
       setBuySliderPct(0);
       return;
@@ -1043,6 +1060,7 @@ export function TradePanel({
 
   useEffect(() => {
     if (side !== "sell") return;
+    if (sliderDraggingRef.current) return;
     if (maxSellTokenWei === 0n || sellTokenWei <= 0n) {
       setSellSliderPct(0);
       return;
@@ -2145,7 +2163,13 @@ export function TradePanel({
   const sliderPct = side === "buy" ? buySliderPct : sellSliderPct;
   const canUseSlider = side === "buy" ? canUseMaxBuy : canUseMaxSell;
   const applySliderPercent = side === "buy" ? applyBuySliderPercent : applySellSliderPercent;
-  const sliderPctIndicatorLeft = sliderPct <= 5 ? 5 : sliderPct >= 95 ? 95 : sliderPct;
+  const teethTooltipLeft = sliderPct <= 4 ? 4 : sliderPct >= 96 ? 96 : sliderPct;
+
+  function onTeethSliderPointerDown() {
+    if (!canUseSlider) return;
+    sliderDraggingRef.current = true;
+    setTeethDragging(true);
+  }
 
   return (
     <section
@@ -2254,11 +2278,19 @@ export function TradePanel({
 
           <div className={`trade-teeth-slider trade-teeth-slider--${side} mt-5`}>
             <div className="trade-teeth-slider__frame">
+              {teethDragging ? (
+                <span
+                  className={`trade-teeth-tooltip trade-teeth-tooltip--${side}`}
+                  style={{ left: `${teethTooltipLeft}%` }}
+                  role="tooltip"
+                >
+                  {sliderPct}
+                </span>
+              ) : null}
               <div className="trade-teeth-row" aria-hidden>
-                {Array.from({ length: TRADE_RULER_TICK_COUNT }, (_, index) => {
-                  const tickPct = (index * 100) / (TRADE_RULER_TICK_COUNT - 1);
-                  const active = sliderPct >= tickPct;
-                  const isMajor = index % 5 === 0;
+                {Array.from({ length: TRADE_TEETH_COUNT }, (_, index) => {
+                  const active = index < sliderPct;
+                  const isMajor = index % 10 === 9;
                   return (
                     <span
                       key={index}
@@ -2275,7 +2307,9 @@ export function TradePanel({
                 max={100}
                 step={1}
                 value={sliderPct}
+                onPointerDown={onTeethSliderPointerDown}
                 onChange={(e) => applySliderPercent(Number(e.target.value))}
+                onInput={(e) => applySliderPercent(Number(e.currentTarget.value))}
                 disabled={!canUseSlider}
                 className="trade-teeth-slider__input"
                 aria-label={side === "buy" ? "Buy amount slider" : "Sell amount slider"}
@@ -2287,13 +2321,6 @@ export function TradePanel({
                       : `${sliderPct}% of ${side === "buy" ? "wallet balance" : "token balance"}`
                 }
               />
-              <span
-                className={`trade-teeth-pct trade-teeth-pct--${side}`}
-                style={{ left: `${sliderPctIndicatorLeft}%` }}
-                aria-hidden
-              >
-                {sliderPct}%
-              </span>
             </div>
           </div>
         </div>
