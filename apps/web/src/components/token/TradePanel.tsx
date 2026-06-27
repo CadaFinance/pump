@@ -2226,38 +2226,40 @@ export function TradePanel({
           </button>
         </div>
 
-        <div className="trade-panel-tabs">
-          <div className="trade-side-group">
-            <button
-              type="button"
-              onClick={() => {
-                setSide("buy");
-                setAmount("");
-                setLinkedBuySpendWei(null);
-                setLinkedSellTokenWei(null);
-                setError(null);
-                setAssetMenuOpen(false);
-              }}
-              className={side === "buy" ? "trade-side-button-active-buy" : "trade-side-button"}
-            >
-              Buy
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setSide("sell");
-                setAmount("");
-                setLinkedBuySpendWei(null);
-                setLinkedSellTokenWei(null);
-                setError(null);
-                setAssetMenuOpen(false);
-              }}
-              className={side === "sell" ? "trade-side-button-active-sell" : "trade-side-button"}
-            >
-              Sell
-            </button>
+        {tradeMode === "market" ? (
+          <div className="trade-panel-tabs">
+            <div className="trade-side-group">
+              <button
+                type="button"
+                onClick={() => {
+                  setSide("buy");
+                  setAmount("");
+                  setLinkedBuySpendWei(null);
+                  setLinkedSellTokenWei(null);
+                  setError(null);
+                  setAssetMenuOpen(false);
+                }}
+                className={side === "buy" ? "trade-side-button-active-buy" : "trade-side-button"}
+              >
+                Buy
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setSide("sell");
+                  setAmount("");
+                  setLinkedBuySpendWei(null);
+                  setLinkedSellTokenWei(null);
+                  setError(null);
+                  setAssetMenuOpen(false);
+                }}
+                className={side === "sell" ? "trade-side-button-active-sell" : "trade-side-button"}
+              >
+                Sell
+              </button>
+            </div>
           </div>
-        </div>
+        ) : null}
 
         {tradeMode === "market" ? (
           <>
@@ -2428,7 +2430,7 @@ export function TradePanel({
         </div>
 
         {error ? (
-          <div className="notice-error mx-4 mb-3 px-3 py-2 text-caption" role="alert">
+          <div className="notice-error mx-3 mb-2 px-3 py-2 text-caption" role="alert">
             {error}
           </div>
         ) : null}
@@ -2445,7 +2447,7 @@ export function TradePanel({
           </>
         ) : (
           <div className="trade-limit-placeholder">
-            <p className="text-body-sm text-pump-muted">Limit orders are not available yet.</p>
+            <p className="text-body-sm font-medium text-pump-muted">Coming soon</p>
           </div>
         )}
       </form>
