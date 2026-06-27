@@ -715,7 +715,7 @@ export function TokenDetailLive({
     <button
       type="button"
       onClick={() => setProfileAddress(liveToken.creatorAddress)}
-      className="inline-flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden text-caption text-pump-muted transition hover:text-pump-text"
+      className="inline-flex min-w-0 items-center gap-1.5 overflow-hidden text-caption text-pump-muted transition hover:text-pump-text"
       aria-label={`View creator profile ${creatorLabel}`}
     >
       <UserAvatarForAddress address={liveToken.creatorAddress} size={20} className="shrink-0" />
@@ -723,23 +723,25 @@ export function TokenDetailLive({
     </button>
   );
 
-  const tokenActions = (
-    <div className="segment-control">
+  const toolbarActions = (
+    <div className="token-detail-toolbar__actions">
       <button
         type="button"
         onClick={onShare}
-        className="inline-flex h-8 w-8 items-center justify-center text-pump-muted transition hover:bg-pump-border/10 hover:text-pump-text"
+        className="token-toolbar-btn"
         aria-label="Share"
       >
         <ShareIcon />
+        <span className="hidden sm:inline">Share</span>
       </button>
       <button
         type="button"
         onClick={() => void onCopyAddress()}
-        className="inline-flex h-8 w-8 items-center justify-center text-pump-muted transition hover:bg-pump-border/10 hover:text-pump-text"
+        className="token-toolbar-btn"
         aria-label={copiedAddress ? "Address copied" : "Copy token address"}
       >
         {copiedAddress ? <CheckIcon /> : <CopyIcon />}
+        <span className="financial-value hidden sm:inline">{shortAddress(liveToken.address)}</span>
       </button>
       <button
         type="button"
@@ -747,8 +749,8 @@ export function TokenDetailLive({
         aria-label={favorited ? "Remove from favorites" : "Add to favorites"}
         className={
           favorited
-            ? "inline-flex h-8 w-8 items-center justify-center text-lg leading-none text-pump-accent transition hover:bg-pump-accent/10"
-            : "inline-flex h-8 w-8 items-center justify-center text-lg leading-none text-pump-muted transition hover:bg-pump-border/10 hover:text-pump-text"
+            ? "token-toolbar-btn token-toolbar-btn--icon token-toolbar-btn--fav-active"
+            : "token-toolbar-btn token-toolbar-btn--icon"
         }
       >
         {favorited ? "★" : "☆"}
@@ -756,134 +758,74 @@ export function TokenDetailLive({
     </div>
   );
 
-  const creatorElapsedMeta = (
-    <div className="flex min-w-0 items-center gap-x-2 overflow-hidden text-caption font-normal text-pump-muted">
-      {creatorMeta}
-      <span className="shrink-0 text-pump-muted/40" aria-hidden>
-        ·
-      </span>
-      <span className="shrink-0 whitespace-nowrap text-pump-muted/65">{elapsed}</span>
-    </div>
-  );
-
-  const tokenMetaLine = (
-    <div className="flex min-w-0 items-center gap-x-2 overflow-hidden text-caption text-pump-muted">
-      <span className="financial-value shrink-0 font-medium text-pump-text">${liveToken.symbol}</span>
-      <TokenAirdropLinkChip tokenAddress={tokenAddress} />
-      <span className="shrink-0 text-pump-muted/45" aria-hidden>
-        ·
-      </span>
-      {creatorElapsedMeta}
-    </div>
-  );
-
   return (
-    <div className="mt-3 space-y-5 pb-[var(--mobile-token-footer-height)] md:mt-4 md:space-y-6 lg:pb-0">
-      <header className="lg:hidden">
-        <div className="flex items-center gap-3">
+    <div className="token-terminal pb-[var(--mobile-token-footer-height)] lg:pb-0">
+      <div className="token-detail-toolbar">
+        <div className="token-detail-toolbar__identity">
           <TokenAvatar
             address={liveToken.address}
             symbol={liveToken.symbol}
             logoUrl={liveToken.logoUrl}
-            size={44}
-          />
-          <div className="min-w-0 flex-1">
-            <div className="flex min-w-0 items-center gap-2">
-              <h1 className="financial-value min-w-0 truncate text-h2 font-semibold tracking-tight text-pump-text">
-                ${liveToken.symbol}
-              </h1>
-              <TokenAirdropLinkChip tokenAddress={tokenAddress} className="lg:hidden" />
-            </div>
-            <div className="mt-0.5 min-w-0 overflow-hidden">
-              {creatorElapsedMeta}
-            </div>
-          </div>
-          {tokenActions}
-        </div>
-        {hasSocialLinks(liveToken.socialLinks) ? (
-          <div className="mt-3 border-t border-pump-border/10 pt-3">
-            <TokenSocialLinksBar links={liveToken.socialLinks} variant="mobile" />
-          </div>
-        ) : null}
-      </header>
-
-      <header className="hidden flex-wrap items-start justify-between gap-4 lg:flex">
-        <div className="flex min-w-0 items-start gap-3">
-          <TokenAvatar
-            address={liveToken.address}
-            symbol={liveToken.symbol}
-            logoUrl={liveToken.logoUrl}
-            size={48}
+            size={36}
+            className="shrink-0"
           />
           <div className="min-w-0">
-            <div className="flex min-w-0 items-center gap-3">
-              <h1 className="min-w-0 truncate section-heading">{liveToken.name}</h1>
-              <TokenSocialLinksBar links={liveToken.socialLinks} inline />
+            <div className="token-detail-toolbar__title-row">
+              <h1 className="financial-value truncate text-body font-semibold text-pump-text">
+                {liveToken.name}
+              </h1>
+              <span className="financial-value shrink-0 text-body-sm font-medium text-pump-muted">
+                ${liveToken.symbol}
+              </span>
+              <TokenAirdropLinkChip tokenAddress={tokenAddress} />
             </div>
-            <div className="mt-0.5">{tokenMetaLine}</div>
+            <div className="token-detail-toolbar__meta-row">
+              <span className="shrink-0 whitespace-nowrap">{elapsed}</span>
+              <span className="shrink-0 text-pump-muted/40" aria-hidden>
+                ·
+              </span>
+              {creatorMeta}
+              {hasSocialLinks(liveToken.socialLinks) ? (
+                <>
+                  <span className="shrink-0 text-pump-muted/40" aria-hidden>
+                    ·
+                  </span>
+                  <TokenSocialLinksBar links={liveToken.socialLinks} inline />
+                </>
+              ) : null}
+            </div>
           </div>
         </div>
+        {toolbarActions}
+      </div>
 
-        <div className="flex shrink-0 items-center gap-2">
-          <button
-            type="button"
-            onClick={onShare}
-            className="secondary-button inline-flex h-8 items-center gap-2 px-3 text-body-sm"
-            aria-label="Share"
-          >
-            <ShareIcon />
-            <span>Share</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => void onCopyAddress()}
-            className="secondary-button inline-flex h-8 items-center gap-2 px-3 text-body-sm"
-            aria-label={copiedAddress ? "Address copied" : "Copy token address"}
-          >
-            {copiedAddress ? <CheckIcon /> : <CopyIcon />}
-            <span className="financial-value">{shortAddress(liveToken.address)}</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => toggleFavorite(tokenAddress)}
-            title={favorited ? "Remove from favorites" : "Add to favorites"}
-            aria-label={favorited ? "Remove from favorites" : "Add to favorites"}
-            className={
-              favorited
-                ? "toolbar-btn !w-10 border-pump-accent/45 bg-pump-accent/12 text-lg leading-none text-pump-accent"
-                : "secondary-button inline-flex h-8 w-10 items-center justify-center text-lg leading-none"
-            }
-          >
-            {favorited ? "★" : "☆"}
-          </button>
-        </div>
-      </header>
-
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
-        <div className="min-w-0 space-y-6">
-          <PriceChart
-            tokenAddress={tokenAddress}
-            symbol={symbol}
-            status={liveToken.status}
-            initialCandles={initialCandles}
-            actorOptimisticSpot={actorChartSpot}
-            curveSnapshot={tradeCurveSnapshot}
-            liveCandleUpdates={liveCandleUpdates}
-            fallbackTrades={chartFallbackTrades}
-            wsConnected={wsConnected}
-            bnbUsd={bnbUsd}
-            liveOnChainSpotBnb={onChainSpotBnb}
-            currentPriceUsd={priceUsd}
-            currentMcapUsd={fdvUsd}
-            volume24hBnb={volume24hBnb}
-            price24hChangePct={change24h?.changePct ?? null}
-          />
+      <div className="token-terminal-body">
+        <div className="token-terminal-col">
+          <div className="token-terminal-cell">
+            <PriceChart
+              tokenAddress={tokenAddress}
+              symbol={symbol}
+              status={liveToken.status}
+              initialCandles={initialCandles}
+              actorOptimisticSpot={actorChartSpot}
+              curveSnapshot={tradeCurveSnapshot}
+              liveCandleUpdates={liveCandleUpdates}
+              fallbackTrades={chartFallbackTrades}
+              wsConnected={wsConnected}
+              bnbUsd={bnbUsd}
+              liveOnChainSpotBnb={onChainSpotBnb}
+              currentPriceUsd={priceUsd}
+              currentMcapUsd={fdvUsd}
+              volume24hBnb={volume24hBnb}
+              price24hChangePct={change24h?.changePct ?? null}
+            />
+          </div>
 
           {indexerSyncing ? (
-            <p className="text-caption text-pump-muted">Indexer syncing…</p>
+            <p className="bg-pump-card px-3 py-1.5 text-caption text-pump-muted">Indexer syncing…</p>
           ) : null}
 
-          <div className="pt-3">
+          <div className="token-terminal-cell">
             <TradeTape
               tokenAddress={tokenAddress}
               creatorAddress={liveToken.creatorAddress}
@@ -899,8 +841,8 @@ export function TokenDetailLive({
           </div>
         </div>
 
-        <aside className="min-w-0 w-full space-y-5 lg:sticky lg:top-[4.75rem] lg:self-start">
-          <div className="hidden lg:block">
+        <aside className="token-terminal-col lg:sticky lg:top-[4.75rem] lg:self-start">
+          <div className="token-terminal-cell hidden lg:block">
             <TradePanel
               tokenAddress={tokenAddress as `0x${string}`}
               symbol={symbol}
@@ -914,19 +856,23 @@ export function TokenDetailLive({
               chainCurveSnapshot={tradeCurveSnapshot}
             />
           </div>
-          <CreatorRewardsCard
-            creatorAddress={liveToken.creatorAddress}
-            launchTxHash={liveToken.launchTxHash}
-            followerCount={liveToken.creatorFollowerCount}
-            onAddressClick={setProfileAddress}
-          />
+          <div className="token-terminal-cell">
+            <CreatorRewardsCard
+              creatorAddress={liveToken.creatorAddress}
+              launchTxHash={liveToken.launchTxHash}
+              followerCount={liveToken.creatorFollowerCount}
+              onAddressClick={setProfileAddress}
+            />
+          </div>
           {liveToken.description ? (
-            <section className="panel-surface p-4">
-              <p className="section-label">About</p>
-              <p className="mt-2 text-body-sm leading-relaxed text-pump-muted">
-                {liveToken.description}
-              </p>
-            </section>
+            <div className="token-terminal-cell">
+              <section className="panel-surface p-4">
+                <p className="section-label">About</p>
+                <p className="mt-2 text-body-sm leading-relaxed text-pump-muted">
+                  {liveToken.description}
+                </p>
+              </section>
+            </div>
           ) : null}
         </aside>
       </div>

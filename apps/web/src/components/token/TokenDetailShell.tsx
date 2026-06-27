@@ -4,9 +4,7 @@ import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import type { TokenDetail, TradeItem } from "@/lib/db/launchpad";
 import type { TokenDetailBundle, InitialChartCandles } from "@/lib/token-server";
 import { AppShell } from "@/components/layout/AppShell";
-import { PageBackLink } from "@/components/ui/PageBackLink";
 import { TokenDetailLive } from "@/components/token/TokenDetailLive";
-import { TokenDetailBackLink } from "@/components/token/TokenDetailBackLink";
 import { TokenDetailBodySkeleton } from "@/components/token/TokenDetailBodySkeleton";
 import {
   buildOptimisticTokenDetail,
@@ -36,10 +34,6 @@ function TokenDetailView({
 }) {
   return (
     <>
-      <Suspense fallback={<PageBackLink href="/" />}>
-        <TokenDetailBackLink />
-      </Suspense>
-
       {indexerSyncing ? (
         <p className="notice-warning mt-4 text-xs">
           On-chain confirmed — indexer syncing token to Arena. Stats update automatically.
@@ -179,7 +173,6 @@ export function TokenDetailShell({
   if (initialLoading && !optimisticToken) {
     return (
       <AppShell wide>
-        <PageBackLink href="/" />
         <TokenDetailBodySkeleton />
       </AppShell>
     );
@@ -188,7 +181,6 @@ export function TokenDetailShell({
   if (fatalError && !data && !optimisticToken) {
     return (
       <AppShell wide>
-        <PageBackLink href="/" />
         <div className="notice-error mt-6 p-4">
           {fatalError}
         </div>

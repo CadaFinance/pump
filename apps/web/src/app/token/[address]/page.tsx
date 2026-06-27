@@ -3,7 +3,6 @@ import type { Metadata } from "next";
 import { AppShellFrame } from "@/components/layout/AppShell";
 import { TokenDetailPageLoader } from "@/components/token/TokenDetailPageLoader";
 import { TokenDetailBodySkeleton } from "@/components/token/TokenDetailBodySkeleton";
-import { PageBackLink } from "@/components/ui/PageBackLink";
 import { normalizeAddressParam } from "@/lib/address";
 import { getTokenByAddress } from "@/lib/db/launchpad";
 
@@ -60,7 +59,6 @@ export default async function TokenDetailPage({ params }: PageProps) {
     <Suspense
       fallback={
         <AppShellFrame wide pathname="/token">
-          <PageBackLink href="/" />
           <TokenDetailBodySkeleton />
         </AppShellFrame>
       }

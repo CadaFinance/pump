@@ -4,9 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { TokenHolderSnapshot, TradeItem } from "@/lib/db/launchpad";
 import { explorerTxUrl, shortAddress } from "@/config/chain";
 import { UserAvatarForAddress } from "@/components/user/UserAvatarForAddress";
-import { SectionHeadingIcon } from "@/components/ui/IconLabel";
 import { PctChange } from "@/components/ui/PctChange";
-import { MetricIcons } from "@/lib/metric-icons";
 import { ACTIVITY_PAGE_SIZE } from "@/lib/activity-page-size";
 import { DEFAULT_TOKEN_TOTAL_SUPPLY, formatUsdReadable, formatTradeFillPriceUsd, tradeNetUsdForDisplay, positionAvgEntryUsd, positionUnrealizedUsd, positionUnrealizedPct, scaleCostBasisUsdForBalance } from "@/lib/format-usd";
 import {
@@ -351,12 +349,9 @@ export function TradeTape({
   }, [fetchHoldersPage, holdersRefreshKey]);
 
   return (
-    <section className="space-y-3">
-      <SectionHeadingIcon icon={MetricIcons.activity}>Activity</SectionHeadingIcon>
-
-      <div className="panel-surface overflow-hidden">
-        <div className="border-b border-pump-border/15 px-3 py-2.5">
-          <div className="segment-control w-fit" role="tablist" aria-label="Activity">
+    <section className="panel-surface overflow-hidden">
+      <div className="border-b border-pump-border/15 px-3 py-2">
+        <div className="segment-control w-fit" role="tablist" aria-label="Trades and holders">
             <button
               type="button"
               role="tab"
@@ -539,7 +534,6 @@ export function TradeTape({
             </div>
           </div>
         )}
-      </div>
     </section>
   );
 }
