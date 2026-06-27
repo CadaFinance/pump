@@ -2188,22 +2188,7 @@ export function TradePanel({
         ) : null}
 
         <div className="trade-panel-input-zone">
-          <button
-            type="button"
-            onClick={toggleInputMode}
-            className="trade-currency-chip"
-            aria-label="Toggle input currency"
-          >
-            <TradeInputModeIcon
-              mode={activeInputMode}
-              symbol={symbol}
-              tokenAddress={tokenAddress}
-            />
-            <span className="text-body-sm font-medium text-pump-text">{currencyLabel}</span>
-            <ChevronDownSmall />
-          </button>
-
-          <div className="mt-4 flex items-start justify-between gap-3">
+          <div className="flex items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
               <div
                 className={
@@ -2253,38 +2238,59 @@ export function TradePanel({
 
             <button
               type="button"
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => applySliderPercent(100)}
-              disabled={!canUseSlider}
-              className={`trade-max-button shrink-0 ${
-                atMaxSpend
-                  ? side === "buy"
-                    ? "trade-max-button--active-buy"
-                    : "trade-max-button--active-sell"
-                  : ""
-              }`}
+              onClick={toggleInputMode}
+              className="trade-currency-chip shrink-0 self-start"
+              aria-label="Toggle input currency"
             >
-              Max
+              <TradeInputModeIcon
+                mode={activeInputMode}
+                symbol={symbol}
+                tokenAddress={tokenAddress}
+              />
+              <span className="text-body-sm font-medium text-pump-text">{currencyLabel}</span>
+              <ChevronDownSmall />
             </button>
           </div>
 
-          <div className="trade-ruler-slider mt-5 pb-1">
-            <div className="trade-ruler-labels" aria-hidden>
-              {TRADE_RULER_LABELS.map((label) => (
-                <span key={label}>{label}%</span>
-              ))}
+          <div className={`trade-ruler-slider trade-ruler-slider--${side} mt-5 pb-1`}>
+            <div className="trade-ruler-labels">
+              {TRADE_RULER_LABELS.map((label) => {
+                const passed = sliderPct >= label;
+                return (
+                  <button
+                    key={label}
+                    type="button"
+                    disabled={!canUseSlider}
+                    onClick={() => applySliderPercent(label)}
+                    className={`trade-ruler-label trade-ruler-label--${side}${
+                      passed ? ` trade-ruler-label--passed-${side}` : ""
+                    }`}
+                  >
+                    {label}%
+                  </button>
+                );
+              })}
             </div>
             <div className="trade-ruler-track">
               <div className="trade-ruler-line" aria-hidden />
+              <div
+                className={`trade-ruler-fill trade-ruler-fill--${side}`}
+                style={{ width: `${sliderPct}%` }}
+                aria-hidden
+              />
               <div className="trade-ruler-ticks" aria-hidden>
-                {Array.from({ length: TRADE_RULER_TICK_COUNT }, (_, index) => (
-                  <span
-                    key={index}
-                    className={
-                      index % 5 === 0 ? "trade-ruler-tick trade-ruler-tick--major" : "trade-ruler-tick trade-ruler-tick--minor"
-                    }
-                  />
-                ))}
+                {Array.from({ length: TRADE_RULER_TICK_COUNT }, (_, index) => {
+                  const tickPct = (index * 100) / (TRADE_RULER_TICK_COUNT - 1);
+                  const passed = sliderPct >= tickPct;
+                  return (
+                    <span
+                      key={index}
+                      className={`trade-ruler-tick trade-ruler-tick--${side}${
+                        index % 5 === 0 ? " trade-ruler-tick--major" : " trade-ruler-tick--minor"
+                      }${passed ? ` trade-ruler-tick--passed-${side}` : ""}`}
+                    />
+                  );
+                })}
               </div>
               <input
                 type="range"
@@ -2295,7 +2301,7 @@ export function TradePanel({
                 onChange={(e) => applySliderPercent(Number(e.target.value))}
                 disabled={!canUseSlider}
                 className={`trade-ruler-slider__input trade-amount-slider relative z-[1] w-full disabled:opacity-40 ${
-                  side === "sell" ? "trade-amount-slider--sell" : ""
+                  side === "sell" ? "trade-amount-slider--sell" : "trade-amount-slider--buy"
                 }`}
                 aria-label={side === "buy" ? "Buy amount slider" : "Sell amount slider"}
                 aria-valuetext={
