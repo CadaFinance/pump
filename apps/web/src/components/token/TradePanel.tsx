@@ -79,6 +79,8 @@ import {
 } from "@/lib/trade-timing";
 import { usePumpWallet } from "@/components/wallet/PumpWalletProvider";
 import { contracts, NATIVE_SYMBOL, pumpChain } from "@/config/chain";
+import { NativeLogo } from "@/components/token/NativeLogo";
+import { TokenAvatar } from "@/components/token/TokenAvatar";
 import { erc20Abi, maxUint256 } from "@/lib/abis/erc20";
 import { memeTokenAbi } from "@/lib/abis/meme-token";
 import { buildPermitTypedData, canUseErc20Permit, PERMIT_ALLOWANCE_MAX, permitDeadline } from "@/lib/erc20-permit";
@@ -227,10 +229,22 @@ function formatReceiveAmount(value: string | number): string {
   return n.toLocaleString(undefined, { maximumFractionDigits: 6 });
 }
 
-function formatTokenAvailableBalance(value: string | number): string {
+function formatSellAvailTokenBalance(value: string | number): string {
   const n = Number(value);
-  if (!Number.isFinite(n) || n <= 0) return "0";
-  return Math.floor(n).toLocaleString(undefined, { maximumFractionDigits: 0 });
+  if (!Number.isFinite(n) || n <= 0) return "0.00";
+  if (n > 99_999) {
+    if (n >= 1_000_000_000) {
+      const scaled = n / 1_000_000_000;
+      return `${scaled >= 100 ? scaled.toFixed(0) : scaled.toFixed(2).replace(/\.?0+$/, "")}B`;
+    }
+    if (n >= 1_000_000) {
+      const scaled = n / 1_000_000;
+      return `${scaled >= 100 ? scaled.toFixed(0) : scaled.toFixed(2).replace(/\.?0+$/, "")}M`;
+    }
+    const scaled = n / 1_000;
+    return `${scaled >= 100 ? scaled.toFixed(0) : scaled.toFixed(1).replace(/\.0$/, "")}K`;
+  }
+  return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 function formatTokenCompact(value: string | number): string {
@@ -960,26 +974,15 @@ export function TradePanel({
     }
 
     if (tokenBalance === undefined) return "…";
-    if (sellInputMode === "token") {
-      return `${formatTokenAvailableBalance(formatUnits(maxSellTokenWei, 18))} ${symbol}`;
-    }
-    if (!bondingCurve || protocolFeeBps === undefined) return "…";
-    if (bnbUsd == null) return "…";
-    const usd = bnbToUsd(Number(formatEther(maxSellEthOutWei)), bnbUsd);
-    return usd != null ? formatUsdReadable(usd) : "…";
+    return `${formatSellAvailTokenBalance(formatUnits(maxSellTokenWei, 18))} ${symbol}`;
   }, [
     isConnected,
     side,
-    buyInputMode,
-    sellInputMode,
     bnbBalance,
     tokenBalance,
     maxBuySpendWei,
     maxSellTokenWei,
-    maxSellEthOutWei,
     bnbUsd,
-    bondingCurve,
-    protocolFeeBps,
     symbol,
   ]);
 
@@ -2296,8 +2299,8 @@ export function TradePanel({
               </div>
             </div>
 
-            <div className={`trade-teeth-slider trade-teeth-slider--${side} mt-2`}>
-            <div className="trade-teeth-slider__frame">
+            <div className={`trade-teeth-slider trade-teeth-slider--${side}`}>
+              <div className="trade-teeth-slider__frame">
               {teethDragging ? (
                 <span
                   className={`trade-teeth-tooltip trade-teeth-tooltip--${side}`}
@@ -2361,9 +2364,25 @@ export function TradePanel({
           <div className="trade-detail-row trade-order-value-row">
             <span className="trade-detail-row__label">Order value</span>
             <div className="trade-order-value-row__values">
-              <span className="trade-detail-row__value financial-value text-pump-text">
-                {orderValuePrimary ?? "—"}
-              </span>
+              {orderValuePrimary ? (
+                <span className="trade-order-value-asset">
+                  {side === "buy" ? (
+                    <TokenAvatar
+                      address={tokenAddress}
+                      symbol={symbol}
+                      size={16}
+                      className="!ring-0"
+                    />
+                  ) : (
+                    <NativeLogo size={16} />
+                  )}
+                  <span className="trade-detail-row__value financial-value text-pump-text">
+                    {orderValuePrimary}
+                  </span>
+                </span>
+              ) : (
+                <span className="trade-detail-row__value financial-value text-pump-text">—</span>
+              )}
               <span className="trade-detail-row__value financial-value text-pump-muted">
                 {orderValueUsd ?? "—"}
               </span>
