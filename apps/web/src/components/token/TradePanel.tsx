@@ -991,24 +991,62 @@ export function TradePanel({
       ? `${formatReceiveAmount(formatUnits(minReceivedWei, 18))} ${symbol}`
       : `${formatBnbReadable(Number(formatEther(minReceivedWei)))} ${NATIVE_SYMBOL}`;
 
-  const buySliderPct = useMemo(() => {
-    if (side !== "buy" || maxBuySpendWei === 0n) return 0;
-    const spendWei = buyCostWei;
-    if (spendWei <= 0n) return 0;
-    const scaled = Number((spendWei * 10000n) / maxBuySpendWei) / 100;
-    return Math.max(0, Math.min(100, Math.round(scaled)));
-  }, [side, maxBuySpendWei, buyCostWei]);
+  /** Slider tracks wallet % only when amount ≤ max; manual over-max decouples (Coinbase/Jupiter pattern). */
+  const [buySliderPct, setBuySliderPct] = useState(0);
+  const [sellSliderPct, setSellSliderPct] = useState(0);
+
+  useEffect(() => {
+    if (side !== "buy") return;
+    if (maxBuySpendWei === 0n || buyCostWei <= 0n) {
+      setBuySliderPct(0);
+      return;
+    }
+    if (buyCostWei > maxBuySpendWei) {
+      setBuySliderPct(0);
+      return;
+    }
+    const pct = Math.max(
+      0,
+      Math.min(100, Math.round(Number((buyCostWei * 10000n) / maxBuySpendWei) / 100))
+    );
+    setBuySliderPct(pct);
+  }, [side, buyCostWei, maxBuySpendWei]);
+
+  useEffect(() => {
+    if (side !== "sell") return;
+    if (maxSellTokenWei === 0n || sellTokenWei <= 0n) {
+      setSellSliderPct(0);
+      return;
+    }
+    if (sellTokenWei > maxSellTokenWei) {
+      setSellSliderPct(0);
+      return;
+    }
+    const pct = Math.max(
+      0,
+      Math.min(100, Math.round(Number((sellTokenWei * 10000n) / maxSellTokenWei) / 100))
+    );
+    setSellSliderPct(pct);
+  }, [side, sellTokenWei, maxSellTokenWei]);
 
   const buySliderFillPct = buySliderPct;
-
-  const sellSliderPct = useMemo(() => {
-    if (side !== "sell" || maxSellTokenWei === 0n) return 0;
-    if (sellTokenWei <= 0n) return 0;
-    const scaled = Number((sellTokenWei * 10000n) / maxSellTokenWei) / 100;
-    return Math.max(0, Math.min(100, Math.round(scaled)));
-  }, [side, maxSellTokenWei, sellTokenWei]);
-
   const sellSliderFillPct = sellSliderPct;
+
+  const buyAmountOverMax =
+    side === "buy" && buyCostWei > maxBuySpendWei && buyCostWei > 0n && maxBuySpendWei > 0n;
+  const sellAmountOverMax =
+    side === "sell" && sellTokenWei > maxSellTokenWei && sellTokenWei > 0n && maxSellTokenWei > 0n;
+  const amountOverMax = side === "buy" ? buyAmountOverMax : sellAmountOverMax;
+  const atMaxSpend =
+    side === "buy"
+      ? buyCostWei > 0n &&
+        maxBuySpendWei > 0n &&
+        buyCostWei <= maxBuySpendWei &&
+        buySliderPct >= 100
+      : sellTokenWei > 0n &&
+        maxSellTokenWei > 0n &&
+        sellTokenWei <= maxSellTokenWei &&
+        sellSliderPct >= 100;
 
   const gasCostLabel =
     gasLoading && gasCostWei == null
@@ -1179,6 +1217,8 @@ export function TradePanel({
     setAmount("");
     setLinkedBuySpendWei(null);
     setLinkedSellTokenWei(null);
+    setBuySliderPct(0);
+    setSellSliderPct(0);
   }
 
   function applyBuySpendWei(spendWei: bigint) {
@@ -1217,6 +1257,7 @@ export function TradePanel({
     }
 
     const clamped = Math.max(0, Math.min(100, pct));
+    setBuySliderPct(clamped);
     if (clamped === 0) {
       applyBuySpendWei(0n);
       return;
@@ -1266,6 +1307,7 @@ export function TradePanel({
     }
 
     const clamped = Math.max(0, Math.min(100, pct));
+    setSellSliderPct(clamped);
     if (clamped === 0) {
       applySellTokenWei(0n);
       return;
@@ -2200,9 +2242,11 @@ export function TradePanel({
                 }`}
                 aria-label={side === "buy" ? "Buy amount slider" : "Sell amount slider"}
                 aria-valuetext={
-                  sliderPct >= 100
-                    ? "Max"
-                    : `${sliderPct}% of ${side === "buy" ? "wallet balance" : "token balance"}`
+                  amountOverMax
+                    ? "Over available balance"
+                    : atMaxSpend
+                      ? "Max"
+                      : `${sliderPct}% of ${side === "buy" ? "wallet balance" : "token balance"}`
                 }
               />
             </div>
@@ -2211,9 +2255,13 @@ export function TradePanel({
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => applySliderPercent(100)}
               disabled={!canUseSlider}
-              className={`shrink-0 text-caption font-semibold text-pump-muted transition disabled:opacity-40 ${
-                side === "buy" ? "hover:text-pump-success" : "hover:text-pump-danger"
-              }`}
+              className={`shrink-0 text-caption font-semibold transition disabled:opacity-40 ${
+                atMaxSpend
+                  ? side === "buy"
+                    ? "text-pump-success"
+                    : "text-pump-danger"
+                  : "text-pump-muted"
+              } ${side === "buy" ? "hover:text-pump-success" : "hover:text-pump-danger"}`}
             >
               Max
             </button>
