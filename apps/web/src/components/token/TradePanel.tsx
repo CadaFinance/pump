@@ -79,6 +79,8 @@ import {
 } from "@/lib/trade-timing";
 import { usePumpWallet } from "@/components/wallet/PumpWalletProvider";
 import { contracts, NATIVE_SYMBOL, pumpChain } from "@/config/chain";
+import { NativeLogo } from "@/components/token/NativeLogo";
+import { TokenAvatar } from "@/components/token/TokenAvatar";
 import { erc20Abi, maxUint256 } from "@/lib/abis/erc20";
 import { memeTokenAbi } from "@/lib/abis/meme-token";
 import { buildPermitTypedData, canUseErc20Permit, PERMIT_ALLOWANCE_MAX, permitDeadline } from "@/lib/erc20-permit";
@@ -241,6 +243,34 @@ function SwapArrowsIcon() {
       <path d="M8 7l4-4 4 4M16 17l-4 4-4-4" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
+}
+
+const TRADE_RULER_LABELS = [0, 25, 50, 75, 100] as const;
+const TRADE_RULER_TICK_COUNT = 21;
+
+function TradeInputModeIcon({
+  mode,
+  symbol,
+  tokenAddress,
+}: {
+  mode: TradeInputMode;
+  symbol: string;
+  tokenAddress: `0x${string}`;
+}) {
+  if (mode === "usd") {
+    return (
+      <span
+        className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-pump-accent/12 text-label font-semibold text-pump-accent"
+        aria-hidden
+      >
+        $
+      </span>
+    );
+  }
+  if (mode === "bnb") {
+    return <NativeLogo size={24} />;
+  }
+  return <TokenAvatar address={tokenAddress} symbol={symbol} size={24} className="!ring-0" />;
 }
 
 export function TradePanel({
@@ -1028,9 +1058,6 @@ export function TradePanel({
     );
     setSellSliderPct(pct);
   }, [side, sellTokenWei, maxSellTokenWei]);
-
-  const buySliderFillPct = buySliderPct;
-  const sellSliderFillPct = sellSliderPct;
 
   const buyAmountOverMax =
     side === "buy" && buyCostWei > maxBuySpendWei && buyCostWei > 0n && maxBuySpendWei > 0n;
@@ -2117,7 +2144,6 @@ export function TradePanel({
     (!isConnected || (!wrongChain && maxSellTokenWei > 0n));
 
   const sliderPct = side === "buy" ? buySliderPct : sellSliderPct;
-  const sliderFillPct = side === "buy" ? buySliderFillPct : sellSliderFillPct;
   const canUseSlider = side === "buy" ? canUseMaxBuy : canUseMaxSell;
   const applySliderPercent = side === "buy" ? applyBuySliderPercent : applySellSliderPercent;
 
@@ -2159,11 +2185,28 @@ export function TradePanel({
           <p className="notice-warning mx-4 mt-2 text-caption">Trading is paused on this curve.</p>
         ) : null}
         <div className="px-4 pt-4 pb-0">
-          <div className="flex justify-center">
-            <div className="inline-flex max-w-full items-baseline flex-nowrap gap-2">
+          <button
+            type="button"
+            onClick={toggleInputMode}
+            className="inline-flex items-center gap-2 rounded-md text-left transition hover:opacity-80"
+            aria-label="Toggle input currency"
+          >
+            <TradeInputModeIcon
+              mode={activeInputMode}
+              symbol={symbol}
+              tokenAddress={tokenAddress}
+            />
+            <span className="text-body-sm font-medium text-pump-text">{currencyLabel}</span>
+            <SwapArrowsIcon />
+          </button>
+
+          <div className="mt-3 flex items-start justify-between gap-3">
+            <div className="min-w-0 flex-1">
               <div
                 className={
-                  activeInputMode === "usd" ? "relative shrink-0 pl-3.5 md:pl-4" : "shrink-0"
+                  activeInputMode === "usd"
+                    ? "relative inline-flex max-w-full items-baseline pl-3.5 md:pl-4"
+                    : "inline-flex max-w-full items-baseline"
                 }
               >
                 {activeInputMode === "usd" ? (
@@ -2188,7 +2231,7 @@ export function TradePanel({
                   style={{
                     width: `${Math.min(Math.max(displayInputValue.length || 1, 1), 10)}ch`,
                   }}
-                  className="financial-value min-w-[1ch] max-w-[10ch] bg-transparent p-0 text-[2.5rem] font-semibold leading-none text-pump-text outline-none placeholder:text-pump-muted/45 md:text-[2.75rem]"
+                  className="financial-value min-w-[1ch] max-w-full bg-transparent p-0 text-left text-[2.5rem] font-semibold leading-none text-pump-text outline-none placeholder:text-pump-muted/45 md:text-[2.75rem]"
                   aria-label={
                     side === "buy"
                       ? "Trade amount"
@@ -2198,37 +2241,48 @@ export function TradePanel({
                   }
                 />
               </div>
-              <button
-                type="button"
-                onClick={toggleInputMode}
-                className="inline-flex shrink-0 items-center gap-0.5 whitespace-nowrap text-caption leading-none text-pump-muted transition hover:text-pump-text"
-                aria-label="Toggle input currency"
-              >
-                {currencyLabel}
-                <SwapArrowsIcon />
-              </button>
+              {conversionParts.length > 0 ? (
+                <p className="mt-1.5 text-left text-caption leading-snug text-pump-muted">
+                  {conversionParts.join(" · ")}
+                </p>
+              ) : null}
             </div>
+
+            <button
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => applySliderPercent(100)}
+              disabled={!canUseSlider}
+              className={`trade-max-button shrink-0 ${
+                atMaxSpend
+                  ? side === "buy"
+                    ? "trade-max-button--active-buy"
+                    : "trade-max-button--active-sell"
+                  : ""
+              }`}
+            >
+              Max
+            </button>
           </div>
 
-          {conversionParts.length > 0 ? (
-            <p className="mt-2 text-center text-caption text-pump-muted">
-              {conversionParts.join(" · ")}
-            </p>
-          ) : null}
-
-          <div className="mt-3 flex items-center gap-2.5 pb-3">
-            <div className="relative min-w-0 flex-1 pt-1">
-              <div
-                className="pointer-events-none absolute top-1/2 h-1 w-full -translate-y-1/2 rounded-full bg-pump-border/25"
-                aria-hidden
-              />
-              <div
-                className={`pointer-events-none absolute top-1/2 h-1 -translate-y-1/2 rounded-full transition-[width] duration-75 ${
-                  side === "buy" ? "bg-pump-success/70" : "bg-pump-danger/70"
-                }`}
-                style={{ width: `${sliderFillPct}%` }}
-                aria-hidden
-              />
+          <div className="trade-ruler-slider mt-5 pb-3">
+            <div className="trade-ruler-labels" aria-hidden>
+              {TRADE_RULER_LABELS.map((label) => (
+                <span key={label}>{label}%</span>
+              ))}
+            </div>
+            <div className="trade-ruler-track">
+              <div className="trade-ruler-line" aria-hidden />
+              <div className="trade-ruler-ticks" aria-hidden>
+                {Array.from({ length: TRADE_RULER_TICK_COUNT }, (_, index) => (
+                  <span
+                    key={index}
+                    className={
+                      index % 5 === 0 ? "trade-ruler-tick trade-ruler-tick--major" : "trade-ruler-tick trade-ruler-tick--minor"
+                    }
+                  />
+                ))}
+              </div>
               <input
                 type="range"
                 min={0}
@@ -2237,7 +2291,7 @@ export function TradePanel({
                 value={sliderPct}
                 onChange={(e) => applySliderPercent(Number(e.target.value))}
                 disabled={!canUseSlider}
-                className={`trade-amount-slider relative z-[1] w-full disabled:opacity-40 ${
+                className={`trade-ruler-slider__input trade-amount-slider relative z-[1] w-full disabled:opacity-40 ${
                   side === "sell" ? "trade-amount-slider-danger" : ""
                 }`}
                 aria-label={side === "buy" ? "Buy amount slider" : "Sell amount slider"}
@@ -2250,21 +2304,6 @@ export function TradePanel({
                 }
               />
             </div>
-            <button
-              type="button"
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => applySliderPercent(100)}
-              disabled={!canUseSlider}
-              className={`shrink-0 text-caption font-semibold transition disabled:opacity-40 ${
-                atMaxSpend
-                  ? side === "buy"
-                    ? "text-pump-success"
-                    : "text-pump-danger"
-                  : "text-pump-muted"
-              } ${side === "buy" ? "hover:text-pump-success" : "hover:text-pump-danger"}`}
-            >
-              Max
-            </button>
           </div>
         </div>
 
