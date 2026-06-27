@@ -237,10 +237,10 @@ function ChevronDownIcon({ open }: { open: boolean }) {
   );
 }
 
-function SwapArrowsIcon() {
+function ChevronDownSmall() {
   return (
-    <svg viewBox="0 0 24 24" aria-hidden className="h-3.5 w-3.5 fill-none stroke-current">
-      <path d="M8 7l4-4 4 4M16 17l-4 4-4-4" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    <svg viewBox="0 0 24 24" aria-hidden className="h-3.5 w-3.5 fill-none stroke-current opacity-70">
+      <path d="M6 9l6 6 6-6" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
@@ -260,7 +260,7 @@ function TradeInputModeIcon({
   if (mode === "usd") {
     return (
       <span
-        className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-pump-accent/12 text-label font-semibold text-pump-accent"
+        className="trade-currency-icon trade-currency-icon--usd"
         aria-hidden
       >
         $
@@ -2152,43 +2152,46 @@ export function TradePanel({
       className={embedded ? "trade-panel-embedded overflow-hidden p-0" : "panel-surface overflow-hidden p-0"}
     >
       <form onSubmit={onSubmit}>
-        <div className="trade-side-group">
-          <button
-            type="button"
-            onClick={() => {
-              setSide("buy");
-              setAmount("");
-              setLinkedBuySpendWei(null);
-              setLinkedSellTokenWei(null);
-              setError(null);
-            }}
-            className={side === "buy" ? "trade-side-button-active-buy" : "trade-side-button"}
-          >
-            Buy
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setSide("sell");
-              setAmount("");
-              setLinkedBuySpendWei(null);
-              setLinkedSellTokenWei(null);
-              setError(null);
-            }}
-            className={side === "sell" ? "trade-side-button-active-sell" : "trade-side-button"}
-          >
-            Sell
-          </button>
+        <div className="trade-panel-tabs">
+          <div className="trade-side-group">
+            <button
+              type="button"
+              onClick={() => {
+                setSide("buy");
+                setAmount("");
+                setLinkedBuySpendWei(null);
+                setLinkedSellTokenWei(null);
+                setError(null);
+              }}
+              className={side === "buy" ? "trade-side-button-active-buy" : "trade-side-button"}
+            >
+              Buy
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setSide("sell");
+                setAmount("");
+                setLinkedBuySpendWei(null);
+                setLinkedSellTokenWei(null);
+                setError(null);
+              }}
+              className={side === "sell" ? "trade-side-button-active-sell" : "trade-side-button"}
+            >
+              Sell
+            </button>
+          </div>
         </div>
 
         {paused ? (
           <p className="notice-warning mx-4 mt-2 text-caption">Trading is paused on this curve.</p>
         ) : null}
-        <div className="px-4 pt-4 pb-0">
+
+        <div className="trade-panel-input-zone">
           <button
             type="button"
             onClick={toggleInputMode}
-            className="inline-flex items-center gap-2 rounded-md text-left transition hover:opacity-80"
+            className="trade-currency-chip"
             aria-label="Toggle input currency"
           >
             <TradeInputModeIcon
@@ -2197,10 +2200,10 @@ export function TradePanel({
               tokenAddress={tokenAddress}
             />
             <span className="text-body-sm font-medium text-pump-text">{currencyLabel}</span>
-            <SwapArrowsIcon />
+            <ChevronDownSmall />
           </button>
 
-          <div className="mt-3 flex items-start justify-between gap-3">
+          <div className="mt-4 flex items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
               <div
                 className={
@@ -2231,7 +2234,7 @@ export function TradePanel({
                   style={{
                     width: `${Math.min(Math.max(displayInputValue.length || 1, 1), 10)}ch`,
                   }}
-                  className="financial-value min-w-[1ch] max-w-full bg-transparent p-0 text-left text-[2.5rem] font-semibold leading-none text-pump-text outline-none placeholder:text-pump-muted/45 md:text-[2.75rem]"
+                  className="trade-amount-input financial-value min-w-[1ch] max-w-full bg-transparent p-0 text-left text-[2.5rem] leading-none text-pump-text outline-none placeholder:text-pump-muted/45 md:text-[2.75rem]"
                   aria-label={
                     side === "buy"
                       ? "Trade amount"
@@ -2242,7 +2245,7 @@ export function TradePanel({
                 />
               </div>
               {conversionParts.length > 0 ? (
-                <p className="mt-1.5 text-left text-caption leading-snug text-pump-muted">
+                <p className="trade-conversion-line mt-1.5 text-left text-caption leading-snug text-pump-muted">
                   {conversionParts.join(" · ")}
                 </p>
               ) : null}
@@ -2265,7 +2268,7 @@ export function TradePanel({
             </button>
           </div>
 
-          <div className="trade-ruler-slider mt-5 pb-3">
+          <div className="trade-ruler-slider mt-5 pb-1">
             <div className="trade-ruler-labels" aria-hidden>
               {TRADE_RULER_LABELS.map((label) => (
                 <span key={label}>{label}%</span>
@@ -2292,7 +2295,7 @@ export function TradePanel({
                 onChange={(e) => applySliderPercent(Number(e.target.value))}
                 disabled={!canUseSlider}
                 className={`trade-ruler-slider__input trade-amount-slider relative z-[1] w-full disabled:opacity-40 ${
-                  side === "sell" ? "trade-amount-slider-danger" : ""
+                  side === "sell" ? "trade-amount-slider--sell" : ""
                 }`}
                 aria-label={side === "buy" ? "Buy amount slider" : "Sell amount slider"}
                 aria-valuetext={
@@ -2308,39 +2311,42 @@ export function TradePanel({
         </div>
 
         {hasTradeAmount ? (
-          <div className="px-4 pb-4 pt-1">
+          <div className="trade-panel-details-zone">
             <button
               type="button"
               onClick={() => setReceiveExpanded((v) => !v)}
-              className="flex w-full items-center justify-between py-2 text-left text-caption text-pump-muted transition hover:text-pump-text"
+              className="trade-receive-toggle"
               aria-expanded={receiveExpanded}
             >
-              <span>You receive ≈ {receiveAmount} {receiveUnit}</span>
+              <span>
+                You receive ≈{" "}
+                <span className="financial-value text-pump-text">
+                  {receiveAmount} {receiveUnit}
+                </span>
+              </span>
               <ChevronDownIcon open={receiveExpanded} />
             </button>
             {receiveExpanded ? (
-              <div className="space-y-2 pt-1 text-caption">
+              <div className="trade-detail-grid">
                 {estimatedQuotePriceLabel ? (
-                  <div className="flex items-center justify-between gap-3 text-pump-muted">
-                    <span>Est. price</span>
-                    <span className="financial-value text-pump-text">
+                  <div className="trade-detail-row">
+                    <span className="trade-detail-row__label">Est. price</span>
+                    <span className="trade-detail-row__value financial-value">
                       {estimatedQuotePriceLabel}
                     </span>
                   </div>
                 ) : null}
-                <div className="flex items-center justify-between gap-3 text-pump-muted">
-                  <span>Min received</span>
-                  <span className="financial-value text-pump-text">{minReceivedLabel}</span>
+                <div className="trade-detail-row">
+                  <span className="trade-detail-row__label">Min received</span>
+                  <span className="trade-detail-row__value financial-value">{minReceivedLabel}</span>
                 </div>
-                <div className="flex items-center justify-between gap-3 text-pump-muted">
-                  <span>Max slippage</span>
-                  <span className="financial-value text-pump-text">{slippagePct}%</span>
+                <div className="trade-detail-row">
+                  <span className="trade-detail-row__label">Max slippage</span>
+                  <span className="trade-detail-row__value financial-value">{slippagePct}%</span>
                 </div>
-                <div className="flex items-center justify-between gap-3 text-pump-muted">
-                  <span>Est. gas</span>
-                  <span className="financial-value text-pump-text">
-                    {gasCostLabel}
-                  </span>
+                <div className="trade-detail-row">
+                  <span className="trade-detail-row__label">Est. gas</span>
+                  <span className="trade-detail-row__value financial-value">{gasCostLabel}</span>
                 </div>
               </div>
             ) : null}
