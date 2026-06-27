@@ -61,9 +61,9 @@ export function TokenDetailBodySkeleton() {
                   <thead>
                     <tr>
                       <th>Account</th>
-                      <th>Amount</th>
-                      <th className="token-tape-table__col-mid">$M</th>
-                      <th>Price</th>
+                      <th className="token-tape-table__col-num">Amount</th>
+                      <th className="token-tape-table__col-num">$M</th>
+                      <th className="token-tape-table__col-num">Price</th>
                       <th className="token-tape-table__col-end">Time</th>
                     </tr>
                   </thead>
@@ -76,8 +76,8 @@ export function TokenDetailBodySkeleton() {
                         <td>
                           <Skeleton className="h-3.5 w-12" />
                         </td>
-                        <td className="token-tape-table__col-mid">
-                          <Skeleton className="mx-auto h-3.5 w-10" />
+                        <td className="token-tape-table__col-num">
+                          <Skeleton className="ml-auto h-3.5 w-10" />
                         </td>
                         <td>
                           <Skeleton className="h-3.5 w-14" />

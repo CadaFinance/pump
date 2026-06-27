@@ -376,9 +376,9 @@ export function TradeTape({
                 <thead>
                   <tr>
                     <th>Account</th>
-                    <th className="token-tape-table__col-mid">Balance</th>
-                    <th className="token-tape-table__col-mid">Supply</th>
-                    <th>Entry</th>
+                    <th className="token-tape-table__col-num">Balance</th>
+                    <th className="token-tape-table__col-num">Supply</th>
+                    <th className="token-tape-table__col-num">Entry</th>
                     <th className="token-tape-table__col-end">P/L</th>
                   </tr>
                 </thead>
@@ -419,13 +419,13 @@ export function TradeTape({
                             onAddressClick={onAddressClick}
                           />
                         </td>
-                        <td className="token-tape-table__col-mid token-tape-table__value financial-value">
+                        <td className="token-tape-table__col-num token-tape-table__value financial-value token-tape-table__cell-default">
                           {formatTokenAmount(row.netTokens)}
                         </td>
-                        <td className="token-tape-table__col-mid token-tape-table__value financial-value token-tape-table__muted">
+                        <td className="token-tape-table__col-num token-tape-table__value financial-value token-tape-table__muted">
                           {formatSupplyShare(row.netTokens)}
                         </td>
-                        <td className="token-tape-table__value financial-value token-tape-table__muted">
+                        <td className="token-tape-table__col-num token-tape-table__value financial-value token-tape-table__muted">
                           {formatUsdReadable(avgEntryUsd, { compact: true })}
                         </td>
                         <td className="token-tape-table__col-end">
@@ -458,9 +458,9 @@ export function TradeTape({
               <thead>
                 <tr>
                   <th>Account</th>
-                  <th>Amount</th>
-                  <th className="token-tape-table__col-mid">${symbol}</th>
-                  <th>Price</th>
+                  <th className="token-tape-table__col-num">Amount</th>
+                  <th className="token-tape-table__col-num">${symbol}</th>
+                  <th className="token-tape-table__col-num">Price</th>
                   <th className="token-tape-table__col-end">Time</th>
                   <th className="token-tape-table__col-end">Txn</th>
                 </tr>
@@ -483,16 +483,16 @@ export function TradeTape({
                         />
                       </td>
                       <td
-                        className={`token-tape-table__value financial-value font-medium ${
-                          isBuy ? "text-pump-success" : "text-pump-danger"
+                        className={`token-tape-table__col-num token-tape-table__value financial-value font-medium ${
+                          isBuy ? "token-tape-table__amount--buy" : "token-tape-table__amount--sell"
                         }`}
                       >
                         {formatUsdReadable(tradeNetUsd)}
                       </td>
-                      <td className="token-tape-table__col-mid token-tape-table__value financial-value token-tape-table__muted">
+                      <td className="token-tape-table__col-num token-tape-table__value financial-value token-tape-table__muted token-tape-table__cell-default">
                         {formatTokenAmount(Number(trade.tokenAmount))}
                       </td>
-                      <td className="token-tape-table__value financial-value token-tape-table__muted">
+                      <td className="token-tape-table__col-num token-tape-table__value financial-value token-tape-table__muted token-tape-table__cell-default">
                         {formatTradeFillPriceUsd(
                           trade.nativeAmount,
                           trade.tokenAmount,
