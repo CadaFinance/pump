@@ -724,6 +724,10 @@ code,
     font-variant-numeric: tabular-nums;
   }
 
+  .trade-available-line {
+    font-variant-numeric: tabular-nums;
+  }
+
   .trade-receive-toggle {
     display: flex;
     width: 100%;

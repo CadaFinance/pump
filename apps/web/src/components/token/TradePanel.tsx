@@ -810,6 +810,14 @@ export function TradePanel({
     return effectiveTokenBalance(pendingLedgerRef.current, tokenBalance);
   }, [isConnected, tokenBalance, pendingReservationTick]);
 
+  const maxSellEthOutWei = useMemo(() => {
+    if (!isConnected || maxSellTokenWei === 0n || !bondingCurve || protocolFeeBps === undefined) {
+      return 0n;
+    }
+    const { ethOut } = quoteSellFromCurveState(bondingCurve, protocolFeeBps, maxSellTokenWei);
+    return ethOut > 0n ? ethOut : 0n;
+  }, [isConnected, maxSellTokenWei, bondingCurve, protocolFeeBps]);
+
   const insufficientSellTokenBalance =
     side === "sell" &&
     isConnected &&
@@ -957,18 +965,11 @@ export function TradePanel({
       if (amountUsdLabel) {
         conversionParts.push(`≈ ${amountUsdLabel}`);
       }
-    } else {
-      if (Number(amount) > 0) {
-        if (buyInputMode === "usd") {
-          conversionParts.push(`≈ ${formatBnbReadable(Number(amount))} ${NATIVE_SYMBOL}`);
-        } else if (amountUsdLabel) {
-          conversionParts.push(`≈ ${amountUsdLabel}`);
-        }
-      }
-      if (estimatedOut > 0n) {
-        conversionParts.push(
-          `≈ ${formatReceiveAmount(formatUnits(estimatedOut, 18))} ${symbol}`
-        );
+    } else if (Number(amount) > 0) {
+      if (buyInputMode === "usd") {
+        conversionParts.push(`≈ ${formatBnbReadable(Number(amount))} ${NATIVE_SYMBOL}`);
+      } else if (amountUsdLabel) {
+        conversionParts.push(`≈ ${amountUsdLabel}`);
       }
     }
   } else if (sellTokenWei > 0n) {
@@ -981,19 +982,54 @@ export function TradePanel({
       if (amountUsdLabel) {
         conversionParts.push(`≈ ${amountUsdLabel}`);
       }
-    } else {
-      if (Number(amount) > 0) {
-        if (sellInputMode === "usd") {
-          conversionParts.push(`≈ ${formatBnbReadable(Number(amount))} ${NATIVE_SYMBOL}`);
-        } else if (amountUsdLabel) {
-          conversionParts.push(`≈ ${amountUsdLabel}`);
-        }
+    } else if (Number(amount) > 0) {
+      if (sellInputMode === "usd") {
+        conversionParts.push(`≈ ${formatBnbReadable(Number(amount))} ${NATIVE_SYMBOL}`);
+      } else if (amountUsdLabel) {
+        conversionParts.push(`≈ ${amountUsdLabel}`);
       }
-      conversionParts.push(
-        `≈ ${formatReceiveAmount(formatUnits(sellTokenWei, 18))} ${symbol}`
-      );
     }
   }
+
+  const availableLabel = useMemo(() => {
+    if (!isConnected) return null;
+
+    if (side === "buy") {
+      if (bnbBalance === undefined) return "…";
+      if (buyInputMode === "bnb") {
+        return `${formatBnbReadable(Number(formatEther(maxBuySpendWei)))} ${NATIVE_SYMBOL}`;
+      }
+      if (bnbUsd == null) return "…";
+      const usd = bnbToUsd(Number(formatEther(maxBuySpendWei)), bnbUsd);
+      return usd != null ? formatUsdReadable(usd) : "…";
+    }
+
+    if (tokenBalance === undefined) return "…";
+    if (sellInputMode === "token") {
+      return `${formatReceiveAmount(formatUnits(maxSellTokenWei, 18))} ${symbol}`;
+    }
+    if (!bondingCurve || protocolFeeBps === undefined) return "…";
+    if (sellInputMode === "bnb") {
+      return `${formatBnbReadable(Number(formatEther(maxSellEthOutWei)))} ${NATIVE_SYMBOL}`;
+    }
+    if (bnbUsd == null) return "…";
+    const usd = bnbToUsd(Number(formatEther(maxSellEthOutWei)), bnbUsd);
+    return usd != null ? formatUsdReadable(usd) : "…";
+  }, [
+    isConnected,
+    side,
+    buyInputMode,
+    sellInputMode,
+    bnbBalance,
+    tokenBalance,
+    maxBuySpendWei,
+    maxSellTokenWei,
+    maxSellEthOutWei,
+    bnbUsd,
+    bondingCurve,
+    protocolFeeBps,
+    symbol,
+  ]);
 
   const receiveAmount =
     side === "buy"
@@ -1002,23 +1038,6 @@ export function TradePanel({
         ? formatBnbReadable(Number(formatEther(estimatedOut)))
         : "0";
   const receiveUnit = side === "buy" ? symbol : NATIVE_SYMBOL;
-
-  const minReceivedWei = useMemo(() => {
-    if (side === "buy") {
-      if (buyInputMode === "token" && effectiveBuyTokenWei > 0n) {
-        return minOutWithSlippage(effectiveBuyTokenWei);
-      }
-      if (estimatedOut > 0n) return minOutWithSlippage(estimatedOut);
-    } else if (estimatedOut > 0n) {
-      return minOutWithSlippage(estimatedOut);
-    }
-    return 0n;
-  }, [side, buyInputMode, effectiveBuyTokenWei, estimatedOut]);
-
-  const minReceivedLabel =
-    side === "buy"
-      ? `${formatReceiveAmount(formatUnits(minReceivedWei, 18))} ${symbol}`
-      : `${formatBnbReadable(Number(formatEther(minReceivedWei)))} ${NATIVE_SYMBOL}`;
 
   /** Slider tracks wallet % only when amount ≤ max; manual over-max decouples (Coinbase/Jupiter pattern). */
   const [buySliderPct, setBuySliderPct] = useState(0);
@@ -1100,8 +1119,6 @@ export function TradePanel({
       : userOpPrefundWei > 0n
         ? formatGasCostLabel(userOpPrefundWei, bnbUsd)
         : "—";
-
-  const slippagePct = Number(SLIPPAGE_BPS) / 100;
 
   const estimatedQuotePriceUsd = useMemo(() => {
     if (side === "buy" && estimatedOut > 0n && buyCostWei > 0n) {
@@ -2263,10 +2280,20 @@ export function TradePanel({
                   }
                 />
               </div>
-              {conversionParts.length > 0 ? (
-                <p className="trade-conversion-line mt-1.5 text-left text-caption leading-snug text-pump-muted">
-                  {conversionParts.join(" · ")}
-                </p>
+              {conversionParts.length > 0 || availableLabel ? (
+                <div className="mt-1.5 space-y-0.5">
+                  {conversionParts.length > 0 ? (
+                    <p className="trade-conversion-line text-left text-caption leading-snug text-pump-muted">
+                      {conversionParts.join(" · ")}
+                    </p>
+                  ) : null}
+                  {availableLabel ? (
+                    <p className="trade-available-line text-left text-caption leading-snug text-pump-muted">
+                      Avlbl{" "}
+                      <span className="financial-value text-pump-text">{availableLabel}</span>
+                    </p>
+                  ) : null}
+                </div>
               ) : null}
             </div>
 
@@ -2372,14 +2399,6 @@ export function TradePanel({
                     </span>
                   </div>
                 ) : null}
-                <div className="trade-detail-row">
-                  <span className="trade-detail-row__label">Min received</span>
-                  <span className="trade-detail-row__value financial-value">{minReceivedLabel}</span>
-                </div>
-                <div className="trade-detail-row">
-                  <span className="trade-detail-row__label">Max slippage</span>
-                  <span className="trade-detail-row__value financial-value">{slippagePct}%</span>
-                </div>
                 <div className="trade-detail-row">
                   <span className="trade-detail-row__label">Est. gas</span>
                   <span className="trade-detail-row__value financial-value">{gasCostLabel}</span>
