@@ -29,21 +29,15 @@ type PagedMeta = {
   offset: number;
 };
 
-const activityTableScrollClass =
-  "min-w-0 overflow-x-auto overscroll-x-contain [-webkit-overflow-scrolling:touch]";
-const cellClass = "px-2.5 py-2.5 sm:px-3 lg:px-4 lg:py-3";
-const accountCellClass = `${cellClass} max-w-[9.5rem] whitespace-nowrap lg:min-w-[9rem] lg:max-w-none`;
-const amountCellClass = `${cellClass} whitespace-nowrap financial-value font-medium`;
+const activityTableScrollClass = "token-tape-table-wrap";
 
-function formatRelativeTime(iso: string): string {
-  const diffMs = Date.now() - new Date(iso).getTime();
-  const diffMin = Math.max(0, Math.floor(diffMs / 60_000));
-  if (diffMin < 1) return "just now";
-  if (diffMin < 60) return `${diffMin}m ago`;
-  const diffHr = Math.floor(diffMin / 60);
-  if (diffHr < 24) return `${diffHr}h ago`;
-  const diffDay = Math.floor(diffHr / 24);
-  return `${diffDay}d ago`;
+function formatTradeClockTime(iso: string): string {
+  return new Date(iso).toLocaleTimeString(undefined, {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  });
 }
 
 function formatTokenAmount(value: number): string {
@@ -149,11 +143,11 @@ function IdentityPill({
     <button
       type="button"
       onClick={() => onAddressClick(address)}
-      className="inline-flex min-w-0 max-w-full items-center gap-1 text-left text-caption text-pump-text transition hover:text-pump-accent"
+      className="token-tape-identity"
       aria-label={`View profile ${label}`}
     >
-      <UserAvatarForAddress address={address} size={22} className="shrink-0 sm:!h-6 sm:!w-6" />
-      <span className="truncate font-medium">{label}</span>
+      <UserAvatarForAddress address={address} size={18} className="shrink-0" />
+      <span className="token-tape-identity__label">{label}</span>
       {showCreatorBadge ? <CreatorBadge /> : null}
     </button>
   );
@@ -373,19 +367,19 @@ export function TradeTape({
       <div className="token-trade-tape__scroll">
         {tab === "holders" ? (
           !holdersReady ? (
-            <p className="px-4 py-6 text-body-sm text-pump-muted">Verifying holders on-chain…</p>
+            <p className="token-tape-empty">Verifying holders on-chain…</p>
           ) : holderRows.length === 0 ? (
-            <p className="px-4 py-6 text-body-sm text-pump-muted">No holders yet.</p>
+            <p className="token-tape-empty">No holders yet.</p>
           ) : (
             <div className={activityTableScrollClass}>
-              <table className="sheet-grid w-max min-w-[640px] lg:w-full lg:min-w-[720px]">
+              <table className="token-tape-table">
                 <thead>
                   <tr>
-                    <th className="whitespace-nowrap">Account</th>
-                    <th>Balance</th>
-                    <th>Supply</th>
+                    <th>Account</th>
+                    <th className="token-tape-table__col-mid">Balance</th>
+                    <th className="token-tape-table__col-mid">Supply</th>
                     <th>Entry</th>
-                    <th className="text-right">P/L</th>
+                    <th className="token-tape-table__col-end">P/L</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -418,30 +412,30 @@ export function TradeTape({
 
                     return (
                       <tr key={row.address}>
-                        <td className={accountCellClass}>
+                        <td className="token-tape-table__account">
                           <IdentityPill
                             address={row.address}
                             showCreatorBadge={row.address.toLowerCase() === creatorKey}
                             onAddressClick={onAddressClick}
                           />
                         </td>
-                        <td className={`${cellClass} financial-value text-pump-text`}>
+                        <td className="token-tape-table__col-mid token-tape-table__value financial-value">
                           {formatTokenAmount(row.netTokens)}
                         </td>
-                        <td className={`${cellClass} financial-value text-pump-text`}>
+                        <td className="token-tape-table__col-mid token-tape-table__value financial-value token-tape-table__muted">
                           {formatSupplyShare(row.netTokens)}
                         </td>
-                        <td className={`${cellClass} financial-value text-pump-text`}>
+                        <td className="token-tape-table__value financial-value token-tape-table__muted">
                           {formatUsdReadable(avgEntryUsd, { compact: true })}
                         </td>
-                        <td className={cellClass}>
-                          <div className="flex items-center justify-end gap-1.5 whitespace-nowrap lg:gap-2">
-                            <span className={`financial-value text-caption font-semibold lg:text-body-sm ${pnlTone}`}>
+                        <td className="token-tape-table__col-end">
+                          <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
+                            <span className={`financial-value text-caption font-medium ${pnlTone}`}>
                               {formatUsdReadable(unrealizedPnlUsd, { compact: true, signed: true })}
                             </span>
                             <PctChange
                               value={unrealizedPnlPct}
-                              className="text-[11px] lg:text-caption"
+                              className="text-[11px]"
                               toneClassName={pnlTone}
                             />
                           </div>
@@ -457,18 +451,18 @@ export function TradeTape({
             </div>
           )
         ) : displayedTrades.length === 0 ? (
-          <p className="px-4 py-6 text-body-sm text-pump-muted">No trades yet.</p>
+          <p className="token-tape-empty">No trades yet.</p>
         ) : (
           <div className={activityTableScrollClass}>
-            <table className="sheet-grid w-max min-w-[600px] lg:w-full lg:min-w-[720px]">
+            <table className="token-tape-table">
               <thead>
                 <tr>
-                  <th className="whitespace-nowrap">Account</th>
+                  <th>Account</th>
                   <th>Amount</th>
-                  <th>${symbol}</th>
+                  <th className="token-tape-table__col-mid">${symbol}</th>
                   <th>Price</th>
-                  <th>Time</th>
-                  <th className="text-right">Txn</th>
+                  <th className="token-tape-table__col-end">Time</th>
+                  <th className="token-tape-table__col-end">Txn</th>
                 </tr>
               </thead>
               <tbody>
@@ -481,7 +475,7 @@ export function TradeTape({
                       key={trade.id}
                       className={tradeRowClass(trade.id, trade.side, isOptimistic)}
                     >
-                      <td className={accountCellClass}>
+                      <td className="token-tape-table__account">
                         <IdentityPill
                           address={trade.traderAddress}
                           showCreatorBadge={trade.traderAddress.toLowerCase() === creatorKey}
@@ -489,16 +483,16 @@ export function TradeTape({
                         />
                       </td>
                       <td
-                        className={`${amountCellClass} ${
+                        className={`token-tape-table__value financial-value font-medium ${
                           isBuy ? "text-pump-success" : "text-pump-danger"
                         }`}
                       >
                         {formatUsdReadable(tradeNetUsd)}
                       </td>
-                      <td className={`${cellClass} financial-value text-pump-text`}>
+                      <td className="token-tape-table__col-mid token-tape-table__value financial-value token-tape-table__muted">
                         {formatTokenAmount(Number(trade.tokenAmount))}
                       </td>
-                      <td className={`${cellClass} financial-value text-pump-text`}>
+                      <td className="token-tape-table__value financial-value token-tape-table__muted">
                         {formatTradeFillPriceUsd(
                           trade.nativeAmount,
                           trade.tokenAmount,
@@ -509,15 +503,15 @@ export function TradeTape({
                           trade.nativeUsdRate
                         )}
                       </td>
-                      <td className={`${cellClass} text-caption text-pump-muted whitespace-nowrap`}>
-                        {formatRelativeTime(trade.blockTime)}
+                      <td className="token-tape-table__col-end token-tape-table__muted">
+                        {formatTradeClockTime(trade.blockTime)}
                       </td>
-                      <td className={`${cellClass} text-right`}>
+                      <td className="token-tape-table__col-end">
                         <a
                           href={explorerTxUrl(trade.txHash)}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="financial-value text-caption text-pump-muted hover:text-pump-accent"
+                          className="financial-value text-caption text-pump-muted transition hover:text-pump-accent"
                         >
                           {shortAddress(trade.txHash, true)}
                         </a>

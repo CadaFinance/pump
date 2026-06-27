@@ -25,6 +25,24 @@ export function TokenDetailBodySkeleton() {
   return (
     <div className="token-page" aria-busy="true" aria-label="Loading token">
       <div className="token-page-grid">
+        <div className="token-page-stack token-page-stack--sidebar hidden lg:flex">
+          <section className="token-market-sidebar panel-surface">
+            <div className="token-market-sidebar__toolbar">
+              <Skeleton className="h-8 w-full rounded-md" />
+              <div className="mt-2 flex gap-2">
+                <Skeleton className="h-3 w-8" />
+                <Skeleton className="h-3 w-10" />
+                <Skeleton className="h-3 w-8" />
+              </div>
+            </div>
+            <div className="token-market-sidebar__list p-2">
+              {Array.from({ length: 8 }).map((_, index) => (
+                <Skeleton key={index} className="mb-2 h-8 w-full rounded-sm" />
+              ))}
+            </div>
+          </section>
+        </div>
+
         <div className="token-page-stack token-page-stack--main">
           <div className="shrink-0">{toolbarSkeleton}</div>
           <div className="token-page-chart-slot">
@@ -37,20 +55,38 @@ export function TokenDetailBodySkeleton() {
                 <Skeleton className="h-4 w-16" />
               </div>
               <div className="token-trade-tape__scroll">
-                <div className="sheet-list">
-                  {Array.from({ length: 5 }).map((_, index) => (
-                    <div
-                      key={index}
-                      className="flex items-center justify-between gap-3 px-3 py-2.5 md:px-4"
-                    >
-                      <div className="flex min-w-0 items-center gap-2">
-                        <Skeleton variant="circle" className="h-6 w-6" />
-                        <Skeleton className="h-4 w-24" />
-                      </div>
-                      <Skeleton variant="line" className="h-3 w-16" />
-                    </div>
-                  ))}
-                </div>
+                <table className="token-tape-table">
+                  <thead>
+                    <tr>
+                      <th>Account</th>
+                      <th>Amount</th>
+                      <th className="token-tape-table__col-mid">$M</th>
+                      <th>Price</th>
+                      <th className="token-tape-table__col-end">Time</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {Array.from({ length: 5 }).map((_, index) => (
+                      <tr key={index}>
+                        <td className="token-tape-table__account">
+                          <Skeleton className="h-3.5 w-20" />
+                        </td>
+                        <td>
+                          <Skeleton className="h-3.5 w-12" />
+                        </td>
+                        <td className="token-tape-table__col-mid">
+                          <Skeleton className="mx-auto h-3.5 w-10" />
+                        </td>
+                        <td>
+                          <Skeleton className="h-3.5 w-14" />
+                        </td>
+                        <td className="token-tape-table__col-end">
+                          <Skeleton className="ml-auto h-3.5 w-14" />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </section>
           </div>

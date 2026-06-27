@@ -44,6 +44,7 @@ import {
   type TradePrefillConfig,
 } from "@/lib/token-trade-prefill";
 import { TradeTape } from "@/components/token/TradeTape";
+import { TokenMarketListPlaceholder } from "@/components/token/TokenMarketListPlaceholder";
 import { PriceChart } from "@/components/token/PriceChart";
 import { useFavorites } from "@/components/favorites/FavoritesProvider";
 import { TokenAvatar } from "@/components/token/TokenAvatar";
@@ -807,6 +808,10 @@ export function TokenDetailLive({
   return (
     <div className="token-page">
       <div className="token-page-grid">
+        <div className="token-page-stack token-page-stack--sidebar hidden lg:flex">
+          <TokenMarketListPlaceholder />
+        </div>
+
         <div className="token-page-stack token-page-stack--main">
           <div className="shrink-0">{tokenToolbar}</div>
           <div className="token-page-chart-slot">
