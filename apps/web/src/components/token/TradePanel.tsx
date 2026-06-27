@@ -79,8 +79,6 @@ import {
 } from "@/lib/trade-timing";
 import { usePumpWallet } from "@/components/wallet/PumpWalletProvider";
 import { contracts, NATIVE_SYMBOL, pumpChain } from "@/config/chain";
-import { NativeLogo } from "@/components/token/NativeLogo";
-import { TokenAvatar } from "@/components/token/TokenAvatar";
 import { erc20Abi, maxUint256 } from "@/lib/abis/erc20";
 import { memeTokenAbi } from "@/lib/abis/meme-token";
 import { buildPermitTypedData, canUseErc20Permit, PERMIT_ALLOWANCE_MAX, permitDeadline } from "@/lib/erc20-permit";
@@ -116,7 +114,11 @@ import {
 import type { TradePrefillConfig } from "@/lib/token-trade-prefill";
 
 type Side = "buy" | "sell";
-type TradeInputMode = "usd" | "bnb" | "token";
+type TradeInputMode = "usd" | "token";
+
+function normalizeTradeInputMode(mode?: string): TradeInputMode {
+  return mode === "token" ? "token" : "usd";
+}
 
 const CURVE_POLL_MS = 4_000;
 
@@ -253,29 +255,12 @@ function ChevronDownSmall() {
 
 const TRADE_TEETH_COUNT = 100;
 
-function TradeInputModeIcon({
-  mode,
-  symbol,
-  tokenAddress,
-}: {
-  mode: TradeInputMode;
-  symbol: string;
-  tokenAddress: `0x${string}`;
-}) {
-  if (mode === "usd") {
-    return (
-      <span
-        className="trade-currency-icon trade-currency-icon--usd"
-        aria-hidden
-      >
-        $
-      </span>
-    );
-  }
-  if (mode === "bnb") {
-    return <NativeLogo size={24} />;
-  }
-  return <TokenAvatar address={tokenAddress} symbol={symbol} size={24} className="!ring-0" />;
+function AssetMenuCheck() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden className="h-4 w-4 shrink-0 stroke-current">
+      <path d="M5 12l5 5L20 7" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
 }
 
 export function TradePanel({
@@ -320,6 +305,8 @@ export function TradePanel({
   const autoSubmitTriggeredRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const [receiveExpanded, setReceiveExpanded] = useState(false);
+  const [assetMenuOpen, setAssetMenuOpen] = useState(false);
+  const assetMenuRef = useRef<HTMLDivElement>(null);
   const [pendingReservationTick, setPendingReservationTick] = useState(0);
   const pendingLedgerRef = useRef(createTradePendingLedger());
   const pendingTradesRef = useRef<Map<string, { side: "buy" | "sell" }>>(new Map());
@@ -347,14 +334,14 @@ export function TradePanel({
     setSide(prefill.side);
     if (prefill.side === "buy") {
       if (prefill.buyMode) {
-        setBuyInputMode(prefill.buyMode);
+        setBuyInputMode(normalizeTradeInputMode(prefill.buyMode));
       }
       if (prefill.buyMax) {
         buyMaxPendingRef.current = true;
       }
     }
     if (prefill.side === "sell") {
-      setSellInputMode(prefill.buyMode ?? "token");
+      setSellInputMode(normalizeTradeInputMode(prefill.buyMode ?? "token"));
       if (prefill.sellMax) {
         sellMaxPendingRef.current = true;
       }
@@ -953,12 +940,8 @@ export function TradePanel({
     pendingReservationTick,
   ]);
 
-  const currencyLabel =
-    activeInputMode === "usd"
-      ? "USD"
-      : activeInputMode === "bnb"
-        ? NATIVE_SYMBOL
-        : symbol;
+  const currencyLabel = activeInputMode === "usd" ? "USD" : symbol;
+  const inputFieldLabel = activeInputMode === "usd" ? "Total" : "Amount";
 
   const conversionParts: string[] = [];
   const hasInputValue =
@@ -967,77 +950,24 @@ export function TradePanel({
     Number.isFinite(Number(displayInputValue.replace(/,/g, "."))) &&
     Number(displayInputValue.replace(/,/g, ".")) > 0;
 
-  if (hasInputValue) {
-    if (side === "buy") {
-      if (buyInputMode === "token") {
-        if (buyCostWei > 0n) {
-          conversionParts.push(
-            `≈ ${formatBnbReadable(Number(formatEther(buyCostWei)))} ${NATIVE_SYMBOL}`
-          );
-        }
-        if (amountUsdLabel) {
-          conversionParts.push(`≈ ${amountUsdLabel}`);
-        }
-      } else if (buyInputMode === "usd") {
-        conversionParts.push(`≈ ${formatBnbReadable(Number(amount))} ${NATIVE_SYMBOL}`);
-      } else if (amountUsdLabel) {
-        conversionParts.push(`≈ ${amountUsdLabel}`);
-      }
-    } else if (sellInputMode === "token") {
-      if (estimatedOut > 0n) {
+  if (hasInputValue && side === "buy") {
+    if (buyInputMode === "token") {
+      if (buyCostWei > 0n) {
         conversionParts.push(
-          `≈ ${formatBnbReadable(Number(formatEther(estimatedOut)))} ${NATIVE_SYMBOL}`
+          `≈ ${formatBnbReadable(Number(formatEther(buyCostWei)))} ${NATIVE_SYMBOL}`
         );
       }
       if (amountUsdLabel) {
         conversionParts.push(`≈ ${amountUsdLabel}`);
       }
-    } else if (sellInputMode === "usd") {
+    } else if (Number(amount) > 0) {
       conversionParts.push(`≈ ${formatBnbReadable(Number(amount))} ${NATIVE_SYMBOL}`);
-    } else if (amountUsdLabel) {
-      conversionParts.push(`≈ ${amountUsdLabel}`);
     }
   }
 
-  const inputChipLabel = useMemo(() => {
-    if (!hasInputValue) return null;
-    if (activeInputMode === "usd") {
-      const usd = Number(displayInputValue.replace(/,/g, "."));
-      return Number.isFinite(usd) && usd > 0 ? formatUsdReadable(usd) : null;
-    }
-    if (activeInputMode === "bnb") {
-      const bnb = Number(amount);
-      return Number.isFinite(bnb) && bnb > 0
-        ? `${formatBnbReadable(bnb)} ${NATIVE_SYMBOL}`
-        : null;
-    }
-    if (side === "buy" && effectiveBuyTokenWei > 0n) {
-      return `${formatReceiveAmount(formatUnits(effectiveBuyTokenWei, 18))} ${symbol}`;
-    }
-    if (side === "sell" && sellTokenWei > 0n) {
-      return `${formatReceiveAmount(formatUnits(sellTokenWei, 18))} ${symbol}`;
-    }
-    return null;
-  }, [
-    hasInputValue,
-    activeInputMode,
-    displayInputValue,
-    amount,
-    side,
-    effectiveBuyTokenWei,
-    sellTokenWei,
-    symbol,
-  ]);
-
   const metaLeftLine = (() => {
-    if (!hasInputValue) return null;
-    const parts: string[] = [];
-    if (inputChipLabel && activeInputMode !== "token") {
-      parts.push(inputChipLabel);
-    }
-    parts.push(...conversionParts);
-    if (parts.length > 0) return parts.join(" · ");
-    return inputChipLabel;
+    if (!hasInputValue || side !== "buy" || conversionParts.length === 0) return null;
+    return conversionParts.join(" · ");
   })();
 
   const availableLabel = useMemo(() => {
@@ -1045,9 +975,6 @@ export function TradePanel({
 
     if (side === "buy") {
       if (bnbBalance === undefined) return "…";
-      if (buyInputMode === "bnb") {
-        return `${formatBnbReadable(Number(formatEther(maxBuySpendWei)))} ${NATIVE_SYMBOL}`;
-      }
       if (bnbUsd == null) return "…";
       const usd = bnbToUsd(Number(formatEther(maxBuySpendWei)), bnbUsd);
       return usd != null ? formatUsdReadable(usd) : "…";
@@ -1058,9 +985,6 @@ export function TradePanel({
       return `${formatTokenAvailableBalance(formatUnits(maxSellTokenWei, 18))} ${symbol}`;
     }
     if (!bondingCurve || protocolFeeBps === undefined) return "…";
-    if (sellInputMode === "bnb") {
-      return `${formatBnbReadable(Number(formatEther(maxSellEthOutWei)))} ${NATIVE_SYMBOL}`;
-    }
     if (bnbUsd == null) return "…";
     const usd = bnbToUsd(Number(formatEther(maxSellEthOutWei)), bnbUsd);
     return usd != null ? formatUsdReadable(usd) : "…";
@@ -1087,6 +1011,16 @@ export function TradePanel({
         ? formatBnbReadable(Number(formatEther(estimatedOut)))
         : "0";
   const receiveUnit = side === "buy" ? symbol : NATIVE_SYMBOL;
+
+  const sellReceiveUsdLabel = useMemo(() => {
+    if (side !== "sell") return null;
+    if (amountUsdLabel) return amountUsdLabel;
+    if (estimatedOut > 0n && bnbUsd != null) {
+      const usd = bnbToUsd(Number(formatEther(estimatedOut)), bnbUsd);
+      return usd != null ? formatUsdReadable(usd) : null;
+    }
+    return null;
+  }, [side, amountUsdLabel, estimatedOut, bnbUsd]);
 
   /** Slider tracks wallet % only when amount ≤ max; manual over-max decouples (Coinbase/Jupiter pattern). */
   const [buySliderPct, setBuySliderPct] = useState(0);
@@ -1427,25 +1361,33 @@ export function TradePanel({
     applySellTokenWei(tokenWei);
   }
 
-  function toggleInputMode() {
+  function selectInputMode(mode: TradeInputMode) {
+    if (mode === activeInputMode) {
+      setAssetMenuOpen(false);
+      return;
+    }
     setAmount("");
     setLinkedBuySpendWei(null);
     setLinkedSellTokenWei(null);
     setError(null);
     if (side === "buy") {
-      setBuyInputMode((mode) => {
-        if (mode === "usd") return "bnb";
-        if (mode === "bnb") return "token";
-        return "usd";
-      });
-      return;
+      setBuyInputMode(mode);
+    } else {
+      setSellInputMode(mode);
     }
-    setSellInputMode((mode) => {
-      if (mode === "usd") return "bnb";
-      if (mode === "bnb") return "token";
-      return "usd";
-    });
+    setAssetMenuOpen(false);
   }
+
+  useEffect(() => {
+    if (!assetMenuOpen) return;
+    const onPointerDown = (event: PointerEvent) => {
+      if (!assetMenuRef.current?.contains(event.target as Node)) {
+        setAssetMenuOpen(false);
+      }
+    };
+    window.addEventListener("pointerdown", onPointerDown);
+    return () => window.removeEventListener("pointerdown", onPointerDown);
+  }, [assetMenuOpen]);
 
   async function assertScwForTrade(scw: Address, callValueWei: bigint) {
     const client = fastTradeConfirm ? createTradeHttpPublicClient() : undefined;
@@ -2257,6 +2199,7 @@ export function TradePanel({
                 setLinkedBuySpendWei(null);
                 setLinkedSellTokenWei(null);
                 setError(null);
+                setAssetMenuOpen(false);
               }}
               className={side === "buy" ? "trade-side-button-active-buy" : "trade-side-button"}
             >
@@ -2270,6 +2213,7 @@ export function TradePanel({
                 setLinkedBuySpendWei(null);
                 setLinkedSellTokenWei(null);
                 setError(null);
+                setAssetMenuOpen(false);
               }}
               className={side === "sell" ? "trade-side-button-active-sell" : "trade-side-button"}
             >
@@ -2283,22 +2227,9 @@ export function TradePanel({
         ) : null}
 
         <div className="trade-panel-input-zone">
-          <div className="trade-input-layout">
-            <div
-              className={
-                activeInputMode === "usd"
-                  ? "trade-input-layout__amount relative inline-flex max-w-full items-baseline pl-3.5 md:pl-4"
-                  : "trade-input-layout__amount inline-flex max-w-full items-baseline"
-              }
-            >
-              {activeInputMode === "usd" ? (
-                <span
-                  className="financial-value absolute bottom-[0.22em] left-0 text-body-sm font-medium leading-none text-pump-muted md:text-body"
-                  aria-hidden
-                >
-                  $
-                </span>
-              ) : null}
+          <div className="trade-field">
+            <span className="trade-field-label">{inputFieldLabel}</span>
+            <div className="trade-amount-box">
               <input
                 id="trade-amount"
                 name="trade-amount"
@@ -2309,47 +2240,73 @@ export function TradePanel({
                 spellCheck={false}
                 value={displayInputValue}
                 onChange={(e) => onDisplayInputChange(e.target.value)}
-                placeholder="0"
-                style={{
-                  width: `${Math.min(Math.max(displayInputValue.length || 1, 1), 10)}ch`,
-                }}
-                className="trade-amount-input financial-value min-w-[1ch] max-w-full bg-transparent p-0 text-left text-[2.5rem] leading-none text-pump-text outline-none placeholder:text-pump-muted/45 md:text-[2.75rem]"
+                placeholder="0.0"
+                className="trade-amount-box__input financial-value"
                 aria-label={
                   side === "buy"
-                    ? "Trade amount"
+                    ? activeInputMode === "usd"
+                      ? "Total in USD"
+                      : `Amount in ${symbol}`
                     : sellInputMode === "token"
                       ? `Amount in ${symbol}`
-                      : "Expected receive amount"
+                      : "Total in USD"
                 }
               />
+              <div className="trade-amount-box__asset" ref={assetMenuRef}>
+                <button
+                  type="button"
+                  onClick={() => setAssetMenuOpen((open) => !open)}
+                  className="trade-asset-select"
+                  aria-haspopup="listbox"
+                  aria-expanded={assetMenuOpen}
+                  aria-label="Select input currency"
+                >
+                  <span className="text-body-sm font-medium text-pump-text">{currencyLabel}</span>
+                  <ChevronDownSmall />
+                </button>
+                {assetMenuOpen ? (
+                  <div className="trade-asset-menu" role="listbox" aria-label="Input currency">
+                    <button
+                      type="button"
+                      role="option"
+                      aria-selected={activeInputMode === "usd"}
+                      className="trade-asset-menu__option"
+                      onClick={() => selectInputMode("usd")}
+                    >
+                      <span>USD</span>
+                      {activeInputMode === "usd" ? <AssetMenuCheck /> : null}
+                    </button>
+                    <button
+                      type="button"
+                      role="option"
+                      aria-selected={activeInputMode === "token"}
+                      className="trade-asset-menu__option"
+                      onClick={() => selectInputMode("token")}
+                    >
+                      <span>{symbol}</span>
+                      {activeInputMode === "token" ? <AssetMenuCheck /> : null}
+                    </button>
+                  </div>
+                ) : null}
+              </div>
             </div>
 
-            <button
-              type="button"
-              onClick={toggleInputMode}
-              className="trade-currency-chip trade-input-layout__chip shrink-0 self-start justify-self-end"
-              aria-label="Toggle input currency"
-            >
-              <TradeInputModeIcon
-                mode={activeInputMode}
-                symbol={symbol}
-                tokenAddress={tokenAddress}
-              />
-              <span className="text-body-sm font-medium text-pump-text">{currencyLabel}</span>
-              <ChevronDownSmall />
-            </button>
-
-            {hasInputValue && metaLeftLine ? (
-              <p className="trade-conversion-line trade-input-layout__conversion text-left text-caption leading-snug text-pump-muted">
-                {metaLeftLine}
-              </p>
-            ) : null}
-
-            {hasInputValue && availableLabel ? (
-              <p className="trade-available-line trade-input-layout__available text-right text-caption leading-snug text-pump-muted">
-                Available{" "}
-                <span className="financial-value text-pump-text">{availableLabel}</span>
-              </p>
+            {hasInputValue && (metaLeftLine || availableLabel) ? (
+              <div className="trade-input-meta">
+                {metaLeftLine ? (
+                  <p className="trade-conversion-line text-left text-caption leading-snug text-pump-muted">
+                    {metaLeftLine}
+                  </p>
+                ) : (
+                  <span aria-hidden />
+                )}
+                {availableLabel ? (
+                  <p className="trade-available-line text-right text-caption leading-snug text-pump-muted">
+                    Available{" "}
+                    <span className="financial-value text-pump-text">{availableLabel}</span>
+                  </p>
+                ) : null}
+              </div>
             ) : null}
           </div>
 
@@ -2424,7 +2381,9 @@ export function TradePanel({
               <span>
                 You receive ≈{" "}
                 <span className="financial-value text-pump-text">
-                  {receiveAmount} {receiveUnit}
+                  {side === "buy"
+                    ? `${receiveAmount} ${receiveUnit}`
+                    : (sellReceiveUsdLabel ?? "—")}
                 </span>
               </span>
               <ChevronDownIcon open={receiveExpanded} />

@@ -61,7 +61,7 @@ export function buildArenaQuickTradePrefill(
   if (side === "buy") {
     return {
       side: "buy",
-      buyMode: "bnb",
+      buyMode: "usd",
       amount: prefs.buyAmountBnb,
       autoSubmit: true,
     };
