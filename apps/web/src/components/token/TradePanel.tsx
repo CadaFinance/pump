@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { encodeFunctionData, formatEther, formatUnits, parseEther, parseSignature, parseUnits } from "viem";
 import type { Address, TransactionReceipt } from "viem";
 import { useOpenConnectModal } from "@/hooks/useOpenConnectModal";
@@ -245,7 +245,6 @@ function ChevronDownSmall() {
   );
 }
 
-const TRADE_RULER_LABELS = [0, 25, 50, 75, 100] as const;
 const TRADE_RULER_TICK_COUNT = 21;
 
 function TradeInputModeIcon({
@@ -2146,6 +2145,10 @@ export function TradePanel({
   const sliderPct = side === "buy" ? buySliderPct : sellSliderPct;
   const canUseSlider = side === "buy" ? canUseMaxBuy : canUseMaxSell;
   const applySliderPercent = side === "buy" ? applyBuySliderPercent : applySellSliderPercent;
+  const sliderPctIndicatorLeft = sliderPct <= 5 ? 5 : sliderPct >= 95 ? 95 : sliderPct;
+  const sliderTrackStyle = {
+    "--slider-pct": `${sliderPct}%`,
+  } as CSSProperties;
 
   return (
     <section
@@ -2253,31 +2256,7 @@ export function TradePanel({
           </div>
 
           <div className={`trade-ruler-slider trade-ruler-slider--${side} mt-5 pb-1`}>
-            <div className="trade-ruler-labels">
-              {TRADE_RULER_LABELS.map((label) => {
-                const passed = sliderPct >= label;
-                return (
-                  <button
-                    key={label}
-                    type="button"
-                    disabled={!canUseSlider}
-                    onClick={() => applySliderPercent(label)}
-                    className={`trade-ruler-label trade-ruler-label--${side}${
-                      passed ? ` trade-ruler-label--passed-${side}` : ""
-                    }`}
-                  >
-                    {label}%
-                  </button>
-                );
-              })}
-            </div>
-            <div className="trade-ruler-track">
-              <div className="trade-ruler-line" aria-hidden />
-              <div
-                className={`trade-ruler-fill trade-ruler-fill--${side}`}
-                style={{ width: `${sliderPct}%` }}
-                aria-hidden
-              />
+            <div className="trade-ruler-track-wrap">
               <div className="trade-ruler-ticks" aria-hidden>
                 {Array.from({ length: TRADE_RULER_TICK_COUNT }, (_, index) => {
                   const tickPct = (index * 100) / (TRADE_RULER_TICK_COUNT - 1);
@@ -2285,7 +2264,7 @@ export function TradePanel({
                   return (
                     <span
                       key={index}
-                      className={`trade-ruler-tick trade-ruler-tick--${side}${
+                      className={`trade-ruler-tick${
                         index % 5 === 0 ? " trade-ruler-tick--major" : " trade-ruler-tick--minor"
                       }${passed ? ` trade-ruler-tick--passed-${side}` : ""}`}
                     />
@@ -2300,7 +2279,8 @@ export function TradePanel({
                 value={sliderPct}
                 onChange={(e) => applySliderPercent(Number(e.target.value))}
                 disabled={!canUseSlider}
-                className={`trade-ruler-slider__input trade-amount-slider relative z-[1] w-full disabled:opacity-40 ${
+                style={sliderTrackStyle}
+                className={`trade-ruler-slider__input trade-amount-slider w-full disabled:opacity-40 ${
                   side === "sell" ? "trade-amount-slider--sell" : "trade-amount-slider--buy"
                 }`}
                 aria-label={side === "buy" ? "Buy amount slider" : "Sell amount slider"}
@@ -2312,6 +2292,13 @@ export function TradePanel({
                       : `${sliderPct}% of ${side === "buy" ? "wallet balance" : "token balance"}`
                 }
               />
+              <span
+                className={`trade-ruler-pct-indicator trade-ruler-pct-indicator--${side}`}
+                style={{ left: `${sliderPctIndicatorLeft}%` }}
+                aria-hidden
+              >
+                {sliderPct}%
+              </span>
             </div>
           </div>
         </div>

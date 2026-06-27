@@ -1086,104 +1086,29 @@ code,
     user-select: none;
   }
 
-  .trade-ruler-labels {
-    display: flex;
-    justify-content: space-between;
-    margin-bottom: 0.5rem;
-    gap: 0.25rem;
-  }
-
-  .trade-ruler-label {
-    border: none;
-    background: transparent;
-    padding: 0;
-    font-size: var(--text-label);
-    font-weight: 500;
-    letter-spacing: 0.01em;
-    color: rgb(var(--pump-muted) / 0.72);
-    cursor: pointer;
-    transition:
-      color 0.12s ease,
-      font-weight 0.12s ease;
-  }
-
-  .trade-ruler-label:disabled {
-    cursor: not-allowed;
-    opacity: 0.4;
-  }
-
-  .trade-ruler-label--passed-buy:not(:disabled):hover {
-    color: rgb(var(--pump-success));
-  }
-
-  .trade-ruler-label--passed-sell:not(:disabled):hover {
-    color: rgb(var(--pump-danger));
-  }
-
-  .trade-ruler-label--passed-buy {
-    color: rgb(var(--pump-success));
-    font-weight: 600;
-  }
-
-  .trade-ruler-label--passed-sell {
-    color: rgb(var(--pump-danger));
-    font-weight: 600;
-  }
-
-  .trade-ruler-track {
+  .trade-ruler-track-wrap {
     position: relative;
-    height: 1.75rem;
-  }
-
-  .trade-ruler-line {
-    pointer-events: none;
-    position: absolute;
-    top: 50%;
-    left: 0;
-    right: 0;
-    height: 3px;
-    transform: translateY(-50%);
-    border-radius: 1px;
-    background: rgb(var(--pump-border) / 0.28);
-  }
-
-  .trade-ruler-fill {
-    pointer-events: none;
-    position: absolute;
-    top: 50%;
-    left: 0;
-    z-index: 0;
-    height: 3px;
-    transform: translateY(-50%);
-    border-radius: 1px;
-    transition: width 75ms ease;
-  }
-
-  .trade-ruler-fill--buy {
-    background: rgb(var(--pump-success) / 0.72);
-  }
-
-  .trade-ruler-fill--sell {
-    background: rgb(var(--pump-danger) / 0.72);
+    padding-top: 0.125rem;
+    padding-bottom: 1.375rem;
   }
 
   .trade-ruler-ticks {
     pointer-events: none;
     position: absolute;
-    top: 50%;
+    top: 0.875rem;
     left: 0;
     right: 0;
+    z-index: 0;
     display: flex;
     height: 0.625rem;
     align-items: flex-end;
     justify-content: space-between;
-    transform: translateY(-50%);
   }
 
   .trade-ruler-tick {
     width: 1px;
     flex-shrink: 0;
-    background: rgb(var(--pump-border) / 0.42);
+    background: rgb(var(--pump-border) / 0.38);
   }
 
   .trade-ruler-tick--major {
@@ -1195,24 +1120,63 @@ code,
   }
 
   .trade-ruler-tick--passed-buy {
-    background: rgb(var(--pump-success) / 0.55);
+    background: rgb(var(--pump-success) / 0.45);
   }
 
   .trade-ruler-tick--passed-sell {
-    background: rgb(var(--pump-danger) / 0.55);
+    background: rgb(var(--pump-danger) / 0.45);
+  }
+
+  .trade-ruler-pct-indicator {
+    position: absolute;
+    bottom: 0;
+    transform: translateX(-50%);
+    font-size: var(--text-caption);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+    pointer-events: none;
+    transition: left 75ms ease;
+  }
+
+  .trade-ruler-pct-indicator--buy {
+    color: rgb(var(--pump-success));
+  }
+
+  .trade-ruler-pct-indicator--sell {
+    color: rgb(var(--pump-danger));
   }
 
   .trade-ruler-slider__input {
     position: relative;
     z-index: 1;
+    display: block;
+    width: 100%;
     margin: 0;
     height: 1.75rem;
+    cursor: pointer;
+    --slider-track-bg: rgb(var(--pump-border) / 0.32);
+  }
+
+  .trade-ruler-slider--buy .trade-ruler-slider__input {
+    --slider-fill: rgb(var(--pump-success));
+  }
+
+  .trade-ruler-slider--sell .trade-ruler-slider__input {
+    --slider-fill: rgb(var(--pump-danger));
   }
 
   .trade-ruler-slider__input::-webkit-slider-runnable-track {
-    height: 3px;
-    background: transparent;
+    height: 6px;
     border: none;
+    border-radius: 3px;
+    background: linear-gradient(
+      to right,
+      var(--slider-fill) 0%,
+      var(--slider-fill) var(--slider-pct, 0%),
+      var(--slider-track-bg) var(--slider-pct, 0%),
+      var(--slider-track-bg) 100%
+    );
   }
 
   .trade-ruler-slider__input::-webkit-slider-thumb {
@@ -1223,26 +1187,25 @@ code,
     margin-top: -0.5625rem;
     border: none;
     border-radius: 2px;
-    box-shadow: 0 0 0 1px rgb(var(--pump-card) / 0.85);
-    transition: transform 0.1s ease;
-  }
-
-  .trade-ruler-slider__input.trade-amount-slider--buy::-webkit-slider-thumb {
-    background: rgb(var(--pump-success));
-  }
-
-  .trade-ruler-slider__input.trade-amount-slider--sell::-webkit-slider-thumb {
-    background: rgb(var(--pump-danger));
+    background: var(--slider-fill);
+    box-shadow: 0 0 0 2px rgb(var(--pump-card));
   }
 
   .trade-ruler-slider__input:active::-webkit-slider-thumb {
-    transform: scaleY(1.06);
+    transform: scaleY(1.08);
   }
 
   .trade-ruler-slider__input::-moz-range-track {
-    height: 3px;
-    background: transparent;
+    height: 6px;
     border: none;
+    border-radius: 3px;
+    background: var(--slider-track-bg);
+  }
+
+  .trade-ruler-slider__input::-moz-range-progress {
+    height: 6px;
+    border-radius: 3px;
+    background: var(--slider-fill);
   }
 
   .trade-ruler-slider__input::-moz-range-thumb {
@@ -1250,15 +1213,12 @@ code,
     height: 1.25rem;
     border: none;
     border-radius: 2px;
-    box-shadow: 0 0 0 1px rgb(var(--pump-card) / 0.85);
+    background: var(--slider-fill);
+    box-shadow: 0 0 0 2px rgb(var(--pump-card));
   }
 
-  .trade-ruler-slider__input.trade-amount-slider--buy::-moz-range-thumb {
-    background: rgb(var(--pump-success));
-  }
-
-  .trade-ruler-slider__input.trade-amount-slider--sell::-moz-range-thumb {
-    background: rgb(var(--pump-danger));
+  .trade-ruler-slider__input:disabled {
+    cursor: not-allowed;
   }
 
   @media (prefers-reduced-motion: reduce) {
