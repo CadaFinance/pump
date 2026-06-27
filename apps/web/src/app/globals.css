@@ -672,8 +672,25 @@ code,
   }
 
   .trade-panel-details-zone {
-    padding: 0.5rem 1rem 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 0.625rem 1rem 0.75rem;
     border-bottom: 1px solid rgb(var(--pump-border) / 0.28);
+  }
+
+  .trade-order-value-row__values {
+    display: flex;
+    min-width: 0;
+    align-items: baseline;
+    justify-content: flex-end;
+    gap: 0.625rem;
+    flex-wrap: wrap;
+  }
+
+  .trade-order-value-row__values .trade-detail-row__value {
+    flex: 0 1 auto;
+    width: auto;
   }
 
   .trade-field {
@@ -682,10 +699,22 @@ code,
     gap: 0.375rem;
   }
 
+  .trade-field-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.75rem;
+  }
+
   .trade-field-label {
     font-size: var(--text-caption);
     line-height: var(--leading-caption);
     color: rgb(var(--pump-muted));
+  }
+
+  .trade-field-avail {
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
   }
 
   .trade-amount-box {
@@ -771,56 +800,13 @@ code,
     background: rgb(var(--pump-border) / 0.12);
   }
 
-  .trade-input-meta {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 0.75rem;
-    margin-top: 0.125rem;
-  }
-
-  .trade-conversion-line {
-    font-variant-numeric: tabular-nums;
-  }
-
-  .trade-available-line {
-    font-variant-numeric: tabular-nums;
-    white-space: nowrap;
-  }
-
-  .trade-receive-toggle {
-    display: flex;
-    width: 100%;
-    min-height: 2.75rem;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.75rem;
-    padding-block: 0.375rem;
-    text-align: left;
-    font-size: var(--text-caption);
-    line-height: var(--leading-caption);
-    color: rgb(var(--pump-muted));
-    transition: color 0.15s ease;
-  }
-
-  .trade-receive-toggle:hover {
-    color: rgb(var(--pump-text));
-  }
-
-  .trade-detail-grid {
-    display: flex;
-    flex-direction: column;
-    gap: 0.625rem;
-    padding-bottom: 0.25rem;
-    font-size: var(--text-caption);
-    line-height: var(--leading-caption);
-  }
-
   .trade-detail-row {
     display: flex;
     align-items: baseline;
     justify-content: space-between;
     gap: 0.75rem;
+    font-size: var(--text-caption);
+    line-height: var(--leading-caption);
   }
 
   .trade-detail-row__label {

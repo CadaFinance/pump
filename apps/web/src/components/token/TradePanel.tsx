@@ -233,16 +233,23 @@ function formatTokenAvailableBalance(value: string | number): string {
   return Math.floor(n).toLocaleString(undefined, { maximumFractionDigits: 0 });
 }
 
-function ChevronDownIcon({ open }: { open: boolean }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      aria-hidden
-      className={`h-4 w-4 fill-none stroke-current transition ${open ? "rotate-180" : ""}`}
-    >
-      <path d="M6 9l6 6 6-6" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
+function formatTokenCompact(value: string | number): string {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return "0";
+  if (n >= 1_000_000_000) {
+    const scaled = n / 1_000_000_000;
+    return `${scaled >= 100 ? scaled.toFixed(0) : scaled.toFixed(2).replace(/\.?0+$/, "")}B`;
+  }
+  if (n >= 1_000_000) {
+    const scaled = n / 1_000_000;
+    return `${scaled >= 100 ? scaled.toFixed(0) : scaled.toFixed(2).replace(/\.?0+$/, "")}M`;
+  }
+  if (n >= 10_000) {
+    const scaled = n / 1_000;
+    return `${scaled >= 100 ? scaled.toFixed(0) : scaled.toFixed(1).replace(/\.0$/, "")}K`;
+  }
+  if (n >= 1) return n.toLocaleString(undefined, { maximumFractionDigits: 2 });
+  return n.toLocaleString(undefined, { maximumFractionDigits: 4 });
 }
 
 function ChevronDownSmall() {
@@ -304,7 +311,6 @@ export function TradePanel({
   const autoSubmitPendingRef = useRef(false);
   const autoSubmitTriggeredRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
-  const [receiveExpanded, setReceiveExpanded] = useState(false);
   const [assetMenuOpen, setAssetMenuOpen] = useState(false);
   const assetMenuRef = useRef<HTMLDivElement>(null);
   const [pendingReservationTick, setPendingReservationTick] = useState(0);
@@ -943,33 +949,6 @@ export function TradePanel({
   const currencyLabel = activeInputMode === "usd" ? "USD" : symbol;
   const inputFieldLabel = activeInputMode === "usd" ? "Total" : "Amount";
 
-  const conversionParts: string[] = [];
-  const hasInputValue =
-    displayInputValue.trim() !== "" &&
-    displayInputValue !== "0" &&
-    Number.isFinite(Number(displayInputValue.replace(/,/g, "."))) &&
-    Number(displayInputValue.replace(/,/g, ".")) > 0;
-
-  if (hasInputValue && side === "buy") {
-    if (buyInputMode === "token") {
-      if (buyCostWei > 0n) {
-        conversionParts.push(
-          `≈ ${formatBnbReadable(Number(formatEther(buyCostWei)))} ${NATIVE_SYMBOL}`
-        );
-      }
-      if (amountUsdLabel) {
-        conversionParts.push(`≈ ${amountUsdLabel}`);
-      }
-    } else if (Number(amount) > 0) {
-      conversionParts.push(`≈ ${formatBnbReadable(Number(amount))} ${NATIVE_SYMBOL}`);
-    }
-  }
-
-  const metaLeftLine = (() => {
-    if (!hasInputValue || side !== "buy" || conversionParts.length === 0) return null;
-    return conversionParts.join(" · ");
-  })();
-
   const availableLabel = useMemo(() => {
     if (!isConnected) return null;
 
@@ -1003,24 +982,6 @@ export function TradePanel({
     protocolFeeBps,
     symbol,
   ]);
-
-  const receiveAmount =
-    side === "buy"
-      ? formatReceiveAmount(estimatedOut > 0n ? formatUnits(estimatedOut, 18) : "0")
-      : estimatedOut > 0n
-        ? formatBnbReadable(Number(formatEther(estimatedOut)))
-        : "0";
-  const receiveUnit = side === "buy" ? symbol : NATIVE_SYMBOL;
-
-  const sellReceiveUsdLabel = useMemo(() => {
-    if (side !== "sell") return null;
-    if (amountUsdLabel) return amountUsdLabel;
-    if (estimatedOut > 0n && bnbUsd != null) {
-      const usd = bnbToUsd(Number(formatEther(estimatedOut)), bnbUsd);
-      return usd != null ? formatUsdReadable(usd) : null;
-    }
-    return null;
-  }, [side, amountUsdLabel, estimatedOut, bnbUsd]);
 
   /** Slider tracks wallet % only when amount ≤ max; manual over-max decouples (Coinbase/Jupiter pattern). */
   const [buySliderPct, setBuySliderPct] = useState(0);
@@ -1120,6 +1081,42 @@ export function TradePanel({
     }
     return null;
   }, [side, estimatedOut, buyCostWei, sellTokenWei, bnbUsd]);
+
+  const orderValuePrimary = useMemo(() => {
+    if (!hasTradeAmount) return null;
+    if (side === "buy") {
+      if (estimatedOut <= 0n) return null;
+      return `${formatTokenCompact(formatUnits(estimatedOut, 18))} ${symbol}`;
+    }
+    if (estimatedOut <= 0n) return null;
+    return `${formatBnbReadable(Number(formatEther(estimatedOut)))} ${NATIVE_SYMBOL}`;
+  }, [hasTradeAmount, side, estimatedOut, symbol]);
+
+  const orderValueUsd = useMemo(() => {
+    if (!hasTradeAmount) return null;
+    if (side === "buy") {
+      if (estimatedOut <= 0n) return null;
+      if (estimatedQuotePriceUsd != null) {
+        const usd = Number(formatUnits(estimatedOut, 18)) * estimatedQuotePriceUsd;
+        return formatUsdReadable(usd, { compact: true });
+      }
+      return amountUsdValue != null ? formatUsdReadable(amountUsdValue, { compact: true }) : null;
+    }
+    if (amountUsdLabel) return amountUsdLabel;
+    if (estimatedOut > 0n && bnbUsd != null) {
+      const usd = bnbToUsd(Number(formatEther(estimatedOut)), bnbUsd);
+      return usd != null ? formatUsdReadable(usd, { compact: true }) : null;
+    }
+    return null;
+  }, [
+    hasTradeAmount,
+    side,
+    estimatedOut,
+    estimatedQuotePriceUsd,
+    amountUsdValue,
+    amountUsdLabel,
+    bnbUsd,
+  ]);
 
   useEffect(() => {
     if (side !== "buy" || linkedBuySpendWei == null || maxBuySpendWei === 0n) return;
@@ -2228,7 +2225,15 @@ export function TradePanel({
 
         <div className="trade-panel-input-zone">
           <div className="trade-field">
-            <span className="trade-field-label">{inputFieldLabel}</span>
+            <div className="trade-field-header">
+              <span className="trade-field-label">{inputFieldLabel}</span>
+              {availableLabel ? (
+                <span className="trade-field-avail text-caption leading-snug text-pump-muted">
+                  Avail.{" "}
+                  <span className="financial-value text-pump-text">{availableLabel}</span>
+                </span>
+              ) : null}
+            </div>
             <div className="trade-amount-box">
               <input
                 id="trade-amount"
@@ -2291,26 +2296,7 @@ export function TradePanel({
               </div>
             </div>
 
-            {hasInputValue && (metaLeftLine || availableLabel) ? (
-              <div className="trade-input-meta">
-                {metaLeftLine ? (
-                  <p className="trade-conversion-line text-left text-caption leading-snug text-pump-muted">
-                    {metaLeftLine}
-                  </p>
-                ) : (
-                  <span aria-hidden />
-                )}
-                {availableLabel ? (
-                  <p className="trade-available-line text-right text-caption leading-snug text-pump-muted">
-                    Available{" "}
-                    <span className="financial-value text-pump-text">{availableLabel}</span>
-                  </p>
-                ) : null}
-              </div>
-            ) : null}
-          </div>
-
-          <div className={`trade-teeth-slider trade-teeth-slider--${side} mt-5`}>
+            <div className={`trade-teeth-slider trade-teeth-slider--${side} mt-2`}>
             <div className="trade-teeth-slider__frame">
               {teethDragging ? (
                 <span
@@ -2370,34 +2356,23 @@ export function TradePanel({
           </div>
         </div>
 
-        {hasTradeAmount ? (
-          <div className="trade-panel-details-zone">
-            <button
-              type="button"
-              onClick={() => setReceiveExpanded((v) => !v)}
-              className="trade-receive-toggle"
-              aria-expanded={receiveExpanded}
-            >
-              <span>
-                You receive ≈{" "}
-                <span className="financial-value text-pump-text">
-                  {side === "buy"
-                    ? `${receiveAmount} ${receiveUnit}`
-                    : (sellReceiveUsdLabel ?? "—")}
-                </span>
+        <div className="trade-panel-details-zone">
+          <div className="trade-detail-row trade-order-value-row">
+            <span className="trade-detail-row__label">Order value</span>
+            <div className="trade-order-value-row__values">
+              <span className="trade-detail-row__value financial-value text-pump-text">
+                {orderValuePrimary ?? "—"}
               </span>
-              <ChevronDownIcon open={receiveExpanded} />
-            </button>
-            {receiveExpanded ? (
-              <div className="trade-detail-grid">
-                <div className="trade-detail-row">
-                  <span className="trade-detail-row__label">Est. gas</span>
-                  <span className="trade-detail-row__value financial-value">{gasCostLabel}</span>
-                </div>
-              </div>
-            ) : null}
+              <span className="trade-detail-row__value financial-value text-pump-muted">
+                {orderValueUsd ?? "—"}
+              </span>
+            </div>
           </div>
-        ) : null}
+          <div className="trade-detail-row">
+            <span className="trade-detail-row__label">Est. gas</span>
+            <span className="trade-detail-row__value financial-value">{gasCostLabel}</span>
+          </div>
+        </div>
 
         {error ? (
           <div className="notice-error mx-4 mb-3 px-3 py-2 text-caption" role="alert">
