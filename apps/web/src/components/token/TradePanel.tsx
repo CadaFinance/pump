@@ -1175,6 +1175,12 @@ export function TradePanel({
     setAmount(cleaned);
   }
 
+  function clearTradeAmountInput() {
+    setAmount("");
+    setLinkedBuySpendWei(null);
+    setLinkedSellTokenWei(null);
+  }
+
   function applyBuySpendWei(spendWei: bigint) {
     if (spendWei <= 0n) {
       setAmount("");
@@ -1674,6 +1680,7 @@ export function TradePanel({
     }
     if (gate.side === "buy" && buyParams) {
       dispatchInstantBuy(buyParams, gate);
+      clearTradeAmountInput();
       return true;
     }
     if (gate.side === "sell" && sellParams) {
@@ -1682,6 +1689,7 @@ export function TradePanel({
       } else {
         dispatchInstantSell(sellParams, gate, usePermit);
       }
+      clearTradeAmountInput();
       return true;
     }
     return false;
