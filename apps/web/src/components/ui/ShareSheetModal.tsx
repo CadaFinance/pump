@@ -1,9 +1,14 @@
 "use client";
 
-import { Check, Copy, Mail, Share2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+import {
+  LinkedInBrandIcon,
+  TelegramBrandIcon,
+  WhatsAppBrandIcon,
+  XBrandIcon,
+} from "@/components/icons/BrandIcons";
 import { ModalPortal } from "@/components/ui/ModalPortal";
-import { ICON_STROKE } from "@/lib/icons";
+import { PumpIcon, faCheck, faCopy, faMail, faShare } from "@/lib/icons";
 import {
   copyShareUrl,
   getShareChannels,
@@ -20,57 +25,20 @@ type ShareSheetModalProps = {
   description?: string;
 };
 
-function XShareIcon() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden className="h-4 w-4 fill-current">
-      <path d="M13.2 10.5 19.4 3h-1.5l-5.4 6.5L8.1 3H3.2l6.5 9.4L3.2 21h1.5l5.7-6.9 5.1 6.9h4.9l-6.8-9.5Z" />
-    </svg>
-  );
-}
-
-function TelegramShareIcon() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden className="h-4 w-4 fill-none stroke-current">
-      <path
-        d="M20.5 4.5 4.8 11.1c-.9.4-.9 1.6.1 1.9l4 1.2 1.5 4.7c.3.9 1.5.9 1.8 0l1.7-5.9 5.3-7.5c.5-.7-.1-1.6-.9-1.2Z"
-        strokeWidth="1.5"
-        strokeLinejoin="round"
-      />
-      <path d="M9.8 13.2 15.8 8.5" strokeWidth="1.5" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function WhatsAppShareIcon() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden className="h-4 w-4 fill-current">
-      <path d="M12 2a10 10 0 0 0-8.7 15l-1.3 4.8 4.9-1.3A10 10 0 1 0 12 2Zm5.2 14.2c-.2.6-1.1 1.1-1.8 1.2-.5.1-1.1.2-3.6-.8-3-1.2-4.9-4.1-5.1-4.3-.2-.2-1.2-1.6-1.2-3.1s.8-2.2 1.1-2.5c.3-.3.7-.4.9-.4h.7c.2 0 .5-.1.8.6l1.1 2.7c.1.2.1.5 0 .7-.1.2-.2.3-.4.5l-.6.6c-.2.2-.3.4-.2.7.2.5 1 1.6 2.2 2.5 1.5 1.1 2.8 1.4 3.2 1.6.4.2.7.1.9-.1l1.2-1.4c.2-.3.5-.2.8-.1l2.2 1c.6.3.6.6.5.9Z" />
-    </svg>
-  );
-}
-
-function LinkedInShareIcon() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden className="h-4 w-4 fill-current">
-      <path d="M6.5 8.5h3v11h-3v-11ZM8 4.5a1.75 1.75 0 1 1 0 3.5 1.75 1.75 0 0 1 0-3.5ZM12.5 8.5h2.9v1.5h.1c.4-.8 1.4-1.7 2.9-1.7 3.1 0 3.7 2 3.7 4.7v6.5h-3v-5.8c0-1.4 0-3.2-2-3.2s-2.3 1.5-2.3 3.1v5.9h-3v-11Z" />
-    </svg>
-  );
-}
-
 function ShareChannelIcon({ channel }: { channel: ShareChannel }) {
   switch (channel.id) {
     case "x":
-      return <XShareIcon />;
+      return <XBrandIcon className="h-4 w-4" />;
     case "telegram":
-      return <TelegramShareIcon />;
+      return <TelegramBrandIcon className="h-4 w-4" />;
     case "whatsapp":
-      return <WhatsAppShareIcon />;
+      return <WhatsAppBrandIcon className="h-4 w-4" />;
     case "email":
-      return <Mail className="h-4 w-4" strokeWidth={ICON_STROKE} aria-hidden />;
+      return <PumpIcon icon={faMail} className="h-4 w-4" />;
     case "linkedin":
-      return <LinkedInShareIcon />;
+      return <LinkedInBrandIcon className="h-4 w-4" />;
     case "native":
-      return <Share2 className="h-4 w-4" strokeWidth={ICON_STROKE} aria-hidden />;
+      return <PumpIcon icon={faShare} className="h-4 w-4" />;
   }
 }
 
@@ -164,9 +132,9 @@ export function ShareSheetModal({
                 className="share-sheet-copy-button"
               >
                 {copied ? (
-                  <Check className="h-4 w-4 text-pump-success" strokeWidth={2.25} aria-hidden />
+                  <PumpIcon icon={faCheck} className="h-4 w-4 text-pump-success" />
                 ) : (
-                  <Copy className="h-4 w-4" strokeWidth={ICON_STROKE} aria-hidden />
+                  <PumpIcon icon={faCopy} className="h-4 w-4" />
                 )}
                 <span>{copied ? "Copied" : "Copy"}</span>
               </button>

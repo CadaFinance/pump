@@ -1,16 +1,15 @@
-import type { LucideIcon } from "lucide-react";
-import { LayoutGrid, Target, Wallet } from "lucide-react";
-import { AirdropParachute } from "@/components/icons/AirdropParachute";
+import type { PumpIconDefinition } from "@/lib/icons";
+import { faAirdropParachute, faLayoutGrid, faTarget, faWallet } from "@/lib/pump-fa-icons";
 
 export type AppNavItem = {
   href: string;
   label: string;
-  icon: LucideIcon;
+  icon: PumpIconDefinition;
 };
 
 export const APP_NAV_ITEMS: AppNavItem[] = [
-  { href: "/", label: "Arena", icon: LayoutGrid },
-  { href: "/airdrops", label: "Airdrops", icon: AirdropParachute },
-  { href: "/missions", label: "Missions", icon: Target },
-  { href: "/portfolio", label: "Portfolio", icon: Wallet },
+  { href: "/", label: "Arena", icon: faLayoutGrid },
+  { href: "/airdrops", label: "Airdrops", icon: faAirdropParachute },
+  { href: "/missions", label: "Missions", icon: faTarget },
+  { href: "/portfolio", label: "Portfolio", icon: faWallet },
 ];

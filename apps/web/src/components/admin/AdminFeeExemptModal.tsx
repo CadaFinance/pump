@@ -1,11 +1,11 @@
 "use client";
 
-import { Trash2, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { isAddress } from "viem";
 import { useWaitForTransactionReceipt, useWriteContract } from "wagmi";
 import { AdminBtn } from "@/components/admin/AdminChrome";
 import { ModalPortal } from "@/components/ui/ModalPortal";
+import { PumpIcon, faTrash2, faX } from "@/lib/icons";
 import { adminFetch } from "@/lib/admin-api-client";
 import { ADMIN_COPY } from "@/lib/admin/copy";
 import type { FeeExemptListEntry } from "@/lib/admin/fee-exempt-list";
@@ -197,7 +197,7 @@ export function AdminFeeExemptModal({ open, onClose }: AdminFeeExemptModalProps)
           <div className="admin-modal-head">
             <span id="admin-fee-exempt-title">{ADMIN_COPY.feeExempt.title}</span>
             <button type="button" className="admin-icon-btn" aria-label={ADMIN_COPY.actions.close} onClick={onClose}>
-              <X size={16} />
+              <PumpIcon icon={faX} className="h-4 w-4" />
             </button>
           </div>
 
@@ -239,7 +239,7 @@ export function AdminFeeExemptModal({ open, onClose }: AdminFeeExemptModalProps)
                           disabled={busy || saving}
                           onClick={() => revokeEntry(entry)}
                         >
-                          <Trash2 size={14} aria-hidden />
+                          <PumpIcon icon={faTrash2} className="h-3.5 w-3.5" />
                         </button>
                       </li>
                     );

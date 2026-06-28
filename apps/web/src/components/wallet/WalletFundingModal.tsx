@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ArrowLeft, ArrowUpRight, Wallet } from "lucide-react";
 import QRCode from "qrcode";
 import { isAddress, parseEther } from "viem";
 import { pumpChain, shortAddress } from "@/config/chain";
@@ -12,8 +11,7 @@ import { usePumpWallet } from "@/components/wallet/PumpWalletProvider";
 import { formatTradeError } from "@/lib/trade-errors";
 import type { WalletFundingOptions, WalletFundingView } from "@/components/wallet/WalletFundingProvider";
 import { invalidateScwBalance, startScwDepositWatch } from "@/lib/scw-balance-sync";
-
-const ICON_STROKE = 1.75;
+import { PumpIcon, faArrowLeft, faArrowUpRight, faWallet } from "@/lib/icons";
 
 type WalletFundingModalProps = {
   open: boolean;
@@ -251,7 +249,7 @@ export function WalletFundingModal({
                     onClick={() => onViewChange("choice")}
                     className="mb-2 inline-flex items-center gap-1 text-caption text-pump-muted transition hover:text-pump-text"
                   >
-                    <ArrowLeft className="h-3.5 w-3.5" strokeWidth={ICON_STROKE} aria-hidden />
+                    <PumpIcon icon={faArrowLeft} className="h-3.5 w-3.5" />
                     Back
                   </button>
                 ) : null}
@@ -278,7 +276,7 @@ export function WalletFundingModal({
                   className="wallet-fund-option"
                 >
                   <span className="wallet-fund-option-icon">
-                    <Wallet className="h-5 w-5" strokeWidth={ICON_STROKE} aria-hidden />
+                    <PumpIcon icon={faWallet} className="h-5 w-5" />
                   </span>
                   <span className="min-w-0">
                     <span className="block text-body-sm font-semibold text-pump-text">
@@ -296,7 +294,7 @@ export function WalletFundingModal({
                   className="wallet-fund-option"
                 >
                   <span className="wallet-fund-option-icon">
-                    <ArrowUpRight className="h-5 w-5" strokeWidth={ICON_STROKE} aria-hidden />
+                    <PumpIcon icon={faArrowUpRight} className="h-5 w-5" />
                   </span>
                   <span className="min-w-0">
                     <span className="block text-body-sm font-semibold text-pump-text">Withdraw</span>

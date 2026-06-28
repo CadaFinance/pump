@@ -46,12 +46,10 @@ import {
 } from "@/lib/chart-observability";
 import type { BondingCurveSnapshot } from "@/lib/bonding-curve";
 import { useTheme } from "@/components/theme/ThemeProvider";
-import { PctChange } from "@/components/ui/PctChange";
 import {
   bnbToUsd,
   DEFAULT_TOKEN_TOTAL_SUPPLY,
   formatUsd,
-  formatUsdReadable,
 } from "@/lib/format-usd";
 
 type PriceChartProps = {
@@ -70,12 +68,8 @@ type PriceChartProps = {
   fallbackTrades?: TradeItem[];
   wsConnected?: boolean;
   bnbUsd?: number | null;
-  /** Live on-chain bonding spot (native) — chart tail + header USD. */
+  /** Live on-chain bonding spot (native) — chart tail. */
   liveOnChainSpotBnb?: number | null;
-  currentPriceUsd?: number | null;
-  currentMcapUsd?: number | null;
-  volume24hBnb?: number;
-  price24hChangePct?: number | null;
   /** Fill parent flex slot (token detail fixed viewport). */
   fillContainer?: boolean;
 };
@@ -224,10 +218,6 @@ export function PriceChart({
   wsConnected = false,
   bnbUsd = null,
   liveOnChainSpotBnb = null,
-  currentPriceUsd = null,
-  currentMcapUsd = null,
-  volume24hBnb = 0,
-  price24hChangePct = null,
   fillContainer = false,
 }: PriceChartProps) {
   const { theme } = useTheme();
@@ -892,22 +882,6 @@ export function PriceChart({
     candleUnitScale,
   ]);
 
-  const summaryValue =
-    lastCandle != null
-      ? formatOhlc(lastCandle.close, currency, bnbUsd)
-      : currency === "usd"
-        ? currentPriceUsd != null && currentPriceUsd > 0
-          ? formatPumpSubscriptPrice(currentPriceUsd, "$")
-          : "—"
-        : currentMcapUsd != null && currentMcapUsd > 0
-          ? formatUsd(currentMcapUsd, { compact: true }) ?? "—"
-          : "—";
-  const summaryDeltaPct = price24hChangePct;
-
-  const volumeUsd = bnbToUsd(volume24hBnb, bnbUsd);
-  const volumeUsdLabel =
-    volumeUsd != null ? formatUsdReadable(volumeUsd, { compact: true }) : null;
-
   const showEmpty = !loading && !error && candles.length === 0;
   const showError = !loading && error && candles.length === 0;
   const chromeBlockClass = fillContainer ? "shrink-0" : "";
@@ -920,62 +894,7 @@ export function PriceChart({
           : "panel-surface overflow-hidden"
       }
     >
-      <div className={`px-4 py-2.5 md:py-3 ${chromeBlockClass}`}>
-        <div className="flex flex-col gap-1">
-          <div className="flex items-center justify-between gap-2">
-            <p className="section-label leading-none">
-              {currency === "usd" ? "Price" : "Market cap"}
-            </p>
-            <div className="segment-control shrink-0">
-                <button
-                  type="button"
-                  onClick={() => selectCurrency("usd")}
-                  disabled={bnbUsd == null}
-                  className={`px-2 py-0.5 text-[10px] font-medium transition disabled:opacity-40 sm:px-2.5 sm:py-1 sm:text-[11px] md:text-caption ${
-                    currency === "usd"
-                      ? "chip-button-active"
-                      : "chip-button chip-button-ghost"
-                  }`}
-                >
-                  USD
-                </button>
-                <button
-                  type="button"
-                  onClick={() => selectCurrency("mcap")}
-                  disabled={bnbUsd == null}
-                  className={`px-2 py-0.5 text-[10px] font-medium transition disabled:opacity-40 sm:px-2.5 sm:py-1 sm:text-[11px] md:text-caption ${
-                    currency === "mcap"
-                      ? "chip-button-active"
-                      : "chip-button chip-button-ghost"
-                  }`}
-                >
-                MCAP
-              </button>
-            </div>
-          </div>
-
-          <div className="flex items-end justify-between gap-2">
-            <div className="flex min-w-0 items-end gap-x-1.5 gap-y-0">
-              <p className="financial-value text-[1.625rem] font-semibold leading-none text-pump-text sm:text-[1.75rem] md:text-[1.875rem]">
-                {summaryValue}
-              </p>
-              <PctChange
-                value={summaryDeltaPct}
-                className="pb-px text-[11px] font-semibold leading-none sm:text-body-sm"
-              />
-            </div>
-            <div className="flex shrink-0 items-center gap-x-1 whitespace-nowrap text-[10px] leading-none sm:text-[11px] md:text-caption">
-              <span className="text-pump-muted">Vol</span>
-              <span className="financial-value font-semibold text-pump-text">
-                {volumeUsdLabel ?? "—"}
-              </span>
-              <span className="text-pump-muted">24h</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className={`flex items-center justify-between gap-2 border-t border-pump-border/10 px-3 py-2.5 ${chromeBlockClass}`}>
+      <div className={`flex items-center justify-between gap-2 border-b border-pump-border/10 px-3 py-2.5 ${chromeBlockClass}`}>
         <div className="min-w-0 flex-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <div className="inline-flex min-w-max items-center gap-2">
             <div className="segment-control">
@@ -999,17 +918,45 @@ export function PriceChart({
             </span>
           </div>
         </div>
-        <button
-          type="button"
-          title="Reset zoom"
-          onClick={() => {
-            shouldFitViewportRef.current = true;
-            scheduleFitViewport();
-          }}
-          className="chip-button chip-button-ghost hidden shrink-0 px-2.5 py-1.5 text-caption md:inline-flex"
-        >
-          Fit
-        </button>
+        <div className="flex shrink-0 items-center gap-2">
+          <div className="segment-control shrink-0">
+            <button
+              type="button"
+              onClick={() => selectCurrency("usd")}
+              disabled={bnbUsd == null}
+              className={`px-2 py-0.5 text-[10px] font-medium transition disabled:opacity-40 sm:px-2.5 sm:py-1 sm:text-[11px] md:text-caption ${
+                currency === "usd"
+                  ? "chip-button-active"
+                  : "chip-button chip-button-ghost"
+              }`}
+            >
+              USD
+            </button>
+            <button
+              type="button"
+              onClick={() => selectCurrency("mcap")}
+              disabled={bnbUsd == null}
+              className={`px-2 py-0.5 text-[10px] font-medium transition disabled:opacity-40 sm:px-2.5 sm:py-1 sm:text-[11px] md:text-caption ${
+                currency === "mcap"
+                  ? "chip-button-active"
+                  : "chip-button chip-button-ghost"
+              }`}
+            >
+              MCAP
+            </button>
+          </div>
+          <button
+            type="button"
+            title="Reset zoom"
+            onClick={() => {
+              shouldFitViewportRef.current = true;
+              scheduleFitViewport();
+            }}
+            className="chip-button chip-button-ghost hidden shrink-0 px-2.5 py-1.5 text-caption md:inline-flex"
+          >
+            Fit
+          </button>
+        </div>
       </div>
 
       {displayCandle ? (

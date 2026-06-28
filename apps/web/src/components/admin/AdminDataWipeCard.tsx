@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle } from "lucide-react";
+import { PumpIcon, faAlertTriangle } from "@/lib/icons";
 import { useState } from "react";
 import { adminFetch, readAdminJson } from "@/lib/admin-api-client";
 import { ADMIN_COPY } from "@/lib/admin/copy";
@@ -77,7 +77,7 @@ export function AdminDataWipeCard({ onWiped }: AdminDataWipeCardProps) {
     <AdminBlock title={ADMIN_COPY.wipe.title}>
       <div className="admin-wipe-zone">
         <div className="admin-wipe-warning">
-          <AlertTriangle size={16} aria-hidden />
+          <PumpIcon icon={faAlertTriangle} className="h-4 w-4" />
           <p>{ADMIN_COPY.wipe.warning}</p>
         </div>
 

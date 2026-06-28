@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { Star } from "lucide-react";
 import { useAccount } from "wagmi";
 import { useOpenConnectModal } from "@/hooks/useOpenConnectModal";
 import type { TokenListItem } from "@/lib/db/launchpad";
@@ -10,7 +9,7 @@ import { useFavorites } from "@/components/favorites/FavoritesProvider";
 import { bnbToUsd } from "@/lib/format-usd";
 import { PctChange } from "@/components/ui/PctChange";
 import { formatCapForBoard } from "@/lib/arena-board-format";
-import { ICON_STROKE } from "@/lib/icons";
+import { PumpIcon, faStarSolid } from "@/lib/icons";
 
 type FlashTone = "up" | "down";
 
@@ -95,7 +94,7 @@ export function WatchlistContent({
                 className="toolbar-sheet-row__action text-pump-accent"
                 aria-label="Remove from watchlist"
               >
-                <Star className="h-3.5 w-3.5 fill-current" strokeWidth={ICON_STROKE} aria-hidden />
+                <PumpIcon icon={faStarSolid} className="h-3.5 w-3.5" />
               </button>
               <Link href={`/token/${token.address}`} className="toolbar-sheet-row__main">
                 <TokenAvatar

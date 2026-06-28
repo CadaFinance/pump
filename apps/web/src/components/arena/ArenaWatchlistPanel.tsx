@@ -1,9 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { ChevronLeft, ChevronRight, Star } from "lucide-react";
 import type { TokenListItem } from "@/lib/db/launchpad";
-import { ICON_STROKE } from "@/lib/icons";
+import { PumpIcon, faChevronLeft, faChevronRight, faStarSolid } from "@/lib/icons";
 import {
   readWatchlistPanelCollapsed,
   writeWatchlistPanelCollapsed,
@@ -48,7 +47,7 @@ export function ArenaWatchlistPanel({
         <div className="flex items-center justify-between gap-2 border-b border-pump-border/25 bg-pump-card-soft/30 px-3 py-3">
           {!collapsed ? (
             <div className="flex min-w-0 items-center gap-1.5">
-              <Star className="h-3.5 w-3.5 shrink-0 text-pump-accent" strokeWidth={ICON_STROKE} aria-hidden />
+              <PumpIcon icon={faStarSolid} className="h-3.5 w-3.5 shrink-0 text-pump-accent" />
               <span className="section-label truncate">Watchlist</span>
               <span className="financial-value text-caption text-pump-muted">
                 ({watchlistTokens.length})
@@ -63,9 +62,9 @@ export function ArenaWatchlistPanel({
             aria-expanded={!collapsed}
           >
             {collapsed ? (
-              <ChevronLeft className="h-4 w-4" strokeWidth={ICON_STROKE} aria-hidden />
+              <PumpIcon icon={faChevronLeft} className="h-4 w-4" />
             ) : (
-              <ChevronRight className="h-4 w-4" strokeWidth={ICON_STROKE} aria-hidden />
+              <PumpIcon icon={faChevronRight} className="h-4 w-4" />
             )}
           </button>
         </div>
@@ -81,7 +80,7 @@ export function ArenaWatchlistPanel({
           </div>
         ) : (
           <div className="flex flex-1 flex-col items-center gap-2 py-3">
-            <Star className="h-4 w-4 text-pump-accent" strokeWidth={ICON_STROKE} aria-hidden />
+            <PumpIcon icon={faStarSolid} className="h-4 w-4 text-pump-accent" />
             {watchlistTokens.length > 0 ? (
               <span className="financial-value text-caption font-semibold text-pump-muted">
                 {watchlistTokens.length}

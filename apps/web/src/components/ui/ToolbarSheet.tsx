@@ -1,9 +1,8 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { X } from "lucide-react";
 import { ModalPortal } from "@/components/ui/ModalPortal";
-import { ICON_STROKE } from "@/lib/icons";
+import { PumpIcon, faX } from "@/lib/icons";
 
 type ToolbarSheetProps = {
   open: boolean;
@@ -55,7 +54,7 @@ export function ToolbarSheet({
               className="toolbar-sheet-header__close"
               aria-label="Close"
             >
-              <X className="h-4 w-4" strokeWidth={ICON_STROKE} aria-hidden />
+              <PumpIcon icon={faX} className="h-4 w-4" />
             </button>
           </div>
           <div className="toolbar-sheet-body min-h-0 flex-1 overflow-y-auto">{children}</div>

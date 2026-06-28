@@ -1,14 +1,8 @@
-import { IBM_Plex_Mono, Inter } from "next/font/google";
+import { GeistMono } from "geist/font/mono";
+import { GeistSans } from "geist/font/sans";
 
-export const inter = Inter({
-  subsets: ["latin"],
-  display: "swap",
-  variable: "--font-inter",
-});
+/** Corporate UI — Geist Sans (Swiss neo-grotesque, Vercel). */
+export const geistSans = GeistSans;
 
-export const ibmPlexMono = IBM_Plex_Mono({
-  subsets: ["latin"],
-  weight: ["400", "500", "600"],
-  display: "swap",
-  variable: "--font-mono",
-});
+/** Tabular numbers — Geist Mono pairs with Geist Sans. */
+export const geistMono = GeistMono;

@@ -2,9 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { ShieldCheck } from "lucide-react";
 import { markPumpSessionHint, restorePumpKernelSession } from "@/lib/aa/pump-account";
-import { ICON_STROKE } from "@/lib/icons";
+import { PumpIcon, faShieldCheck } from "@/lib/icons";
 
 export function OAuthAuthCompleteClient() {
   const searchParams = useSearchParams();
@@ -52,10 +51,9 @@ export function OAuthAuthCompleteClient() {
               : "border-pump-border/35 bg-pump-border/6"
           }`}
         >
-          <ShieldCheck
+          <PumpIcon
+            icon={faShieldCheck}
             className={`h-6 w-6 ${failed ? "text-pump-danger" : "text-pump-accent"}`}
-            strokeWidth={ICON_STROKE}
-            aria-hidden
           />
         </div>
         <h1 className="text-h2 font-semibold tracking-tight text-pump-text">

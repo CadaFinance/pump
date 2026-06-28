@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { WagmiProvider } from "wagmi";
 import { App } from "./App";
 import { wagmiConfig } from "./wagmi";
+import "../../web/src/lib/fontawesome-config";
 import "../../web/src/app/globals.css";
 import "../../web/src/app/admin/admin.css";
 

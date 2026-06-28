@@ -1,8 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { ChevronLeft } from "lucide-react";
-import { ICON_STROKE } from "@/lib/icons";
+import { PumpIcon, faChevronLeft } from "@/lib/icons";
 import { getPreviousNavPath } from "@/lib/nav-history";
 
 type PageBackLinkProps = {
@@ -48,7 +47,7 @@ export function PageBackLink({ href, className = "" }: PageBackLinkProps) {
         }, 400);
       }}
     >
-      <ChevronLeft className="page-back-link__icon" strokeWidth={ICON_STROKE} aria-hidden />
+      <PumpIcon icon={faChevronLeft} className="page-back-link__icon" />
       <span>Back</span>
     </a>
   );

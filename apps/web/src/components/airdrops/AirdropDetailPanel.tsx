@@ -60,9 +60,8 @@ import {
   buildTokenTradeUrl,
   remainingRuleAmount,
 } from "@/lib/token-trade-prefill";
-import { Bookmark } from "lucide-react";
 import { useAirdropSaves } from "@/components/airdrops/AirdropSavesProvider";
-import { ICON_STROKE } from "@/lib/icons";
+import { PumpIcon, faBookmarkRegular, faBookmarkSolid } from "@/lib/icons";
 
 function formatAmount(value: string): string {
   const n = Number(value);
@@ -1275,10 +1274,9 @@ export function AirdropDetailPanel({ airdropId }: { airdropId: string }) {
                     }`}
                     aria-label={saved ? "Remove from saved" : "Save campaign"}
                   >
-                    <Bookmark
-                      className={`h-4 w-4 ${saved ? "fill-current" : ""}`}
-                      strokeWidth={ICON_STROKE}
-                      aria-hidden
+                    <PumpIcon
+                      icon={saved ? faBookmarkSolid : faBookmarkRegular}
+                      className="h-4 w-4"
                     />
                   </button>
                   <span className={`${airdropStatusBadgeClass(displayStatus)} h-8 items-center`}>

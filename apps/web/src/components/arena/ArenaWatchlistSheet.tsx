@@ -1,11 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Star } from "lucide-react";
 import { useAccount } from "wagmi";
 import type { TokenListItem } from "@/lib/db/launchpad";
 import { ToolbarSheet } from "@/components/ui/ToolbarSheet";
-import { ICON_STROKE } from "@/lib/icons";
+import { PumpIcon, faStarSolid } from "@/lib/icons";
 import { WatchlistContent, useWatchlistTokens } from "@/components/arena/WatchlistContent";
 import { useFavorites } from "@/components/favorites/FavoritesProvider";
 
@@ -51,7 +50,7 @@ export function ArenaWatchlistSheet({
         className="arena-watchlist-btn toolbar-btn shrink-0 md:hidden"
         aria-label={ariaLabel}
       >
-        <Star className="h-3.5 w-3.5 shrink-0 text-pump-accent" strokeWidth={ICON_STROKE} aria-hidden />
+        <PumpIcon icon={faStarSolid} className="h-3.5 w-3.5 shrink-0 text-pump-accent" />
         <span className="arena-watchlist-btn__label text-caption">Watchlist</span>
         {watchlistCount > 0 ? (
           <span className="arena-watchlist-btn__count financial-value text-caption text-pump-muted">
@@ -66,7 +65,7 @@ export function ArenaWatchlistSheet({
         ariaLabel="Watchlist"
         title="Watchlist"
         count={watchlistCount}
-        icon={<Star className="h-4 w-4 text-pump-accent" strokeWidth={ICON_STROKE} />}
+        icon={<PumpIcon icon={faStarSolid} className="h-4 w-4 text-pump-accent" />}
       >
         <WatchlistContent
           tokens={tokens}

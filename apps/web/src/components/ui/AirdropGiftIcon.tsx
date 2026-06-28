@@ -1,4 +1,5 @@
-import { AirdropParachute } from "@/components/icons/AirdropParachute";
+import { PumpIcon } from "@/lib/icons";
+import { faAirdropParachute } from "@/lib/pump-fa-icons";
 
 type AirdropPromoIconProps = {
   className?: string;
@@ -8,8 +9,12 @@ type AirdropPromoIconProps = {
 /** Animated parachute marker for tokens with an open airdrop campaign. */
 export function AirdropPromoIcon({ className = "", size = 13 }: AirdropPromoIconProps) {
   return (
-    <span className={`airdrop-promo-icon inline-flex shrink-0 ${className}`} aria-hidden>
-      <AirdropParachute className="airdrop-promo-icon__glyph" size={size} />
+    <span
+      className={`airdrop-promo-icon inline-flex shrink-0 ${className}`}
+      style={{ fontSize: size }}
+      aria-hidden
+    >
+      <PumpIcon icon={faAirdropParachute} className="airdrop-promo-icon__glyph" />
     </span>
   );
 }

@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { RootProviders } from "@/components/layout/RootProviders";
 import { ThemeProvider } from "@/components/theme/ThemeProvider";
-import { ibmPlexMono, inter } from "@/lib/fonts";
+import { geistMono, geistSans } from "@/lib/fonts";
+import "@/lib/fontawesome-config";
 import "./globals.css";
 
 const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3012";
@@ -16,6 +17,10 @@ export const metadata: Metadata = {
     template: "%s | Pump",
   },
   description: defaultDescription,
+  icons: {
+    icon: [{ url: "/logos/light-rounded.svg", type: "image/svg+xml" }],
+    apple: [{ url: "/logos/light-rounded.svg", type: "image/svg+xml" }],
+  },
   openGraph: {
     title: defaultTitle,
     description: defaultDescription,
@@ -38,9 +43,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       lang="en"
       data-theme="dark"
       suppressHydrationWarning
-      className={`${inter.variable} ${ibmPlexMono.variable}`}
+      className={`${geistSans.variable} ${geistMono.variable}`}
     >
-      <body>
+      <body className={geistSans.className}>
         <script
           dangerouslySetInnerHTML={{
             __html: `

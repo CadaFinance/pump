@@ -2,9 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Plus } from "lucide-react";
+import { PumpIcon, faPlus } from "@/lib/icons";
 import { APP_NAV_ITEMS } from "@/lib/nav-config";
-import { ICON_STROKE } from "@/lib/icons";
 
 function isNavActive(pathname: string, href: string): boolean {
   return href === "/" ? pathname === "/" : pathname.startsWith(href);
@@ -22,7 +21,6 @@ export function AppNavView({ pathname }: { pathname: string }) {
     <nav className="bottom-nav md:hidden" aria-label="Primary">
       {BEFORE_CREATE.map((item) => {
         const active = isNavActive(pathname, item.href);
-        const Icon = item.icon;
 
         return (
           <Link
@@ -32,11 +30,7 @@ export function AppNavView({ pathname }: { pathname: string }) {
             aria-current={active ? "page" : undefined}
             className={`bottom-nav-item ${active ? "bottom-nav-item-active" : ""}`}
           >
-            <Icon
-              className="bottom-nav-icon"
-              strokeWidth={active ? 2.25 : ICON_STROKE}
-              aria-hidden
-            />
+            <PumpIcon icon={item.icon} className="bottom-nav-icon" />
             <span className="bottom-nav-label">{item.label}</span>
           </Link>
         );
@@ -50,14 +44,13 @@ export function AppNavView({ pathname }: { pathname: string }) {
         aria-label="Create token"
       >
         <span className="bottom-nav-fab-icon" aria-hidden>
-          <Plus className="h-6 w-6" strokeWidth={2.25} />
+          <PumpIcon icon={faPlus} className="h-6 w-6" />
         </span>
         <span className="bottom-nav-label">Create</span>
       </Link>
 
       {AFTER_CREATE.map((item) => {
         const active = isNavActive(pathname, item.href);
-        const Icon = item.icon;
 
         return (
           <Link
@@ -67,11 +60,7 @@ export function AppNavView({ pathname }: { pathname: string }) {
             aria-current={active ? "page" : undefined}
             className={`bottom-nav-item ${active ? "bottom-nav-item-active" : ""}`}
           >
-            <Icon
-              className="bottom-nav-icon"
-              strokeWidth={active ? 2.25 : ICON_STROKE}
-              aria-hidden
-            />
+            <PumpIcon icon={item.icon} className="bottom-nav-icon" />
             <span className="bottom-nav-label">{item.label}</span>
           </Link>
         );

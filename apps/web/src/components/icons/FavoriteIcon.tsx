@@ -1,5 +1,5 @@
-import { Star } from "lucide-react";
-import { ICON_STROKE } from "@/lib/icons";
+import { PumpIcon } from "@/lib/icons";
+import { faStarRegular, faStarSolid } from "@/lib/pump-fa-icons";
 
 type FavoriteIconProps = {
   active: boolean;
@@ -8,11 +8,6 @@ type FavoriteIconProps = {
 
 export function FavoriteIcon({ active, className = "h-4 w-4" }: FavoriteIconProps) {
   return (
-    <Star
-      className={className}
-      strokeWidth={ICON_STROKE}
-      fill={active ? "currentColor" : "none"}
-      aria-hidden
-    />
+    <PumpIcon icon={active ? faStarSolid : faStarRegular} className={className} />
   );
 }

@@ -20,8 +20,7 @@ import {
   isEndingSoon,
   showAirdropProgressBar,
 } from "@/lib/airdrop-board-format";
-import { Plus, Bookmark, ChevronRight } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
+import { PumpIcon, type PumpIconDefinition, faBookmarkRegular, faBookmarkSolid, faChevronRight, faPlus } from "@/lib/icons";
 import { useOpenConnectModal } from "@/hooks/useOpenConnectModal";
 import { useAccount } from "wagmi";
 import { AirdropsSkeleton } from "@/components/airdrops/AirdropsSkeleton";
@@ -29,7 +28,6 @@ import { useAirdropSaves } from "@/components/airdrops/AirdropSavesProvider";
 import { AirdropsSavedSheet } from "@/components/airdrops/AirdropsSavedSheet";
 import { FieldSearchInput } from "@/components/ui/FieldSearchInput";
 import { IconLabel, SectionHeadingIcon, TableHeaderLabel } from "@/components/ui/IconLabel";
-import { ICON_STROKE } from "@/lib/icons";
 import { MetricIcons } from "@/lib/metric-icons";
 import { ScrollStripTrack } from "@/components/ui/ScrollStripTrack";
 import { RECENT_STRIP_DESKTOP, RECENT_STRIP_MOBILE } from "@/lib/recent-strip-limits";
@@ -109,7 +107,7 @@ function AirdropFilterChips({
             {isSavedTab ? (
               <>
                 <span className="inline-flex items-center gap-1 md:hidden">
-                  <Bookmark className="h-3.5 w-3.5" strokeWidth={ICON_STROKE} aria-hidden />
+                  <PumpIcon icon={faBookmarkSolid} className="h-3.5 w-3.5" />
                   <span>({count})</span>
                 </span>
                 <span className="hidden md:inline">
@@ -152,7 +150,7 @@ function CreateCampaignLink({ className = "" }: { className?: string }) {
       prefetch={true}
       className={`${createCampaignButtonClass} inline-flex items-center gap-1.5 ${className}`}
     >
-      <Plus className="h-3.5 w-3.5 shrink-0" strokeWidth={ICON_STROKE} aria-hidden />
+      <PumpIcon icon={faPlus} className="h-3.5 w-3.5 shrink-0" />
       <span>Create airdrop</span>
     </Link>
   );
@@ -268,11 +266,7 @@ function AirdropSaveButton({
       } ${className}`}
       aria-label={saved ? "Remove from saved" : "Save campaign"}
     >
-      <Bookmark
-        className={`h-4 w-4 ${saved ? "fill-current" : ""}`}
-        strokeWidth={ICON_STROKE}
-        aria-hidden
-      />
+      <PumpIcon icon={saved ? faBookmarkSolid : faBookmarkRegular} className="h-4 w-4" />
     </button>
   );
 }
@@ -338,7 +332,7 @@ function HighlightAirdropCard({
   href: string;
   label: string;
   item: EnrichedAirdrop;
-  icon: LucideIcon;
+  icon: PumpIconDefinition;
 }) {
   const symbol = poolSymbol(item);
 
@@ -363,7 +357,7 @@ function HighlightAirdropCard({
   );
 }
 
-function HighlightAirdropPlaceholder({ label, icon }: { label: string; icon: LucideIcon }) {
+function HighlightAirdropPlaceholder({ label, icon }: { label: string; icon: PumpIconDefinition }) {
   return (
     <div className="panel-surface flex min-w-0 flex-row flex-nowrap items-center justify-between gap-3 p-2.5 md:px-3 md:py-3">
       <IconLabel
@@ -639,11 +633,7 @@ export function AirdropsListClient({
                 </div>
               </div>
 
-              <ChevronRight
-                className="koth-banner__chevron hidden shrink-0 md:block"
-                strokeWidth={ICON_STROKE}
-                aria-hidden
-              />
+              <PumpIcon icon={faChevronRight} className="koth-banner__chevron hidden shrink-0 md:block" />
             </div>
 
             <div className="featured-airdrop-card__stats">

@@ -1,14 +1,9 @@
 "use client";
 
 import { type ReactNode, createContext, useContext, useEffect, useMemo, useState } from "react";
-import {
-  Bell,
-  ChevronRight,
-  Pencil,
-  RefreshCw,
-  Search,
-} from "lucide-react";
+import { PumpIcon, type PumpIconDefinition, faBell, faChevronRight, faPencil, faRefreshCw, faSearch } from "@/lib/icons";
 import { explorerAddressUrl, pumpChain, shortAddress } from "@/config/chain";
+import { PumpLogo } from "@/components/brand/PumpLogo";
 import { ADMIN_COPY } from "@/lib/admin/copy";
 
 export type AdminTabId =
@@ -104,10 +99,13 @@ export function AdminLayout({
       <header className="admin-ent-header">
         <div className="admin-ent-header-row">
           <div className="admin-ent-brand">
-            <span className="admin-ent-brand-title">{ADMIN_COPY.brand.title}</span>
-            <span className="admin-ent-env" title={ADMIN_COPY.nav.environment}>
-              {ADMIN_COPY.brand.envLabel}
-            </span>
+            <PumpLogo size={36} className="admin-ent-brand-logo" />
+            <div className="admin-ent-brand-text">
+              <span className="admin-ent-brand-title">{ADMIN_COPY.brand.title}</span>
+              <span className="admin-ent-env" title={ADMIN_COPY.nav.environment}>
+                {ADMIN_COPY.brand.envLabel}
+              </span>
+            </div>
           </div>
 
           <nav className="admin-ent-nav" aria-label="Admin sections">
@@ -128,7 +126,7 @@ export function AdminLayout({
 
           <div className="admin-ent-header-tools">
             <label className="admin-ent-global-search">
-              <Search size={14} aria-hidden />
+              <PumpIcon icon={faSearch} className="h-3.5 w-3.5" />
               <input
                 type="search"
                 value={globalQuery}
@@ -147,7 +145,7 @@ export function AdminLayout({
               disabled
               title="No new alerts"
             >
-              <Bell size={15} />
+              <PumpIcon icon={faBell} className="h-[0.9375rem] w-[0.9375rem]" />
             </button>
 
             {onRefreshAll ? (
@@ -157,7 +155,10 @@ export function AdminLayout({
                 disabled={refreshing}
                 className={refreshing ? "admin-btn admin-btn-sm admin-btn-loading" : "admin-btn admin-btn-sm"}
               >
-                <RefreshCw size={13} className={refreshing ? "admin-spin" : ""} aria-hidden />
+                <PumpIcon
+                  icon={faRefreshCw}
+                  className={`h-3.5 w-3.5 ${refreshing ? "admin-spin" : ""}`}
+                />
                 {refreshing ? ADMIN_COPY.actions.refreshing : ADMIN_COPY.actions.refresh}
               </button>
             ) : null}
@@ -174,7 +175,7 @@ export function AdminLayout({
               >
                 <span className="admin-ent-user-dot" aria-hidden />
                 <span className="admin-num">{address ? shortAddress(address, true) : "—"}</span>
-                <ChevronRight size={12} className="admin-ent-user-chevron" aria-hidden />
+                <PumpIcon icon={faChevronRight} className="h-3 w-3 admin-ent-user-chevron" />
               </button>
               {userMenuOpen && address ? (
                 <div className="admin-ent-user-menu" role="menu">
@@ -464,7 +465,7 @@ export function AdminKvRow({
   const actionCell =
     action ??
     (onEdit ? (
-      <AdminIconButton icon={Pencil} onClick={onEdit} label={editLabel} />
+      <AdminIconButton icon={faPencil} onClick={onEdit} label={editLabel} />
     ) : null);
 
   return (
@@ -524,15 +525,13 @@ export function AdminBtn({
   danger?: boolean;
   ghost?: boolean;
   size?: "sm" | "md";
-  icon?: React.ElementType;
+  icon?: PumpIconDefinition;
 }) {
   const classes = ["admin-btn"];
   if (primary) classes.push("admin-btn-primary");
   if (danger) classes.push("admin-btn-danger");
   if (ghost) classes.push("admin-btn-ghost");
   if (size === "sm") classes.push("admin-btn-sm");
-
-  const Icon = icon;
 
   return (
     <button
@@ -541,19 +540,19 @@ export function AdminBtn({
       disabled={disabled}
       className={classes.join(" ")}
     >
-      {Icon ? <Icon size={14} aria-hidden="true" /> : null}
+      {icon ? <PumpIcon icon={icon} className="h-3.5 w-3.5" /> : null}
       {children}
     </button>
   );
 }
 
 export function AdminIconButton({
-  icon: Icon,
+  icon,
   onClick,
   disabled,
   label,
 }: {
-  icon: React.ElementType;
+  icon: PumpIconDefinition;
   onClick?: () => void;
   disabled?: boolean;
   label: string;
@@ -566,7 +565,7 @@ export function AdminIconButton({
       className="admin-icon-btn"
       aria-label={label}
     >
-      <Icon size={16} />
+      <PumpIcon icon={icon} className="h-4 w-4" />
     </button>
   );
 }

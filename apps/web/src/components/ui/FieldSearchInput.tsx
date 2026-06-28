@@ -1,6 +1,5 @@
 import { forwardRef, type InputHTMLAttributes, type ReactNode } from "react";
-import { Search } from "lucide-react";
-import { ICON_STROKE } from "@/lib/icons";
+import { PumpIcon, faSearch } from "@/lib/icons";
 
 type FieldSearchInputProps = InputHTMLAttributes<HTMLInputElement> & {
   wrapperClassName?: string;
@@ -23,10 +22,9 @@ export const FieldSearchInput = forwardRef<HTMLInputElement, FieldSearchInputPro
 
     const searchField = (
       <div className="arena-search-field relative min-w-0 flex-1">
-        <Search
+        <PumpIcon
+          icon={faSearch}
           className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-pump-muted"
-          strokeWidth={ICON_STROKE}
-          aria-hidden
         />
         <input ref={ref} type="search" className={inputClass} {...props} />
       </div>
@@ -47,10 +45,9 @@ export const FieldSearchInput = forwardRef<HTMLInputElement, FieldSearchInputPro
 
     return (
       <div className={`relative ${wrapperClassName}`}>
-        <Search
+        <PumpIcon
+          icon={faSearch}
           className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-pump-muted"
-          strokeWidth={ICON_STROKE}
-          aria-hidden
         />
         <input ref={ref} type="search" className={inputClass} {...props} />
       </div>

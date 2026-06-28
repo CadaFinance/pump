@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Clock } from "lucide-react";
+import { PumpIcon, faClock } from "@/lib/icons";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { formatEther, isAddress, parseEther } from "viem";
 import {
@@ -747,7 +747,7 @@ export function AdminPanel() {
 
             <AdminPageGridCell span={12}>
               <p className="admin-ent-sync-line">
-                <Clock size={12} aria-hidden />
+                <PumpIcon icon={faClock} className="h-3 w-3" />
                 <span className="admin-num">
                   {lastRefreshedAt ? lastRefreshedAt.toLocaleTimeString() : "—"}
                 </span>

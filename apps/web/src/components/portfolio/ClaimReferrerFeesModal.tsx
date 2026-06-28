@@ -1,6 +1,5 @@
 "use client";
 
-import { Share2 } from "lucide-react";
 import { formatEther } from "viem";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -15,7 +14,7 @@ import { bondingCurveManagerAbi } from "@/lib/bonding-curve";
 import { buildReferralInviteUrl, truncateReferralInviteUrl } from "@/lib/referral-link";
 import { ShareSheetModal } from "@/components/ui/ShareSheetModal";
 import { ModalPortal } from "@/components/ui/ModalPortal";
-import { ICON_STROKE } from "@/lib/icons";
+import { PumpIcon, faShare } from "@/lib/icons";
 import { referralSharePayload } from "@/lib/share-links";
 import { bnbToUsd, formatUsdReadable } from "@/lib/format-usd";
 
@@ -214,7 +213,7 @@ export function ClaimReferrerFeesModal({
               onClick={() => setShareOpen(true)}
               className="secondary-button mt-2 inline-flex items-center justify-center gap-1.5"
             >
-              <Share2 className="h-4 w-4 shrink-0" strokeWidth={ICON_STROKE} aria-hidden />
+              <PumpIcon icon={faShare} className="h-4 w-4 shrink-0" />
               Share
             </button>
           </div>

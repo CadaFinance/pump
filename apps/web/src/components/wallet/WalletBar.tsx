@@ -15,6 +15,7 @@ import { copyToClipboard } from "@/lib/copy-to-clipboard";
 import { useWalletFunding } from "@/components/wallet/WalletFundingProvider";
 import { usePumpWallet } from "@/components/wallet/PumpWalletProvider";
 import { isPumpAuthConfigured } from "@/lib/auth-config";
+import { PumpIcon, faArrowLeftRight, faChevronDown, faCopy, faWallet } from "@/lib/icons";
 
 function formatHeaderBalanceUsd(usd: number | null): string {
   if (usd == null || !Number.isFinite(usd)) return "$0.00";
@@ -30,48 +31,6 @@ function formatHeaderBalanceNative(native: number): string {
 
 function formatNativeAvailable(native: number): string {
   return formatHeaderBalanceNative(native);
-}
-
-function ChevronDownIcon({ open }: { open: boolean }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      aria-hidden
-      className={`h-4 w-4 fill-none stroke-current transition ${open ? "rotate-180" : ""}`}
-    >
-      <path d="M6 9l6 6 6-6" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function CopyIcon() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden className="h-3.5 w-3.5 fill-none stroke-current">
-      <rect x="9" y="9" width="11" height="11" rx="2" strokeWidth="1.6" />
-      <path d="M7 15H6a2 2 0 01-2-2V5a2 2 0 012-2h8a2 2 0 012 2v1" strokeWidth="1.6" />
-    </svg>
-  );
-}
-
-function PortfolioIcon() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden className="h-5 w-5 fill-none stroke-current">
-      <path d="M4 7h16M4 12h16M4 17h10" strokeWidth="1.6" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function TradeIcon() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden className="h-5 w-5 fill-none stroke-current">
-      <path
-        d="M8 7l4-4 4 4M16 17l-4 4-4-4"
-        strokeWidth="1.6"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
 }
 
 type WalletMenuProps = {
@@ -136,7 +95,7 @@ function WalletMenu({
       >
         <span className="financial-value">{shortAddress(address)}</span>
         <span className="flex items-center gap-1 text-pump-muted">
-          {copied ? "Copied" : <CopyIcon />}
+          {copied ? "Copied" : <PumpIcon icon={faCopy} className="h-3.5 w-3.5" />}
         </span>
       </button>
       <p className="mt-1 text-caption text-pump-muted">Smart wallet · deposit address</p>
@@ -171,7 +130,7 @@ function WalletMenu({
           className="flex flex-col items-center gap-2 border border-pump-border/45 bg-pump-border/4 px-3 py-3 text-center transition hover:bg-pump-border/8"
         >
           <span className="text-pump-muted">
-            <PortfolioIcon />
+            <PumpIcon icon={faWallet} className="h-5 w-5" />
           </span>
           <span className="text-body-sm font-semibold text-pump-text">Portfolio</span>
           <span className="text-caption text-pump-muted">Holdings</span>
@@ -182,7 +141,7 @@ function WalletMenu({
           className="flex flex-col items-center gap-2 border border-pump-border/45 bg-pump-border/4 px-3 py-3 text-center transition hover:bg-pump-border/8"
         >
           <span className="text-pump-muted">
-            <TradeIcon />
+            <PumpIcon icon={faArrowLeftRight} className="h-5 w-5" />
           </span>
           <span className="text-body-sm font-semibold text-pump-text">Trade</span>
           <span className="text-caption text-pump-muted">Browse Arena</span>
@@ -246,7 +205,10 @@ function ConnectedWalletButton({ address }: { address: string }) {
           <span className="h-2 w-2 shrink-0 rounded-full bg-pump-success" aria-hidden />
         )}
         <span className="financial-value text-body-sm font-semibold">{balanceLabel}</span>
-        <ChevronDownIcon open={open} />
+        <PumpIcon
+          icon={faChevronDown}
+          className={`h-4 w-4 transition ${open ? "rotate-180" : ""}`}
+        />
       </button>
       {open ? (
         <WalletMenu

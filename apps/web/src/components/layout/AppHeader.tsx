@@ -2,11 +2,11 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Plus } from "lucide-react";
+import { PumpLogo } from "@/components/brand/PumpLogo";
 import { WalletBar } from "@/components/wallet/WalletBar";
 import { ThemePicker } from "@/components/theme/ThemePicker";
 import { APP_NAV_ITEMS } from "@/lib/nav-config";
-import { ICON_STROKE } from "@/lib/icons";
+import { PumpIcon, faPlus } from "@/lib/icons";
 import { shellInnerClassForPath } from "@/components/layout/layout-shell";
 
 function navLinkClass(active: boolean): string {
@@ -20,8 +20,8 @@ export function AppHeaderView({ pathname }: { pathname: string }) {
       <div className={`app-header-inner ${shellInnerClassForPath(pathname)}`}>
         <div className="app-header-start">
           <Link href="/" className="app-header-brand">
-            <span className="app-header-brand-mark" aria-hidden>
-              P
+            <span className="app-header-brand-mark">
+              <PumpLogo size={32} />
             </span>
             <span className="truncate">Pump</span>
           </Link>
@@ -32,7 +32,6 @@ export function AppHeaderView({ pathname }: { pathname: string }) {
                 item.href === "/"
                   ? pathname === "/"
                   : pathname.startsWith(item.href);
-              const Icon = item.icon;
 
               return (
                 <Link
@@ -42,7 +41,7 @@ export function AppHeaderView({ pathname }: { pathname: string }) {
                   aria-current={active ? "page" : undefined}
                   className={navLinkClass(active)}
                 >
-                  <Icon className="h-4 w-4 shrink-0 opacity-80" strokeWidth={ICON_STROKE} aria-hidden />
+                  <PumpIcon icon={item.icon} className="h-4 w-4 shrink-0 opacity-80" />
                   {item.label}
                 </Link>
               );
@@ -60,7 +59,7 @@ export function AppHeaderView({ pathname }: { pathname: string }) {
               pathname.startsWith("/create") ? "opacity-95" : ""
             }`}
           >
-            <Plus className="h-4 w-4 shrink-0" strokeWidth={ICON_STROKE} aria-hidden />
+            <PumpIcon icon={faPlus} className="h-4 w-4 shrink-0" />
             Create
           </Link>
           <WalletBar />

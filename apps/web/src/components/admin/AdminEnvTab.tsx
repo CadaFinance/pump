@@ -1,19 +1,20 @@
 "use client";
 
-import {
-  Eye,
-  EyeOff,
-  Pencil,
-  Plus,
-  RotateCw,
-  Search,
-  Trash2,
-  Zap,
-} from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { adminFetch } from "@/lib/admin-api-client";
 import { isSensitiveEnvKey } from "@/lib/admin/env-parse";
 import { ADMIN_COPY } from "@/lib/admin/copy";
+import {
+  PumpIcon,
+  faEye,
+  faEyeSlash,
+  faPencil,
+  faPlus,
+  faRotateCw,
+  faSearch,
+  faTrash2,
+  faZap,
+} from "@/lib/icons";
 import {
   AdminAlert,
   AdminBlock,
@@ -288,7 +289,7 @@ export function AdminEnvTab() {
             <p>{ADMIN_COPY.environment.applyBody}</p>
           </div>
           <AdminBtn primary onClick={() => void onApply()} disabled={applying || dirty}>
-            <Zap size={14} aria-hidden />
+            <PumpIcon icon={faZap} className="h-3.5 w-3.5" />
             {applying ? ADMIN_COPY.environment.applying : ADMIN_COPY.environment.applyButton}
           </AdminBtn>
         </div>
@@ -332,7 +333,7 @@ export function AdminEnvTab() {
                 </>
               ) : (
                 <AdminTextButton onClick={() => selectedId && void loadVariables(selectedId)} disabled={loading}>
-                  <RotateCw size={14} aria-hidden />
+                  <PumpIcon icon={faRotateCw} className="h-3.5 w-3.5" />
                   {ADMIN_COPY.actions.refresh}
                 </AdminTextButton>
               )}
@@ -359,7 +360,7 @@ export function AdminEnvTab() {
                 aria-label="Variable value"
               />
               <AdminBtn onClick={onAddVariable}>
-                <Plus size={14} aria-hidden />
+                <PumpIcon icon={faPlus} className="h-3.5 w-3.5" />
                 {ADMIN_COPY.environment.addButton}
               </AdminBtn>
             </div>
@@ -368,7 +369,7 @@ export function AdminEnvTab() {
 
           <div className="admin-env-filters">
             <label className="admin-env-search">
-              <Search size={15} aria-hidden />
+              <PumpIcon icon={faSearch} className="h-[0.9375rem] w-[0.9375rem]" />
               <input
                 className="admin-input"
                 placeholder={ADMIN_COPY.environment.searchPlaceholder}
@@ -469,7 +470,7 @@ export function AdminEnvTab() {
                                     title={isRevealed ? ADMIN_COPY.environment.hide : ADMIN_COPY.environment.reveal}
                                     aria-label={isRevealed ? ADMIN_COPY.environment.hide : ADMIN_COPY.environment.reveal}
                                   >
-                                    {isRevealed ? <EyeOff size={15} /> : <Eye size={15} />}
+                                    {isRevealed ? <PumpIcon icon={faEyeSlash} className="h-[0.9375rem] w-[0.9375rem]" /> : <PumpIcon icon={faEye} className="h-[0.9375rem] w-[0.9375rem]" />}
                                   </button>
                                 ) : null}
                                 <button
@@ -479,7 +480,7 @@ export function AdminEnvTab() {
                                   title={ADMIN_COPY.environment.edit}
                                   aria-label={ADMIN_COPY.environment.edit}
                                 >
-                                  <Pencil size={15} />
+                                  <PumpIcon icon={faPencil} className="h-[0.9375rem] w-[0.9375rem]" />
                                 </button>
                                 <button
                                   type="button"
@@ -488,7 +489,7 @@ export function AdminEnvTab() {
                                   title={ADMIN_COPY.environment.delete}
                                   aria-label={ADMIN_COPY.environment.delete}
                                 >
-                                  <Trash2 size={15} />
+                                  <PumpIcon icon={faTrash2} className="h-[0.9375rem] w-[0.9375rem]" />
                                 </button>
                               </>
                             )}

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { MyAirdropParticipation } from "@/lib/db/airdrops";
 import { MetricIcons } from "@/lib/metric-icons";
-import { ICON_STROKE } from "@/lib/icons";
+import { PumpIcon } from "@/lib/icons";
 import { useBnbUsdPrice } from "@/hooks/useBnbUsdPrice";
 import { ClaimAllAirdropsModal } from "@/components/portfolio/ClaimAllAirdropsModal";
 import {
@@ -106,10 +106,9 @@ export function PortfolioAirdropsSection({ address }: { address: string }) {
       <div className="space-y-2 md:space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h3 className="section-heading text-h3 inline-flex items-center gap-2">
-            <MetricIcons.airdrops
+            <PumpIcon
+              icon={MetricIcons.airdrops}
               className="hidden h-[1.05em] w-[1.05em] shrink-0 text-pump-accent sm:block"
-              strokeWidth={ICON_STROKE}
-              aria-hidden
             />
             Joined airdrops ({visibleItems.length})
           </h3>

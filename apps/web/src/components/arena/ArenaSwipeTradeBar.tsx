@@ -1,10 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Settings2 } from "lucide-react";
 import { NATIVE_SYMBOL } from "@/config/chain";
 import { dismissHoldingsSwipeHint } from "@/components/portfolio/HoldingSwipeRow";
-import { ICON_STROKE } from "@/lib/icons";
+import { PumpIcon, faSettings2 } from "@/lib/icons";
 import {
   ARENA_QUICK_TRADE_CHANGE_EVENT,
   DEFAULT_ARENA_QUICK_TRADE,
@@ -74,7 +73,7 @@ export function ArenaSwipeTradeBar() {
           aria-label="Quick trade settings"
           aria-expanded={settingsOpen}
         >
-          <Settings2 className="size-3.5" strokeWidth={ICON_STROKE} aria-hidden />
+          <PumpIcon icon={faSettings2} className="size-3.5" />
           <span className="hidden lg:inline">Settings</span>
         </button>
       </div>

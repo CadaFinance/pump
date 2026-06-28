@@ -1,2 +1,6 @@
-/** Shared Lucide stroke weight — matches the app's refined UI line weight. */
+export type { PumpIconDefinition, PumpIconProp } from "@/components/icons/PumpIcon";
+export { PumpIcon } from "@/components/icons/PumpIcon";
+export * from "@/lib/pump-fa-icons";
+
+/** @deprecated Font Awesome icons do not use stroke width — kept for gradual migration. */
 export const ICON_STROKE = 1.75;

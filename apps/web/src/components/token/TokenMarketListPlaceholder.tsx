@@ -1,7 +1,6 @@
 "use client";
 
-import { Search } from "lucide-react";
-import { ICON_STROKE } from "@/lib/icons";
+import { PumpIcon, faSearch } from "@/lib/icons";
 
 const PLACEHOLDER_ROWS = [
   { symbol: "PEPE", pair: "PEPE/USDT", price: "0.000012", change: "+4.82%" },
@@ -22,7 +21,7 @@ export function TokenMarketListPlaceholder() {
     >
       <div className="token-market-sidebar__toolbar">
         <div className="token-market-sidebar__search" aria-hidden>
-          <Search className="h-3.5 w-3.5 shrink-0 opacity-50" strokeWidth={ICON_STROKE} />
+          <PumpIcon icon={faSearch} className="h-3.5 w-3.5 shrink-0 opacity-50" />
           <span className="truncate text-caption text-pump-muted">Search</span>
         </div>
         <div className="token-market-sidebar__filters" aria-hidden>

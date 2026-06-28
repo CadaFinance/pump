@@ -1,12 +1,12 @@
 "use client";
 
-import { Check, GripVertical, Pencil, Plus, Trash2, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { adminFetch } from "@/lib/admin-api-client";
 import { ADMIN_COPY } from "@/lib/admin/copy";
 import type { AdminTodo, AdminTodoPriority, AdminTodoSortMode } from "@/lib/db/admin-todos";
 import { AdminAlert, AdminBtn } from "@/components/admin/AdminChrome";
 import { ModalPortal } from "@/components/ui/ModalPortal";
+import { PumpIcon, faCheck, faGripVertical, faPencil, faPlus, faTrash2, faX } from "@/lib/icons";
 
 type TodoFilter = "all" | "open" | "done";
 
@@ -74,7 +74,7 @@ function AdminTodoDetailModal({
               <h2 className="admin-todo-modal-title">{todo.title}</h2>
             </div>
             <button type="button" className="admin-icon-btn" aria-label={ADMIN_COPY.actions.close} onClick={onClose}>
-              <X size={16} />
+              <PumpIcon icon={faX} className="h-4 w-4" />
             </button>
           </div>
           <div className="admin-modal-body admin-todo-modal-body">
@@ -403,7 +403,7 @@ export function AdminTodosTab() {
             className="admin-todos-prompt-add"
             disabled={creating || !newTitle.trim()}
           >
-            <Plus size={13} aria-hidden />
+            <PumpIcon icon={faPlus} className="h-3.5 w-3.5" />
             {creating ? "…" : ADMIN_COPY.todos.add}
           </button>
         </form>
@@ -457,7 +457,7 @@ export function AdminTodosTab() {
                         disabled={busy || !editTitle.trim()}
                         onClick={() => void saveEdit(todo.id)}
                       >
-                        <Check size={13} aria-hidden />
+                        <PumpIcon icon={faCheck} className="h-3.5 w-3.5" />
                         {ADMIN_COPY.todos.save}
                       </button>
                       <button
@@ -466,7 +466,7 @@ export function AdminTodosTab() {
                         disabled={busy}
                         onClick={() => setEditingId(null)}
                       >
-                        <X size={13} aria-hidden />
+                        <PumpIcon icon={faX} className="h-3.5 w-3.5" />
                         {ADMIN_COPY.actions.close}
                       </button>
                     </div>
@@ -505,7 +505,7 @@ export function AdminTodosTab() {
                     aria-label={ADMIN_COPY.todos.drag}
                     tabIndex={-1}
                   >
-                    <GripVertical size={14} aria-hidden />
+                    <PumpIcon icon={faGripVertical} className="h-3.5 w-3.5" />
                   </button>
 
                   <label className="admin-todo-check admin-todo-check--compact">
@@ -541,7 +541,7 @@ export function AdminTodosTab() {
                       aria-label={ADMIN_COPY.todos.edit}
                       onClick={() => startEdit(todo)}
                     >
-                      <Pencil size={13} aria-hidden />
+                      <PumpIcon icon={faPencil} className="h-3.5 w-3.5" />
                     </button>
                     <button
                       type="button"
@@ -550,7 +550,7 @@ export function AdminTodosTab() {
                       aria-label={ADMIN_COPY.actions.delete}
                       onClick={() => void onDelete(todo.id)}
                     >
-                      <Trash2 size={13} aria-hidden />
+                      <PumpIcon icon={faTrash2} className="h-3.5 w-3.5" />
                     </button>
                   </div>
                 </li>

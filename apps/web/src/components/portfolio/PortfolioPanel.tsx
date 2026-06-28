@@ -11,9 +11,8 @@ import { bondingCurveManagerAbi } from "@/lib/bonding-curve";
 import { ClaimCreatorFeesModal } from "@/components/portfolio/ClaimCreatorFeesModal";
 import { CreatorFeesCard } from "@/components/portfolio/CreatorFeesCard";
 import { PortfolioMetricBox } from "@/components/portfolio/PortfolioMetricBox";
-import type { LucideIcon } from "lucide-react";
+import { PumpIcon, type PumpIconDefinition } from "@/lib/icons";
 import { MetricIcons } from "@/lib/metric-icons";
-import { ICON_STROKE } from "@/lib/icons";
 import { ClaimReferrerFeesModal } from "@/components/portfolio/ClaimReferrerFeesModal";
 import { ReferralRewardsCard } from "@/components/referrals/ReferralRewardsCard";
 import { FollowNetworkModal } from "@/components/portfolio/FollowNetworkModal";
@@ -225,7 +224,7 @@ function PortfolioStatBox({
   className = "",
 }: {
   label: string;
-  icon?: LucideIcon;
+  icon?: PumpIconDefinition;
   value: ReactNode;
   sub?: ReactNode;
   valueClassName?: string;
@@ -1365,10 +1364,9 @@ export function PortfolioPanel({
             <div className="space-y-2 md:space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-2 md:gap-3">
                 <h3 className="section-heading text-h3 inline-flex items-center gap-2">
-                  <MetricIcons.holdings
+                  <PumpIcon
+                    icon={MetricIcons.holdings}
                     className="hidden h-[1.05em] w-[1.05em] shrink-0 text-pump-accent sm:block"
-                    strokeWidth={ICON_STROKE}
-                    aria-hidden
                   />
                   Holdings ({holdingsCount})
                 </h3>
@@ -1635,10 +1633,9 @@ export function PortfolioPanel({
 
             <div className="space-y-2 md:space-y-3">
               <h3 className="section-heading text-h3 inline-flex items-center gap-2">
-                <MetricIcons.launch
+                <PumpIcon
+                  icon={MetricIcons.launch}
                   className="hidden h-[1.05em] w-[1.05em] shrink-0 text-pump-accent sm:block"
-                  strokeWidth={ICON_STROKE}
-                  aria-hidden
                 />
                 Launched tokens ({data.createdTokensTotal})
               </h3>

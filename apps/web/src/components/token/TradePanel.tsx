@@ -1,5 +1,6 @@
 "use client";
 
+import { PumpIcon, faCheck, faChevronDown } from "@/lib/icons";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { encodeFunctionData, formatEther, formatUnits, parseEther, parseSignature, parseUnits } from "viem";
 import type { Address, TransactionReceipt } from "viem";
@@ -267,23 +268,7 @@ function formatTokenCompact(value: string | number): string {
   return n.toLocaleString(undefined, { maximumFractionDigits: 4 });
 }
 
-function ChevronDownSmall() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden className="h-3.5 w-3.5 fill-none stroke-current opacity-70">
-      <path d="M6 9l6 6 6-6" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
 const TRADE_TEETH_COUNT = 100;
-
-function AssetMenuCheck() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden className="h-4 w-4 shrink-0 stroke-current">
-      <path d="M5 12l5 5L20 7" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
 
 export function TradePanel({
   tokenAddress,
@@ -2311,7 +2296,7 @@ export function TradePanel({
                   aria-label="Select input currency"
                 >
                   <span className="text-body-sm font-medium text-pump-text">{currencyLabel}</span>
-                  <ChevronDownSmall />
+                  <PumpIcon icon={faChevronDown} className="h-3.5 w-3.5 opacity-70" />
                 </button>
                 {assetMenuOpen ? (
                   <div className="trade-asset-menu" role="listbox" aria-label="Input currency">
@@ -2323,7 +2308,9 @@ export function TradePanel({
                       onClick={() => selectInputMode("usd")}
                     >
                       <span>USD</span>
-                      {activeInputMode === "usd" ? <AssetMenuCheck /> : null}
+                      {activeInputMode === "usd" ? (
+                        <PumpIcon icon={faCheck} className="h-4 w-4 shrink-0" />
+                      ) : null}
                     </button>
                     <button
                       type="button"
@@ -2333,7 +2320,9 @@ export function TradePanel({
                       onClick={() => selectInputMode("token")}
                     >
                       <span>{symbol}</span>
-                      {activeInputMode === "token" ? <AssetMenuCheck /> : null}
+                      {activeInputMode === "token" ? (
+                        <PumpIcon icon={faCheck} className="h-4 w-4 shrink-0" />
+                      ) : null}
                     </button>
                   </div>
                 ) : null}

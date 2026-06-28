@@ -4,21 +4,8 @@ import { useAccount } from "wagmi";
 import { explorerTxUrl, shortAddress } from "@/config/chain";
 import { useCreatorFollows } from "@/components/creators/CreatorFollowsProvider";
 import { CREATOR_FEE_SHARE_PCT } from "@/lib/bonding-curve";
+import { PumpIcon, faCoins } from "@/lib/icons";
 import { UserAvatarForAddress } from "@/components/user/UserAvatarForAddress";
-
-function MoneyBagIcon() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden className="h-3.5 w-3.5 fill-none stroke-current">
-      <path
-        d="M12 3v2M8 5h8a2 2 0 012 2v1a4 4 0 010 8v1a2 2 0 01-2 2H8a2 2 0 01-2-2v-1a4 4 0 010-8V7a2 2 0 012-2z"
-        strokeWidth="1.6"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <path d="M12 11v2" strokeWidth="1.6" strokeLinecap="round" />
-    </svg>
-  );
-}
 
 type CreatorRewardsCardProps = {
   creatorAddress: string;
@@ -75,7 +62,7 @@ export function CreatorRewardsCard({
               </span>
             </div>
             <div className="mt-0.5 flex items-center gap-1.5 text-caption font-medium text-pump-success">
-              <MoneyBagIcon />
+              <PumpIcon icon={faCoins} className="h-3.5 w-3.5" />
               <span>{CREATOR_FEE_SHARE_PCT}%</span>
               {followerCount > 0 ? (
                 <span className="text-pump-muted">

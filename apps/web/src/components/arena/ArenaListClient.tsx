@@ -3,8 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
-import { ChevronRight, LayoutGrid, Table2 } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
+import { PumpIcon, type PumpIconDefinition, faChevronRight, faLayoutGrid, faTable2 } from "@/lib/icons";
 import { useAccount } from "wagmi";
 import { useOpenConnectModal } from "@/hooks/useOpenConnectModal";
 import type { ArenaFilterCounts, KothSummary, TokenListItem } from "@/lib/db/launchpad";
@@ -14,7 +13,6 @@ import { ArenaTokenCard } from "@/components/arena/ArenaTokenCard";
 import { ArenaWatchlistSheet } from "@/components/arena/ArenaWatchlistSheet";
 import { FieldSearchInput } from "@/components/ui/FieldSearchInput";
 import { IconLabel, SectionHeadingIcon, TableHeaderLabel } from "@/components/ui/IconLabel";
-import { ICON_STROKE } from "@/lib/icons";
 import { MetricIcons } from "@/lib/metric-icons";
 import { useFavorites } from "@/components/favorites/FavoritesProvider";
 import { TokenAvatar } from "@/components/token/TokenAvatar";
@@ -223,7 +221,7 @@ function HighlightStatCard({
   href: string;
   label: string;
   token: TokenListItem;
-  icon: LucideIcon;
+  icon: PumpIconDefinition;
 }) {
   return (
     <Link
@@ -262,7 +260,7 @@ function HighlightStatCard({
   );
 }
 
-function HighlightStatPlaceholder({ label, icon }: { label: string; icon: LucideIcon }) {
+function HighlightStatPlaceholder({ label, icon }: { label: string; icon: PumpIconDefinition }) {
   return (
     <div className="panel-surface flex min-w-0 flex-row flex-nowrap items-center justify-between gap-3 p-2.5 md:px-3 md:py-3">
       <IconLabel
@@ -1391,11 +1389,7 @@ export function ArenaListClient({
                 </p>
               </div>
 
-              <ChevronRight
-                className="koth-banner__chevron hidden shrink-0 md:block"
-                strokeWidth={ICON_STROKE}
-                aria-hidden
-              />
+              <PumpIcon icon={faChevronRight} className="koth-banner__chevron hidden shrink-0 md:block" />
             </div>
           </Link>
 
@@ -1507,7 +1501,7 @@ export function ArenaListClient({
                   aria-pressed={viewMode === "board"}
                   aria-label="Board view"
                 >
-                  <Table2 className="h-3.5 w-3.5 shrink-0" strokeWidth={ICON_STROKE} aria-hidden />
+                  <PumpIcon icon={faTable2} className="h-3.5 w-3.5 shrink-0" />
                   <span className="hidden sm:inline">Board</span>
                 </button>
                 <button
@@ -1520,7 +1514,7 @@ export function ArenaListClient({
                   aria-pressed={viewMode === "cards"}
                   aria-label="Cards view"
                 >
-                  <LayoutGrid className="h-3.5 w-3.5 shrink-0" strokeWidth={ICON_STROKE} aria-hidden />
+                  <PumpIcon icon={faLayoutGrid} className="h-3.5 w-3.5 shrink-0" />
                   <span className="hidden sm:inline">Cards</span>
                 </button>
               </div>

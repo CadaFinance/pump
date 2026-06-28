@@ -8,13 +8,17 @@ export function TokenDetailBodySkeleton() {
   const toolbarSkeleton = (
     <div className="token-detail-toolbar panel-surface">
       <div className="token-detail-toolbar__row">
-        <div className="token-detail-toolbar__pair">
+        <div className="token-detail-toolbar__identity">
+          <Skeleton className="h-5 w-5 shrink-0 rounded-sm" />
           <Skeleton variant="circle" className="h-7 w-7 shrink-0" />
-          <Skeleton className="h-4 w-20" />
+          <div className="token-detail-toolbar__pair-meta">
+            <Skeleton className="h-5 w-24" />
+            <Skeleton variant="line" className="h-3 w-14" />
+          </div>
         </div>
         <div className="token-detail-toolbar__scroll">
           <div className="token-detail-toolbar__stats">
-            {Array.from({ length: 7 }).map((_, index) => (
+            {Array.from({ length: 5 }).map((_, index) => (
               <div key={index} className="token-detail-toolbar__stat">
                 <Skeleton variant="line" className="h-3 w-14" />
                 <Skeleton className="mt-1 h-4 w-24" />
@@ -23,8 +27,7 @@ export function TokenDetailBodySkeleton() {
           </div>
         </div>
         <div className="token-detail-toolbar__actions">
-          <Skeleton className="h-[2.375rem] w-[2.375rem] shrink-0 rounded-md" />
-          <Skeleton className="h-[2.375rem] w-[2.375rem] shrink-0 rounded-md" />
+          <Skeleton className="h-5 w-5 shrink-0 rounded-sm" />
         </div>
       </div>
     </div>

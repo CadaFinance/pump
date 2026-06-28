@@ -1,12 +1,12 @@
 "use client";
 
 import type { ReactNode } from "react";
-import type { LucideIcon } from "lucide-react";
+import type { PumpIconDefinition } from "@/lib/icons";
 import { IconLabel } from "@/components/ui/IconLabel";
 
 type PortfolioMetricBoxProps = {
   label: string;
-  icon?: LucideIcon;
+  icon?: PumpIconDefinition;
   value: ReactNode;
   valueClassName?: string;
   actions?: ReactNode;

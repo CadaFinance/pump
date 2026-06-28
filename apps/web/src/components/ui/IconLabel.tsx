@@ -1,9 +1,8 @@
-import type { LucideIcon } from "lucide-react";
 import type { ElementType, ReactNode } from "react";
-import { ICON_STROKE } from "@/lib/icons";
+import { PumpIcon, type PumpIconDefinition } from "@/lib/icons";
 
 type IconLabelProps = {
-  icon: LucideIcon;
+  icon: PumpIconDefinition;
   children: ReactNode;
   className?: string;
   iconClassName?: string;
@@ -13,7 +12,7 @@ type IconLabelProps = {
 };
 
 export function IconLabel({
-  icon: Icon,
+  icon,
   children,
   className = "",
   iconClassName = "h-3.5 w-3.5 shrink-0 opacity-75",
@@ -24,45 +23,41 @@ export function IconLabel({
 
   return (
     <Tag className={`inline-flex min-w-0 items-center gap-1 ${className}`}>
-      <Icon className={iconCls} strokeWidth={ICON_STROKE} aria-hidden />
+      <PumpIcon icon={icon} className={iconCls} />
       <span className="min-w-0 truncate">{children}</span>
     </Tag>
   );
 }
 
 export function SectionHeadingIcon({
-  icon: Icon,
+  icon,
   children,
   className = "",
 }: {
-  icon: LucideIcon;
+  icon: PumpIconDefinition;
   children: ReactNode;
   className?: string;
 }) {
   return (
     <h2 className={`section-heading inline-flex items-center gap-2 ${className}`}>
-      <Icon
-        className="h-[1.05em] w-[1.05em] shrink-0 text-pump-accent"
-        strokeWidth={ICON_STROKE}
-        aria-hidden
-      />
+      <PumpIcon icon={icon} className="h-[1.05em] w-[1.05em] shrink-0 text-pump-accent" />
       {children}
     </h2>
   );
 }
 
 export function TableHeaderLabel({
-  icon: Icon,
+  icon,
   children,
 }: {
-  icon?: LucideIcon;
+  icon?: PumpIconDefinition;
   children: ReactNode;
 }) {
-  if (!Icon) return <>{children}</>;
+  if (!icon) return <>{children}</>;
 
   return (
     <span className="inline-flex items-center gap-1">
-      <Icon className="h-3 w-3 shrink-0 opacity-70" strokeWidth={ICON_STROKE} aria-hidden />
+      <PumpIcon icon={icon} className="h-3 w-3 shrink-0 opacity-70" />
       {children}
     </span>
   );

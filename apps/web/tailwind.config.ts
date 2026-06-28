@@ -6,14 +6,14 @@ const config: Config = {
     extend: {
       fontFamily: {
         sans: [
-          "var(--font-inter)",
+          "var(--font-geist-sans)",
           "system-ui",
           "-apple-system",
           "BlinkMacSystemFont",
           "Segoe UI",
           "sans-serif",
         ],
-        mono: ["var(--font-mono)", "SFMono-Regular", "Consolas", "monospace"],
+        mono: ["var(--font-geist-mono)", "SFMono-Regular", "Consolas", "monospace"],
       },
       fontSize: {
         display: ["var(--text-display)", { lineHeight: "var(--leading-display)" }],

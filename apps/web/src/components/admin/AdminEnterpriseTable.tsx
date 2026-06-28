@@ -1,11 +1,11 @@
 "use client";
 
-import { ChevronDown, ChevronUp, Search } from "lucide-react";
 import {
   type ReactNode,
   useMemo,
   useState,
 } from "react";
+import { PumpIcon, faChevronDown, faChevronUp, faSearch } from "@/lib/icons";
 
 export type AdminTableColumn<T> = {
   id: string;
@@ -117,7 +117,7 @@ export function AdminEnterpriseTable<T>({
           <div className="admin-ent-table-toolbar">
             {searchFilter ? (
               <label className="admin-ent-search">
-                <Search size={14} aria-hidden />
+                <PumpIcon icon={faSearch} className="h-3.5 w-3.5" />
                 <input
                   type="search"
                   value={query}
@@ -161,12 +161,12 @@ export function AdminEnterpriseTable<T>({
                       <span>{col.header}</span>
                       {sortCol === col.id ? (
                         sortDir === "asc" ? (
-                          <ChevronUp size={12} aria-hidden />
+                          <PumpIcon icon={faChevronUp} className="h-3 w-3" />
                         ) : (
-                          <ChevronDown size={12} aria-hidden />
+                          <PumpIcon icon={faChevronDown} className="h-3 w-3" />
                         )
                       ) : (
-                        <ChevronDown size={12} className="admin-ent-sort-idle" aria-hidden />
+                        <PumpIcon icon={faChevronDown} className="h-3 w-3 admin-ent-sort-idle" />
                       )}
                     </button>
                   ) : (
