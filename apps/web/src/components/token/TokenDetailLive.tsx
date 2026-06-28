@@ -50,7 +50,12 @@ import { useFavorites } from "@/components/favorites/FavoritesProvider";
 import { TokenAvatar } from "@/components/token/TokenAvatar";
 import { CreatorProfileModal } from "@/components/creators/CreatorProfileModal";
 import { CreatorRewardsCard } from "@/components/creators/CreatorRewardsCard";
+import { ShareSheetModal } from "@/components/ui/ShareSheetModal";
+import { TokenSocialLinksBar } from "@/components/token/TokenSocialLinksBar";
+import { UserAvatarForAddress } from "@/components/user/UserAvatarForAddress";
+import { hasSocialLinks } from "@/lib/token-social";
 import { copyToClipboard } from "@/lib/copy-to-clipboard";
+import { tokenSharePayload } from "@/lib/share-links";
 import { shellTokenPagePaddingXClass } from "@/components/layout/layout-shell";
 import { useLiveChannel, resolveLivePollDelay } from "@/hooks/useLiveChannel";
 import { useRafMessageQueue } from "@/hooks/useRafMessageQueue";
@@ -138,6 +143,19 @@ function ExternalLinkIcon() {
     <svg viewBox="0 0 24 24" aria-hidden className="h-[14px] w-[14px] fill-none stroke-current">
       <path
         d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3"
+        strokeWidth="1.75"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function ShareIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden className="h-[16px] w-[16px] fill-none stroke-current">
+      <path
+        d="M8.59 13.51l6.83 3.98M8.59 10.49l6.83-3.98M15 6.3a2.4 2.4 0 100-4.8 2.4 2.4 0 000 4.8zM5 12a2.4 2.4 0 100-4.8 2.4 2.4 0 000 4.8zM15 17.7a2.4 2.4 0 100-4.8 2.4 2.4 0 000 4.8z"
         strokeWidth="1.75"
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -279,6 +297,7 @@ export function TokenDetailLive({
   const [profileAddress, setProfileAddress] = useState<string | null>(null);
   const [tradePrefill, setTradePrefill] = useState<TradePrefillConfig | null>(null);
   const [tradeSheetOpen, setTradeSheetOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   const tradePrefillCapturedRef = useRef(false);
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -724,6 +743,13 @@ export function TokenDetailLive({
   const volume24hUsd = bnbToUsd(volume24hBnb, bnbUsd);
   const changeTone = change24h?.changePct ?? null;
   const priceToneClass = changeToneClass(changeTone);
+  const creatorLabel = shortAddress(liveToken.creatorAddress);
+  const showSocialLinks = hasSocialLinks(liveToken.socialLinks);
+
+  const sharePayload = useMemo(
+    () => tokenSharePayload(liveToken),
+    [liveToken]
+  );
 
   async function onCopyAddress() {
     const ok = await copyToClipboard(liveToken.address);
@@ -770,60 +796,94 @@ export function TokenDetailLive({
           </span>
         </div>
 
-        <div className="token-detail-toolbar__stats">
-          <div className="token-detail-toolbar__stat">
-            <span className="token-detail-toolbar__stat-label">Price</span>
-            <span className={`token-detail-toolbar__stat-value financial-value ${priceToneClass}`}>
-              {formatToolbarPriceUsd(priceUsd)}
-            </span>
-          </div>
-
-          <div className="token-detail-toolbar__stat">
-            <span className="token-detail-toolbar__stat-label">24h Change</span>
-            <span className={`token-detail-toolbar__stat-value financial-value ${changeToneClass(changeTone)}`}>
-              {formatToolbarChange24h(change24h)}
-            </span>
-          </div>
-
-          <div className="token-detail-toolbar__stat">
-            <span className="token-detail-toolbar__stat-label">24h Volume</span>
-            <span className="token-detail-toolbar__stat-value financial-value">
-              {formatToolbarUsdAmount(volume24hUsd)}
-            </span>
-          </div>
-
-          <div className="token-detail-toolbar__stat">
-            <span className="token-detail-toolbar__stat-label">Market Cap</span>
-            <span className="token-detail-toolbar__stat-value financial-value">
-              {formatToolbarUsdAmount(fdvUsd)}
-            </span>
-          </div>
-
-          <div className="token-detail-toolbar__stat">
-            <span className="token-detail-toolbar__stat-label">Contract</span>
-            <div className="token-detail-toolbar__contract">
-              <span className="token-detail-toolbar__stat-value financial-value">
-                {shortAddress(liveToken.address, true)}
+        <div className="token-detail-toolbar__scroll">
+          <div className="token-detail-toolbar__stats">
+            <div className="token-detail-toolbar__stat">
+              <span className="token-detail-toolbar__stat-label">Price</span>
+              <span className={`token-detail-toolbar__stat-value financial-value ${priceToneClass}`}>
+                {formatToolbarPriceUsd(priceUsd)}
               </span>
-              <a
-                href={explorerAddressUrl(liveToken.address)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="token-detail-toolbar__contract-btn"
-                aria-label="View contract on explorer"
-              >
-                <ExternalLinkIcon />
-              </a>
+            </div>
+
+            <div className="token-detail-toolbar__stat">
+              <span className="token-detail-toolbar__stat-label">24h Change</span>
+              <span className={`token-detail-toolbar__stat-value financial-value ${changeToneClass(changeTone)}`}>
+                {formatToolbarChange24h(change24h)}
+              </span>
+            </div>
+
+            <div className="token-detail-toolbar__stat">
+              <span className="token-detail-toolbar__stat-label">24h Volume</span>
+              <span className="token-detail-toolbar__stat-value financial-value">
+                {formatToolbarUsdAmount(volume24hUsd)}
+              </span>
+            </div>
+
+            <div className="token-detail-toolbar__stat">
+              <span className="token-detail-toolbar__stat-label">Market Cap</span>
+              <span className="token-detail-toolbar__stat-value financial-value">
+                {formatToolbarUsdAmount(fdvUsd)}
+              </span>
+            </div>
+
+            <div className="token-detail-toolbar__stat">
+              <span className="token-detail-toolbar__stat-label">Contract</span>
+              <div className="token-detail-toolbar__contract">
+                <span className="token-detail-toolbar__stat-value financial-value">
+                  {shortAddress(liveToken.address, true)}
+                </span>
+                <a
+                  href={explorerAddressUrl(liveToken.address)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="token-detail-toolbar__contract-btn"
+                  aria-label="View contract on explorer"
+                >
+                  <ExternalLinkIcon />
+                </a>
+                <button
+                  type="button"
+                  onClick={() => void onCopyAddress()}
+                  className="token-detail-toolbar__contract-btn"
+                  aria-label={copiedAddress ? "Address copied" : "Copy contract address"}
+                >
+                  {copiedAddress ? <CheckIcon /> : <CopyIcon />}
+                </button>
+              </div>
+            </div>
+
+            <div className="token-detail-toolbar__stat">
+              <span className="token-detail-toolbar__stat-label">Creator</span>
               <button
                 type="button"
-                onClick={() => void onCopyAddress()}
-                className="token-detail-toolbar__contract-btn"
-                aria-label={copiedAddress ? "Address copied" : "Copy contract address"}
+                onClick={() => setProfileAddress(liveToken.creatorAddress)}
+                className="token-detail-toolbar__creator"
+                aria-label={`View creator profile ${creatorLabel}`}
               >
-                {copiedAddress ? <CheckIcon /> : <CopyIcon />}
+                <UserAvatarForAddress address={liveToken.creatorAddress} size={16} className="shrink-0" />
+                <span className="financial-value">{creatorLabel}</span>
               </button>
             </div>
+
+            {showSocialLinks ? (
+              <div className="token-detail-toolbar__stat">
+                <span className="token-detail-toolbar__stat-label">Links</span>
+                <TokenSocialLinksBar links={liveToken.socialLinks} variant="toolbar" />
+              </div>
+            ) : null}
           </div>
+        </div>
+
+        <div className="token-detail-toolbar__actions">
+          <button
+            type="button"
+            onClick={() => setShareOpen(true)}
+            className="token-detail-toolbar__action-btn"
+            aria-label="Share token"
+            title="Share"
+          >
+            <ShareIcon />
+          </button>
         </div>
       </div>
     </div>
@@ -955,6 +1015,14 @@ export function TokenDetailLive({
         open={profileAddress != null}
         onClose={() => setProfileAddress(null)}
         creatorAddress={profileAddress ?? ""}
+      />
+
+      <ShareSheetModal
+        open={shareOpen}
+        onClose={() => setShareOpen(false)}
+        payload={sharePayload}
+        title="Share token"
+        description={`Spread the word about $${liveToken.symbol}.`}
       />
     </div>
   );

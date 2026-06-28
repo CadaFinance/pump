@@ -3,7 +3,7 @@ import { hasSocialLinks, type TokenSocialLinks } from "@/lib/token-social";
 type TokenSocialLinksBarProps = {
   links: TokenSocialLinks;
   inline?: boolean;
-  variant?: "default" | "mobile";
+  variant?: "default" | "mobile" | "toolbar";
 };
 
 const LINK_ITEMS = [
@@ -72,6 +72,26 @@ export function TokenSocialLinksBar({
   if (!hasSocialLinks(links)) return null;
 
   const activeLinks = LINK_ITEMS.filter(({ key }) => links[key]);
+
+  if (variant === "toolbar") {
+    return (
+      <div className="token-detail-toolbar__social">
+        {activeLinks.map(({ key, label }) => (
+          <a
+            key={key}
+            href={links[key]}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="token-detail-toolbar__social-btn"
+            aria-label={label}
+            title={label}
+          >
+            <SocialIcon type={key} />
+          </a>
+        ))}
+      </div>
+    );
+  }
 
   if (variant === "mobile") {
     return (

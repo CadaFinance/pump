@@ -13,14 +13,17 @@ export function TokenDetailBodySkeleton() {
           <Skeleton variant="circle" className="h-7 w-7 shrink-0" />
           <Skeleton className="h-4 w-20" />
         </div>
-        <div className="token-detail-toolbar__stats">
-          {Array.from({ length: 5 }).map((_, index) => (
-            <div key={index} className="token-detail-toolbar__stat">
-              <Skeleton variant="line" className="h-3 w-14" />
-              <Skeleton className="mt-1 h-4 w-24" />
-            </div>
-          ))}
+        <div className="token-detail-toolbar__scroll">
+          <div className="token-detail-toolbar__stats">
+            {Array.from({ length: 7 }).map((_, index) => (
+              <div key={index} className="token-detail-toolbar__stat">
+                <Skeleton variant="line" className="h-3 w-14" />
+                <Skeleton className="mt-1 h-4 w-24" />
+              </div>
+            ))}
+          </div>
         </div>
+        <Skeleton className="h-8 w-8 shrink-0 rounded-md" />
       </div>
     </div>
   );
