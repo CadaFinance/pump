@@ -38,78 +38,78 @@ html[data-theme="light"] {
   --radius-xl: 12px;
   --radius-full: 9999px;
 
-  /* Institutional Light — JPM/Coinbase Pro: cool pearl canvas, teal trust accent (WCAG AA) */
-  --pump-bg: 244 246 248;
+  /* Boardroom Light — Coinbase institutional: soft gray canvas, Coinbase Blue accent */
+  --pump-bg: 247 247 247;
   --pump-surface: 255 255 255;
   --pump-card: 255 255 255;
-  --pump-card-soft: 237 240 244;
-  --pump-border: 210 216 224;
-  --pump-accent: 26 122 138;
-  --pump-accent-strong: 18 102 118;
-  --pump-accent-foreground: 247 252 251;
-  --pump-text: 26 35 48;
-  --pump-muted: 92 107 122;
-  --pump-success: 13 122 87;
-  --pump-danger: 198 40 40;
-  --pump-warning: 168 112 24;
-  --pump-shadow: 26 35 48 / 0.08;
+  --pump-card-soft: 238 240 243;
+  --pump-border: 218 222 228;
+  --pump-accent: 0 82 255;
+  --pump-accent-strong: 0 68 214;
+  --pump-accent-foreground: 255 255 255;
+  --pump-text: 10 11 13;
+  --pump-muted: 106 112 122;
+  --pump-success: 14 152 83;
+  --pump-danger: 207 46 46;
+  --pump-warning: 180 120 24;
+  --pump-shadow: 10 11 13 / 0.07;
   color-scheme: light;
 }
 
 html[data-theme="dark"] {
-  /* Terminal Graphite — Binance surface ladder (#0B0E11 → #1E2329), steel accent (not crypto yellow) */
-  --pump-bg: 11 14 17;
-  --pump-surface: 18 22 28;
+  /* Terminal Graphite — Binance panel ladder with lifted canvas (#14171C gutter, not #0B0E11 pit) */
+  --pump-bg: 20 23 28;
+  --pump-surface: 24 28 34;
   --pump-card: 30 35 41;
   --pump-card-soft: 43 48 53;
   --pump-border: 71 77 84;
-  --pump-accent: 91 141 201;
-  --pump-accent-strong: 118 162 216;
-  --pump-accent-foreground: 11 14 17;
+  --pump-accent: 59 130 246;
+  --pump-accent-strong: 96 155 248;
+  --pump-accent-foreground: 255 255 255;
   --pump-text: 234 236 239;
-  --pump-muted: 132 142 156;
-  --pump-success: 46 168 122;
-  --pump-danger: 237 87 99;
+  --pump-muted: 112 122 138;
+  --pump-success: 14 203 129;
+  --pump-danger: 246 70 93;
   --pump-warning: 212 168 72;
-  --pump-shadow: 0 0 0 / 0.5;
+  --pump-shadow: 0 0 0 / 0.42;
   color-scheme: dark;
 }
 
 html[data-theme="navy"] {
-  /* Institutional Midnight — KlindrOS/Bloomberg floor: deep blue canvas, trust blue accent */
-  --pump-bg: 10 15 26;
-  --pump-surface: 14 22 38;
-  --pump-card: 20 30 50;
-  --pump-card-soft: 28 40 64;
-  --pump-border: 48 64 96;
-  --pump-accent: 55 118 200;
-  --pump-accent-strong: 78 140 220;
-  --pump-accent-foreground: 244 248 252;
-  --pump-text: 232 236 244;
-  --pump-muted: 118 130 154;
-  --pump-success: 52 168 122;
-  --pump-danger: 232 88 88;
-  --pump-warning: 204 160 64;
-  --pump-shadow: 4 8 20 / 0.5;
+  /* Midnight Banking — award fintech dashboard: cohesive navy steps (#141C4E → #1D2552), no black gutters */
+  --pump-bg: 18 24 58;
+  --pump-surface: 26 34 82;
+  --pump-card: 35 44 98;
+  --pump-card-soft: 44 54 114;
+  --pump-border: 72 88 138;
+  --pump-accent: 45 125 210;
+  --pump-accent-strong: 72 148 228;
+  --pump-accent-foreground: 244 248 255;
+  --pump-text: 240 242 248;
+  --pump-muted: 165 172 198;
+  --pump-success: 127 224 137;
+  --pump-danger: 249 125 125;
+  --pump-warning: 212 168 72;
+  --pump-shadow: 8 12 32 / 0.45;
   color-scheme: dark;
 }
 
 html[data-theme="slate"] {
-  /* Carbon Slate — neutral charcoal terminal (Morgan Stanley ink discipline, no warm cast) */
-  --pump-bg: 13 15 18;
-  --pump-surface: 20 22 28;
-  --pump-card: 28 31 38;
-  --pump-card-soft: 38 42 50;
-  --pump-border: 56 60 70;
-  --pump-accent: 74 128 184;
-  --pump-accent-strong: 98 152 204;
-  --pump-accent-foreground: 13 15 18;
-  --pump-text: 236 238 242;
-  --pump-muted: 140 146 158;
-  --pump-success: 62 175 118;
-  --pump-danger: 220 86 92;
-  --pump-warning: 200 158 68;
-  --pump-shadow: 0 0 0 / 0.48;
+  /* Executive Carbon — GitHub dark + Material M3: neutral gray ladder, link-blue accent */
+  --pump-bg: 22 27 34;
+  --pump-surface: 28 33 40;
+  --pump-card: 33 38 45;
+  --pump-card-soft: 42 47 54;
+  --pump-border: 48 54 61;
+  --pump-accent: 88 166 255;
+  --pump-accent-strong: 121 184 255;
+  --pump-accent-foreground: 13 17 23;
+  --pump-text: 230 237 243;
+  --pump-muted: 139 148 158;
+  --pump-success: 63 185 80;
+  --pump-danger: 248 81 73;
+  --pump-warning: 210 168 68;
+  --pump-shadow: 0 0 0 / 0.4;
   color-scheme: dark;
 }
 

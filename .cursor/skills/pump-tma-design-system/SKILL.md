@@ -39,18 +39,19 @@ Defined in `globals.css` as RGB triplets for `rgb(var(--pump-*))`.
 
 | Token | Role | Theme guidance |
 |-------|------|----------------|
-| `--pump-bg` | App canvas | Light: cool pearl `#F4F6F8`. Dark: Binance ladder `#0B0E11` or deep blue `#0A0F1A` |
-| `--pump-surface` | Header, bottom bar | One step lighter than bg |
-| `--pump-card` | Panels, modals | Elevated surface (`#1E2329` graphite / `#141E32` midnight) |
-| `--pump-card-soft` | Hover, inset areas | Subtle fill |
-| `--pump-border` | Dividers | Low-contrast cool gray; avoid warm browns on terminals |
-| `--pump-accent` | Brand, primary CTA | Teal (light) or steel/trust blue (dark) — never crypto yellow |
-| `--pump-accent-strong` | Hover accent | +brightness |
-| `--pump-text` | Primary copy | Near-white on dark, ink `#1A2330` on light |
-| `--pump-muted` | Labels, secondary | Cool gray (`#848E9C` range on graphite) |
-| `--pump-success` / `--pump-danger` | P&L, buy/sell only | Muted institutional green/red — accent is not P&L |
+| `--pump-bg` | App canvas / panel gutters | **Not** marketing near-black (`#0B0E11`). Use lifted canvas ~`#14171C`–`#161B22` so gutters match panels |
+| `--pump-surface` | Header, bottom bar | One luminance step above bg |
+| `--pump-card` | Panels, modals | Binance `#1E2329` or GitHub `#21262D` — ~8–12% lightness above bg |
+| `--pump-card-soft` | Hover, inset, chart bg | Next step up (`#2B3139` graphite / `#2A2F36` carbon) |
+| `--pump-border` | Dividers | Prefer surface steps over heavy borders (Midnight Banking rule) |
+| `--pump-accent` | Brand, primary CTA | Coinbase Blue `#0052FF` (light), info blue (dark) — never trading yellow |
+| `--pump-text` | Primary copy | Binance `#EAECEF` on dark; Coinbase ink `#0A0B0D` on light |
+| `--pump-muted` | Labels, secondary | `#707A8A` / `#8B949E` cool gray |
+| `--pump-success` / `--pump-danger` | P&L, buy/sell only | Binance `#0ECB81` / `#F6465D` or GitHub semantic greens/reds |
 
-Four corporate themes: `light` (Institutional Light), `dark` (Terminal Graphite), `navy` (Institutional Midnight), `slate` (Carbon Slate). Default: `navy`.
+Four research-backed themes: `light` (Boardroom Light / Coinbase), `dark` (Terminal Graphite / Binance panels), `navy` (Midnight Banking / designmd.ai), `slate` (Executive Carbon / GitHub dark + Material M3). Default: `dark`.
+
+**Luminance ladder rule:** bg → surface → card → card-soft always step lighter. Target ~10 RGB points per tier on dark themes to avoid black-hole gutters on token detail layout.
 
 ## Typography
 

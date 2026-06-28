@@ -4,21 +4,21 @@ export type ThemeId = (typeof THEME_IDS)[number];
 
 export const THEME_STORAGE_KEY = "pump-theme";
 
-/** Default: Institutional Midnight — best match for token detail terminal. */
-export const DEFAULT_THEME_ID: ThemeId = "navy";
+/** Default: Terminal Graphite — Binance panel ladder, lifted canvas for token terminal. */
+export const DEFAULT_THEME_ID: ThemeId = "dark";
 
 export const THEME_LABELS: Record<ThemeId, string> = {
-  light: "Institutional Light",
+  light: "Boardroom Light",
   dark: "Terminal Graphite",
-  navy: "Institutional Midnight",
-  slate: "Carbon Slate",
+  navy: "Midnight Banking",
+  slate: "Executive Carbon",
 };
 
 export const THEME_SWATCHES: Record<ThemeId, { bg: string; accent: string }> = {
-  light: { bg: "#f4f6f8", accent: "#1a7a8a" },
-  dark: { bg: "#0b0e11", accent: "#5b8dc9" },
-  navy: { bg: "#0a0f1a", accent: "#3776c8" },
-  slate: { bg: "#0d0f12", accent: "#4a80b8" },
+  light: { bg: "#f7f7f7", accent: "#0052ff" },
+  dark: { bg: "#14171c", accent: "#3b82f6" },
+  navy: { bg: "#12183a", accent: "#2d7dd2" },
+  slate: { bg: "#161b22", accent: "#58a6ff" },
 };
 
 export function isValidTheme(value: string | null | undefined): value is ThemeId {
@@ -36,12 +36,12 @@ export function getColorScheme(theme: ThemeId): "light" | "dark" {
 export function getRainbowAccent(theme: ThemeId): { accentColor: string; accentColorForeground: string } {
   switch (theme) {
     case "navy":
-      return { accentColor: "#3776c8", accentColorForeground: "#f4f8fc" };
+      return { accentColor: "#2d7dd2", accentColorForeground: "#f4f8ff" };
     case "slate":
-      return { accentColor: "#4a80b8", accentColorForeground: "#f4f6fa" };
+      return { accentColor: "#58a6ff", accentColorForeground: "#0d1117" };
     case "light":
-      return { accentColor: "#1a7a8a", accentColorForeground: "#f7fcfb" };
+      return { accentColor: "#0052ff", accentColorForeground: "#ffffff" };
     default:
-      return { accentColor: "#5b8dc9", accentColorForeground: "#0b0e11" };
+      return { accentColor: "#3b82f6", accentColorForeground: "#ffffff" };
   }
 }
