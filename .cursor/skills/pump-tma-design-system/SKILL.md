@@ -37,20 +37,20 @@ Authoritative visual and layout spec for Pump. Supersedes spreadsheet/Excel meta
 
 Defined in `globals.css` as RGB triplets for `rgb(var(--pump-*))`.
 
-| Token | Role | Dark theme guidance |
-|-------|------|---------------------|
-| `--pump-bg` | App canvas | Deep neutral `#06080c` range |
+| Token | Role | Theme guidance |
+|-------|------|----------------|
+| `--pump-bg` | App canvas | Light: cool pearl `#F4F6F8`. Dark: Binance ladder `#0B0E11` or deep blue `#0A0F1A` |
 | `--pump-surface` | Header, bottom bar | One step lighter than bg |
-| `--pump-card` | Panels, modals | Elevated surface |
+| `--pump-card` | Panels, modals | Elevated surface (`#1E2329` graphite / `#141E32` midnight) |
 | `--pump-card-soft` | Hover, inset areas | Subtle fill |
-| `--pump-border` | Dividers | 20–35% opacity usage |
-| `--pump-accent` | Brand, primary CTA | Clear blue-violet (not spreadsheet blue) |
+| `--pump-border` | Dividers | Low-contrast cool gray; avoid warm browns on terminals |
+| `--pump-accent` | Brand, primary CTA | Teal (light) or steel/trust blue (dark) — never crypto yellow |
 | `--pump-accent-strong` | Hover accent | +brightness |
-| `--pump-text` | Primary copy | Near-white, not pure #fff |
-| `--pump-muted` | Labels, secondary | Cool gray |
-| `--pump-success` / `--pump-danger` | P&L, buy/sell | Standard green/red |
+| `--pump-text` | Primary copy | Near-white on dark, ink `#1A2330` on light |
+| `--pump-muted` | Labels, secondary | Cool gray (`#848E9C` range on graphite) |
+| `--pump-success` / `--pump-danger` | P&L, buy/sell only | Muted institutional green/red — accent is not P&L |
 
-Four themes remain: `light`, `dark`, `navy`, `slate`. Default: `dark`.
+Four corporate themes: `light` (Institutional Light), `dark` (Terminal Graphite), `navy` (Institutional Midnight), `slate` (Carbon Slate). Default: `navy`.
 
 ## Typography
 

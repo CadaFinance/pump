@@ -36,7 +36,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html
       lang="en"
-      data-theme="slate"
+      data-theme="navy"
       suppressHydrationWarning
       className={`${inter.variable} ${ibmPlexMono.variable}`}
     >
@@ -47,9 +47,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               try {
                 var storedTheme = localStorage.getItem("pump-theme");
                 var valid = storedTheme === "light" || storedTheme === "dark" || storedTheme === "navy" || storedTheme === "slate";
-                var theme = valid ? storedTheme : "slate";
+                var theme = valid ? storedTheme : "navy";
                 document.documentElement.dataset.theme = theme;
-                document.documentElement.style.colorScheme = theme === "dark" || theme === "navy" ? "dark" : "light";
+                document.documentElement.style.colorScheme = theme === "dark" || theme === "navy" || theme === "slate" ? "dark" : "light";
               } catch (error) {}
             `,
           }}

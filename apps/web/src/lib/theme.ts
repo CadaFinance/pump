@@ -4,20 +4,21 @@ export type ThemeId = (typeof THEME_IDS)[number];
 
 export const THEME_STORAGE_KEY = "pump-theme";
 
-export const DEFAULT_THEME_ID: ThemeId = "slate";
+/** Default: Institutional Midnight — best match for token detail terminal. */
+export const DEFAULT_THEME_ID: ThemeId = "navy";
 
 export const THEME_LABELS: Record<ThemeId, string> = {
-  light: "Classic Light",
-  dark: "Classic Dark",
-  navy: "Corporate Navy",
-  slate: "Corporate Slate",
+  light: "Institutional Light",
+  dark: "Terminal Graphite",
+  navy: "Institutional Midnight",
+  slate: "Carbon Slate",
 };
 
 export const THEME_SWATCHES: Record<ThemeId, { bg: string; accent: string }> = {
-  light: { bg: "#f7f8f6", accent: "#b84e38" },
-  dark: { bg: "#121210", accent: "#cc9a4c" },
-  navy: { bg: "#101c24", accent: "#38928c" },
-  slate: { bg: "#eaefed", accent: "#1a767a" },
+  light: { bg: "#f4f6f8", accent: "#1a7a8a" },
+  dark: { bg: "#0b0e11", accent: "#5b8dc9" },
+  navy: { bg: "#0a0f1a", accent: "#3776c8" },
+  slate: { bg: "#0d0f12", accent: "#4a80b8" },
 };
 
 export function isValidTheme(value: string | null | undefined): value is ThemeId {
@@ -25,7 +26,7 @@ export function isValidTheme(value: string | null | undefined): value is ThemeId
 }
 
 export function isDarkTheme(theme: ThemeId): boolean {
-  return theme === "dark" || theme === "navy";
+  return theme === "dark" || theme === "navy" || theme === "slate";
 }
 
 export function getColorScheme(theme: ThemeId): "light" | "dark" {
@@ -35,12 +36,12 @@ export function getColorScheme(theme: ThemeId): "light" | "dark" {
 export function getRainbowAccent(theme: ThemeId): { accentColor: string; accentColorForeground: string } {
   switch (theme) {
     case "navy":
-      return { accentColor: "#38928c", accentColorForeground: "#f4fbf8" };
+      return { accentColor: "#3776c8", accentColorForeground: "#f4f8fc" };
     case "slate":
-      return { accentColor: "#1a767a", accentColorForeground: "#f7fcfb" };
+      return { accentColor: "#4a80b8", accentColorForeground: "#f4f6fa" };
     case "light":
-      return { accentColor: "#b84e38", accentColorForeground: "#fffbf8" };
+      return { accentColor: "#1a7a8a", accentColorForeground: "#f7fcfb" };
     default:
-      return { accentColor: "#cc9a4c", accentColorForeground: "#121210" };
+      return { accentColor: "#5b8dc9", accentColorForeground: "#0b0e11" };
   }
 }
