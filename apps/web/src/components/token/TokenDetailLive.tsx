@@ -109,7 +109,7 @@ function changeToneClass(value: number | null | undefined): string {
 
 function StarIcon({ filled }: { filled: boolean }) {
   return (
-    <svg viewBox="0 0 24 24" aria-hidden className="h-[18px] w-[18px] fill-current">
+    <svg viewBox="0 0 24 24" aria-hidden className="h-5 w-5 fill-current">
       <path
         d={
           filled
@@ -153,7 +153,7 @@ function ExternalLinkIcon() {
 
 function ShareIcon() {
   return (
-    <svg viewBox="0 0 24 24" aria-hidden className="h-[16px] w-[16px] fill-none stroke-current">
+    <svg viewBox="0 0 24 24" aria-hidden className="h-5 w-5 fill-none stroke-current">
       <path
         d="M8.59 13.51l6.83 3.98M8.59 10.49l6.83-3.98M15 6.3a2.4 2.4 0 100-4.8 2.4 2.4 0 000 4.8zM5 12a2.4 2.4 0 100-4.8 2.4 2.4 0 000 4.8zM15 17.7a2.4 2.4 0 100-4.8 2.4 2.4 0 000 4.8z"
         strokeWidth="1.75"
@@ -770,19 +770,6 @@ export function TokenDetailLive({
         {liveToken.name} ({liveToken.symbol}/USD)
       </h1>
       <div className="token-detail-toolbar__row">
-        <button
-          type="button"
-          onClick={() => toggleFavorite(tokenAddress)}
-          aria-label={favorited ? "Remove from favorites" : "Add to favorites"}
-          className={
-            favorited
-              ? "token-detail-toolbar__fav token-detail-toolbar__fav--active"
-              : "token-detail-toolbar__fav"
-          }
-        >
-          <StarIcon filled={favorited} />
-        </button>
-
         <div className="token-detail-toolbar__pair">
           <TokenAvatar
             address={liveToken.address}
@@ -875,6 +862,19 @@ export function TokenDetailLive({
         </div>
 
         <div className="token-detail-toolbar__actions">
+          <button
+            type="button"
+            onClick={() => toggleFavorite(tokenAddress)}
+            aria-label={favorited ? "Remove from favorites" : "Add to favorites"}
+            title={favorited ? "Remove from favorites" : "Add to favorites"}
+            className={
+              favorited
+                ? "token-detail-toolbar__action-btn token-detail-toolbar__action-btn--fav-active"
+                : "token-detail-toolbar__action-btn"
+            }
+          >
+            <StarIcon filled={favorited} />
+          </button>
           <button
             type="button"
             onClick={() => setShareOpen(true)}

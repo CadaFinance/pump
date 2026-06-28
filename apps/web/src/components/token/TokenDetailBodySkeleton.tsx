@@ -8,7 +8,6 @@ export function TokenDetailBodySkeleton() {
   const toolbarSkeleton = (
     <div className="token-detail-toolbar panel-surface">
       <div className="token-detail-toolbar__row">
-        <Skeleton className="h-8 w-8 shrink-0 rounded-md" />
         <div className="token-detail-toolbar__pair">
           <Skeleton variant="circle" className="h-7 w-7 shrink-0" />
           <Skeleton className="h-4 w-20" />
@@ -23,7 +22,10 @@ export function TokenDetailBodySkeleton() {
             ))}
           </div>
         </div>
-        <Skeleton className="h-8 w-8 shrink-0 rounded-md" />
+        <div className="token-detail-toolbar__actions">
+          <Skeleton className="h-[2.375rem] w-[2.375rem] shrink-0 rounded-md" />
+          <Skeleton className="h-[2.375rem] w-[2.375rem] shrink-0 rounded-md" />
+        </div>
       </div>
     </div>
   );

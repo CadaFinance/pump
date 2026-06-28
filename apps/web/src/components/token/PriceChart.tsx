@@ -118,37 +118,15 @@ function shouldUseLogPriceScale(candles: CandleBar[]): boolean {
   return max / min >= 1.5;
 }
 
-/** Focus viewport on traded candles so genesis pump + recent action stay visible. */
+/** Anchor viewport on the latest candles (live edge). */
 function visibleLogicalRange(
   candles: CandleBar[],
-  volumes: VolumeBar[],
   maxVisible: number
 ): { from: number; to: number } {
-  if (candles.length === 0) return { from: 0, to: 5 };
-
-  let firstActive = 0;
-  let lastActive = candles.length - 1;
-  for (let i = 0; i < volumes.length; i++) {
-    if (volumes[i]!.value > 0) {
-      firstActive = i;
-      break;
-    }
-  }
-  for (let i = volumes.length - 1; i >= 0; i--) {
-    if (volumes[i]!.value > 0) {
-      lastActive = i;
-      break;
-    }
-  }
-
-  const span = Math.max(1, lastActive - firstActive + 1);
-  const padding = Math.max(3, Math.min(24, Math.floor(span * 0.2)));
-  const to = Math.min(candles.length + 5, lastActive + padding);
-  const activityFrom = Math.max(0, firstActive - padding);
-  const from =
-    span + padding * 2 <= maxVisible
-      ? activityFrom
-      : Math.max(0, Math.min(activityFrom, to - maxVisible));
+  const count = candles.length;
+  if (count === 0) return { from: 0, to: 5 };
+  const to = count + 8;
+  const from = Math.max(0, count - maxVisible);
   return { from, to };
 }
 
@@ -539,27 +517,38 @@ export function PriceChart({
   const chartPriceFormatterRef = useRef(chartPriceFormatter);
   chartPriceFormatterRef.current = chartPriceFormatter;
 
-  const fitChartViewport = useCallback(() => {
+  const fitChartViewport = useCallback((): boolean => {
     const chart = chartRef.current;
     const ts = chart?.timeScale();
     const rightScale = chart?.priceScale("right");
-    if (!ts || !rightScale || candlesForChart.length === 0) return;
+    if (!ts || !rightScale || candlesForChart.length === 0) return false;
 
     rightScale.setAutoScale(true);
     const useLog = shouldUseLogPriceScale(candlesForChart);
     rightScale.applyOptions({
       mode: useLog ? PriceScaleMode.Logarithmic : PriceScaleMode.Normal,
     });
-    const { from, to } = visibleLogicalRange(candlesForChart, volumesForChart, DEFAULT_VISIBLE_CANDLES);
+    const { from, to } = visibleLogicalRange(candlesForChart, DEFAULT_VISIBLE_CANDLES);
     ts.setVisibleLogicalRange({ from, to });
-  }, [candlesForChart, volumesForChart]);
+    ts.scrollToRealTime();
+    return true;
+  }, [candlesForChart]);
 
   // Defer viewport fit until lightweight-charts has laid out setData (fixes flat line on first paint).
   const scheduleFitViewport = useCallback(() => {
+    let attempts = 0;
+    const tryFit = () => {
+      if (fitChartViewport()) {
+        shouldFitViewportRef.current = false;
+        return;
+      }
+      if (attempts < 8) {
+        attempts += 1;
+        requestAnimationFrame(tryFit);
+      }
+    };
     requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        fitChartViewport();
-      });
+      requestAnimationFrame(tryFit);
     });
   }, [fitChartViewport]);
 
@@ -583,6 +572,10 @@ export function PriceChart({
     lastTradeBucketCountRef.current = 0;
     shouldFitViewportRef.current = true;
   }, [tokenAddress]);
+
+  useEffect(() => {
+    shouldFitViewportRef.current = true;
+  }, [timeInterval, currency]);
 
   useEffect(() => {
     if (seriesState.candles.length > 0 && renderedCandlesRef.current.length === 0) {
@@ -876,8 +869,9 @@ export function PriceChart({
     const tradeBucketCount = nextVolumes.filter((v) => v.value > 0).length;
 
     if (shouldFitViewportRef.current) {
-      scheduleFitViewport();
-      shouldFitViewportRef.current = false;
+      if (nextCandles.length > 0) {
+        scheduleFitViewport();
+      }
       lastTradeBucketCountRef.current = tradeBucketCount;
       return;
     }
