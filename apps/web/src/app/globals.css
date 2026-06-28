@@ -1150,12 +1150,118 @@ code,
   }
 
   .token-detail-toolbar {
+    overflow-x: auto;
+    padding: 0.625rem 0.75rem;
+    scrollbar-width: none;
+  }
+
+  .token-detail-toolbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .token-detail-toolbar__row {
     display: flex;
-    flex-wrap: wrap;
+    min-width: min-content;
     align-items: center;
-    justify-content: space-between;
-    gap: 0.5rem 0.75rem;
-    padding: 0.5rem 0.75rem;
+    gap: 1rem;
+  }
+
+  .token-detail-toolbar__fav {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    border: none;
+    border-radius: var(--radius-md);
+    background: transparent;
+    color: rgb(var(--pump-muted));
+    cursor: pointer;
+    transition: color 0.15s ease, background 0.15s ease;
+  }
+
+  .token-detail-toolbar__fav:hover {
+    background: rgb(var(--pump-border) / 0.1);
+    color: rgb(var(--pump-text));
+  }
+
+  .token-detail-toolbar__fav--active {
+    color: rgb(var(--pump-accent));
+  }
+
+  .token-detail-toolbar__pair {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 0.5rem;
+    padding-right: 0.25rem;
+  }
+
+  .token-detail-toolbar__stats {
+    display: flex;
+    flex: 1;
+    align-items: flex-start;
+    gap: clamp(1rem, 2.5vw, 1.75rem);
+    min-width: 0;
+  }
+
+  .token-detail-toolbar__stat {
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+    flex-shrink: 0;
+  }
+
+  .token-detail-toolbar__stat-label {
+    font-size: var(--text-caption);
+    line-height: var(--leading-caption);
+    color: rgb(var(--pump-muted));
+    white-space: nowrap;
+    border-bottom: 1px dotted rgb(var(--pump-border) / 0.55);
+    width: fit-content;
+    padding-bottom: 0.0625rem;
+  }
+
+  .token-detail-toolbar__stat-value {
+    font-size: var(--text-body-sm);
+    font-weight: 500;
+    line-height: 1.35;
+    color: rgb(var(--pump-text));
+    white-space: nowrap;
+  }
+
+  .token-detail-toolbar__stat-value--up {
+    color: rgb(var(--pump-success));
+  }
+
+  .token-detail-toolbar__stat-value--down {
+    color: rgb(var(--pump-danger));
+  }
+
+  .token-detail-toolbar__contract {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+  }
+
+  .token-detail-toolbar__contract-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.375rem;
+    height: 1.375rem;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: rgb(var(--pump-muted));
+    cursor: pointer;
+    transition: color 0.15s ease, background 0.15s ease;
+  }
+
+  .token-detail-toolbar__contract-btn:hover {
+    background: rgb(var(--pump-border) / 0.12);
+    color: rgb(var(--pump-text));
   }
 
   .token-detail-toolbar__identity {
