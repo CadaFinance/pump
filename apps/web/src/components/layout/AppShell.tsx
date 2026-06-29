@@ -36,8 +36,12 @@ export function AppShellFrame({ children, wide = false, pathname }: AppShellFram
     ? "token-page-main w-full max-w-none"
     : `mx-auto w-full flex-1 ${mainMaxWidth}`;
 
+  const shellClass = onTokenPage
+    ? "flex h-dvh max-h-dvh flex-col overflow-hidden"
+    : "flex min-h-screen flex-col";
+
   return (
-    <div className="flex min-h-screen flex-col">
+    <div className={shellClass}>
       <AppHeaderView pathname={pathname} />
       <main
         className={`flex min-h-0 flex-col ${mainPadding} ${mobileBottomOffset} ${mainLayoutClass}`}

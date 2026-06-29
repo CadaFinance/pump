@@ -26,6 +26,8 @@ export function useLiveBoardAnimations(
     flipContainerRef?: RefObject<HTMLElement | null>;
     /** When this changes (filter/sort/search), rank tracking resets without animating. */
     resetKey?: string;
+    /** When true, never play live-land-in (token sidebar explore list). */
+    skipLanding?: boolean;
   }
 ) {
   const prevKeysRef = useRef<string[] | null>(null);
@@ -57,6 +59,16 @@ export function useLiveBoardAnimations(
     const prevKeys = prevKeysRef.current;
     const prevRank = prevRankRef.current;
 
+    // List hydrated from empty (remount / cache restore) — no row land choreography.
+    if ((prevKeys?.length ?? 0) === 0 && orderedKeys.length > 0) {
+      prevKeysRef.current = orderedKeys;
+      const rankMap = new Map<string, number>();
+      orderedKeys.forEach((key, index) => rankMap.set(key, index));
+      prevRankRef.current = rankMap;
+      for (const key of orderedKeys) globallySeenRef.current.add(key);
+      return;
+    }
+
     if (!initializedRef.current) {
       initializedRef.current = true;
       prevKeysRef.current = orderedKeys;
@@ -72,6 +84,10 @@ export function useLiveBoardAnimations(
     const nextRankShift: Record<string, RankShift> = {};
 
     orderedKeys.forEach((key, index) => {
+      if (options?.skipLanding) {
+        globallySeenRef.current.add(key);
+        return;
+      }
       if (!globallySeenRef.current.has(key)) {
         nextLanding.add(key);
         globallySeenRef.current.add(key);

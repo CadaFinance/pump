@@ -35,20 +35,22 @@ import {
   KOTH_CONTENDER_RANK,
   matchesBoardFilter,
   SERVER_BOARD_FILTERS,
-  type BoardCacheEntry,
   type BoardSortDir,
   type BoardSortKey,
   type FlashTone,
+  arenaExploreBoardCache,
 } from "@/lib/arena-explore-board-core";
 
 export type UseArenaExploreBoardOptions = {
   pageSize?: number;
+  /** Token sidebar — skip pump-style row land/rank animations on hydrate. */
+  animateRows?: boolean;
 };
 
 export function useArenaExploreBoard(options: UseArenaExploreBoardOptions = {}) {
   const pageSize = options.pageSize ?? ARENA_BOARD_PAGE_INITIAL;
+  const animateRows = options.animateRows !== false;
   const queryClient = useQueryClient();
-  const filterCacheRef = useRef(new Map<string, BoardCacheEntry>());
   const [tokens, setTokens] = useState<TokenListItem[] | null>(null);
   const [loadedBoardKey, setLoadedBoardKey] = useState("");
   const [topByMcap, setTopByMcap] = useState<TokenListItem[]>([]);
@@ -308,7 +310,7 @@ export function useArenaExploreBoard(options: UseArenaExploreBoardOptions = {}) 
           }
           return nextTokens;
         });
-        filterCacheRef.current.set(requestBoardKey, {
+        arenaExploreBoardCache.set(requestBoardKey, {
           tokens: nextTokens,
           topByMcap: body.topByMcap ?? [],
           koth: body.koth ?? null,
@@ -426,7 +428,7 @@ export function useArenaExploreBoard(options: UseArenaExploreBoardOptions = {}) 
     setLoadingMore(false);
 
     const key = currentBoardKey;
-    const cached = filterCacheRef.current.get(key);
+    const cached = arenaExploreBoardCache.get(key);
 
     if (cached) {
       setTokens(cached.tokens);
@@ -627,9 +629,14 @@ export function useArenaExploreBoard(options: UseArenaExploreBoardOptions = {}) 
     [exploreBoardTokens]
   );
   const boardResetKey = `${activeFilter}|${sortKey}|${sortDir}|${search.trim().toLowerCase()}`;
-  const { rowClass: boardRowClass } = useLiveBoardAnimations(boardKeys, {
+  const { rowClass: liveBoardRowClass } = useLiveBoardAnimations(boardKeys, {
     resetKey: boardResetKey,
+    skipLanding: !animateRows,
   });
+  const boardRowClass = useCallback(
+    (key: string) => (animateRows ? liveBoardRowClass(key) : ""),
+    [animateRows, liveBoardRowClass]
+  );
 
   const filterCounts = useMemo(() => {
     const server = serverFilterCounts ?? {

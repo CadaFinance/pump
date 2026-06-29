@@ -30,6 +30,7 @@ type TokenMarketSidebarRowProps = {
   rowClass?: string;
   isFavorite: boolean;
   onToggleFavorite: (address: string) => void;
+  onTokenSelect?: () => void;
 };
 
 export function TokenMarketSidebarRow({
@@ -46,6 +47,7 @@ export function TokenMarketSidebarRow({
   rowClass = "",
   isFavorite,
   onToggleFavorite,
+  onTokenSelect,
 }: TokenMarketSidebarRowProps) {
   const addressKey = token.address.toLowerCase();
   const isActive = activeTokenAddress?.toLowerCase() === addressKey;
@@ -57,7 +59,10 @@ export function TokenMarketSidebarRow({
   return (
     <TokenDetailLink
       address={token.address}
-      onClick={() => seedTokenDetailFromListItem(token)}
+      onClick={() => {
+        seedTokenDetailFromListItem(token);
+        onTokenSelect?.();
+      }}
       className={`token-market-sidebar__row ${rowClass} ${
         isActive ? "token-market-sidebar__row--active" : ""
       }`}

@@ -16,6 +16,8 @@ type TokenMarketSidebarProps = {
   activeTokenAddress: string;
   density?: TokenSidebarDensity;
   headWrapRef?: Ref<HTMLDivElement>;
+  className?: string;
+  onTokenSelect?: () => void;
 };
 
 export function TokenMarketSidebar({
@@ -23,6 +25,8 @@ export function TokenMarketSidebar({
   activeTokenAddress,
   density = "full",
   headWrapRef,
+  className = "",
+  onTokenSelect,
 }: TokenMarketSidebarProps) {
   const {
     exploreBoardTokens,
@@ -36,7 +40,6 @@ export function TokenMarketSidebar({
     toggleFavorite,
     error,
     tokens,
-    boardRefreshing,
     showLoadMore,
     loadingMore,
     loadMoreRef,
@@ -45,7 +48,7 @@ export function TokenMarketSidebar({
     favoriteListTokens,
     search,
     setSearch,
-  } = useArenaExploreBoard();
+  } = useArenaExploreBoard({ animateRows: false });
 
   const emptyCopy = emptyExploreFilterCopy(activeFilter, {
     search,
@@ -65,7 +68,7 @@ export function TokenMarketSidebar({
   return (
     <section
       id={id}
-      className="token-market-sidebar panel-surface"
+      className={`token-market-sidebar panel-surface ${className}`.trim()}
       data-density={density}
       aria-label="Explore coins"
     >
@@ -84,12 +87,6 @@ export function TokenMarketSidebar({
           activeFilter={activeFilter}
           onSelect={setArenaFilter}
         />
-
-        {boardRefreshing ? (
-          <p className="token-market-sidebar__refresh text-[10px] text-pump-muted" aria-live="polite">
-            Updating…
-          </p>
-        ) : null}
       </div>
 
       <div className="token-market-sidebar__head-wrap" ref={headWrapRef}>
@@ -130,6 +127,7 @@ export function TokenMarketSidebar({
                 rowClass={boardRowClass(addressKey)}
                 isFavorite={isFavorite(token.address)}
                 onToggleFavorite={toggleFavorite}
+                onTokenSelect={onTokenSelect}
               />
             );
           })

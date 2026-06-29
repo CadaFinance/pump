@@ -42,6 +42,9 @@ export type BoardCacheEntry = {
   serverFilterCounts: ArenaFilterCounts | null;
 };
 
+/** Session cache — survives sidebar remounts & instant filter revisits (Arena board pattern). */
+export const arenaExploreBoardCache = new Map<string, BoardCacheEntry>();
+
 export function boardCacheKey(
   filter: BoardFilter,
   sortKey: string,

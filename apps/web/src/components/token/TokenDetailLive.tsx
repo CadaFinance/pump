@@ -1,6 +1,14 @@
 "use client";
 
-import { PumpIcon, faCheck, faCopy, faExternalLink, faShare } from "@/lib/icons";
+import {
+  PumpIcon,
+  faCheck,
+  faChevronDown,
+  faChevronUp,
+  faCopy,
+  faExternalLink,
+  faShare,
+} from "@/lib/icons";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createPublicClient, http } from "viem";
@@ -259,6 +267,7 @@ export function TokenDetailLive({
   const [tradePrefill, setTradePrefill] = useState<TradePrefillConfig | null>(null);
   const [tradeSheetOpen, setTradeSheetOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
+  const [mobileMarketOpen, setMobileMarketOpen] = useState(false);
   const [, setAgeTick] = useState(0);
   const tradePrefillCapturedRef = useRef(false);
   const searchParams = useSearchParams();
@@ -745,6 +754,25 @@ export function TokenDetailLive({
     return () => clearInterval(timer);
   }, []);
 
+  useEffect(() => {
+    setMobileMarketOpen(false);
+  }, [tokenAddress]);
+
+  useEffect(() => {
+    if (!mobileMarketOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMobileMarketOpen(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [mobileMarketOpen]);
+
+  const closeMobileMarket = useCallback(() => setMobileMarketOpen(false), []);
+  const toggleMobileMarket = useCallback(
+    () => setMobileMarketOpen((open) => !open),
+    []
+  );
+
   const tokenToolbar = (
     <div
       className={`token-detail-toolbar panel-surface ${
@@ -778,9 +806,26 @@ export function TokenDetailLive({
             className="token-detail-toolbar__logo shrink-0 !ring-0"
           />
           <div className="token-detail-toolbar__pair-meta">
-            <span className="token-detail-toolbar__symbol financial-value">
-              {liveToken.symbol}/USD
-            </span>
+            <div className="token-detail-toolbar__symbol-row">
+              <span className="token-detail-toolbar__symbol financial-value">
+                {liveToken.symbol}/USD
+              </span>
+              <button
+                type="button"
+                className="token-detail-toolbar__market-toggle lg:hidden"
+                aria-expanded={mobileMarketOpen}
+                aria-controls="token-mobile-market-drawer"
+                aria-label={
+                  mobileMarketOpen ? "Close explore coins list" : "Open explore coins list"
+                }
+                onClick={toggleMobileMarket}
+              >
+                <PumpIcon
+                  icon={mobileMarketOpen ? faChevronUp : faChevronDown}
+                  className="h-4 w-4"
+                />
+              </button>
+            </div>
             <span className="token-detail-toolbar__age">{formatToolbarAge(liveToken.createdAt)}</span>
           </div>
         </div>
@@ -869,7 +914,9 @@ export function TokenDetailLive({
 
   return (
     <div
-      className={`token-page ${!contentSynced ? "token-page--switching" : ""}`}
+      className={`token-page ${!contentSynced ? "token-page--switching" : ""} ${
+        mobileMarketOpen ? "token-page--market-open" : ""
+      }`}
       aria-busy={isRefreshing || undefined}
     >
       <div className="token-page-grid" style={gridStyle}>
@@ -893,7 +940,24 @@ export function TokenDetailLive({
               style={{ top: toggleTop }}
             />
           ) : null}
-          <div className="shrink-0 lg:hidden">{tokenToolbar}</div>
+          <div className="token-mobile-toolbar-host shrink-0 lg:hidden">
+            {tokenToolbar}
+            {mobileMarketOpen ? (
+              <div
+                id="token-mobile-market-drawer"
+                className="token-mobile-market-drawer"
+                role="region"
+                aria-label="Explore coins"
+              >
+                <TokenMarketSidebar
+                  id="token-mobile-market-sidebar"
+                  activeTokenAddress={tokenAddress}
+                  density="compact"
+                  onTokenSelect={closeMobileMarket}
+                />
+              </div>
+            ) : null}
+          </div>
           <div className="token-page-chart-slot">
             <PriceChart
               fillContainer
