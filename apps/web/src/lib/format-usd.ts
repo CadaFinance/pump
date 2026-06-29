@@ -236,6 +236,57 @@ export function formatTradeFillPriceUsd(
   return formatUsdReadable(priceBnb * rate, { compact: true });
 }
 
+/** Mobile tape — fixed 2-decimal USD trade size. */
+export function formatTradeAmountUsdFixed2(usd: number | null | undefined): string {
+  if (usd == null || !Number.isFinite(usd)) return "—";
+  return `$${Math.abs(usd).toFixed(2)}`;
+}
+
+export function tradeFillPriceUsd(
+  nativeAmount: string,
+  tokenAmount: string,
+  bnbUsd: number | null | undefined,
+  feeBnb?: string | null,
+  netBnb?: string | null,
+  storedPriceBnb?: string | null,
+  nativeUsdRate?: string | null
+): number | null {
+  const priceBnb = tradeFillPriceBnb(
+    nativeAmount,
+    tokenAmount,
+    feeBnb,
+    netBnb,
+    storedPriceBnb
+  );
+  const rate = resolveTradeNativeUsdRate(nativeUsdRate, bnbUsd);
+  if (priceBnb == null || rate == null) return null;
+  const usd = priceBnb * rate;
+  return Number.isFinite(usd) ? usd : null;
+}
+
+/** Mobile tape — pump subscript price ($0.0₅7983) at all scales. */
+export function formatTradeFillPriceSubscript(
+  nativeAmount: string,
+  tokenAmount: string,
+  bnbUsd: number | null | undefined,
+  feeBnb?: string | null,
+  netBnb?: string | null,
+  storedPriceBnb?: string | null,
+  nativeUsdRate?: string | null
+): string {
+  const usd = tradeFillPriceUsd(
+    nativeAmount,
+    tokenAmount,
+    bnbUsd,
+    feeBnb,
+    netBnb,
+    storedPriceBnb,
+    nativeUsdRate
+  );
+  if (usd == null) return "—";
+  return formatPumpSubscriptPrice(usd, "$");
+}
+
 export function formatBnbWithUsd(
   bnbAmount: number,
   bnbUsd: number | null | undefined,

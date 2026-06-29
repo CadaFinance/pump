@@ -53,16 +53,16 @@ Two Coinbase CDS themes: `light`, `dark`. Default resolved theme: system prefere
 
 ## Typography
 
-| Token | Size | Use |
-|-------|------|-----|
-| `--text-display` | clamp 28–32px | Marketing hero only |
-| `--text-h1` | clamp 24–28px | Page titles |
-| `--text-h2` | clamp 20–24px | Section titles |
-| `--text-h3` | clamp 18–20px | Card headings |
-| `--text-body` | 16px | Long copy |
-| `--text-body-sm` | 14px | Default UI body |
-| `--text-caption` | 12px | Meta, timestamps |
-| `--text-label` | 11px | Uppercase labels |
+| Token | Mobile | Desktop (≥1024px) | Use |
+|-------|--------|-------------------|-----|
+| `--text-display` | clamp 28–32px | same | Marketing hero only |
+| `--text-h1` | clamp 24–28px | same | Page titles |
+| `--text-h2` | clamp 20–24px | same | Section titles |
+| `--text-h3` | clamp 18–20px | same | Card headings |
+| `--text-body` | 16px | 16px | Shell body, long copy |
+| `--text-body-sm` | 14px | **15px** | Tables, sidebar rows, default UI |
+| `--text-caption` | 13px | 13px | Meta, timestamps, secondary stats |
+| `--text-label` | 12px | 12px | Uppercase labels, nav captions |
 
 - **UI:** Inter (`--font-inter`)
 - **Numbers:** IBM Plex Mono (`.financial-value`, `.metric-value`) with `tabular-nums`

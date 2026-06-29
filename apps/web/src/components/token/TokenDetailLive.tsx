@@ -19,7 +19,8 @@ import {
   bondingCurveSnapshotFromTuple,
 } from "@/lib/bonding-curve";
 import type { ActorOptimisticChartSpot, CandleWsUpdate } from "@/lib/candles";
-import { resolveLatestSpotPriceBnb, sortTradesChronologically, formatPumpSubscriptPrice } from "@/lib/candles";
+import { PumpSubscriptPrice } from "@/components/ui/PumpSubscriptPrice";
+import { resolveLatestSpotPriceBnb, sortTradesChronologically } from "@/lib/candles";
 import { mergeWsCandleUpdates } from "@/lib/chart-series-state";
 import { logChartWsMerge } from "@/lib/chart-observability";
 import type { InitialChartCandles } from "@/lib/token-server";
@@ -48,7 +49,7 @@ import {
 import { contracts, explorerAddressUrl, pumpChain, shortAddress } from "@/config/chain";
 import { copyToClipboard } from "@/lib/copy-to-clipboard";
 import { TradePanel, type TradeConfirmedPayload, type TradeOptimisticPayload, type TradeSubmittedPayload } from "@/components/token/TradePanel";
-import { TradeSheet } from "@/components/token/TradeSheet";
+import { TokenMobileMainTabs, type TokenMobileMainTab } from "@/components/token/TokenMobileMainTabs";
 import {
   parseTradePrefillFromSearchParams,
   type TradePrefillConfig,
@@ -70,7 +71,6 @@ import { hasSocialLinks } from "@/lib/token-social";
 import { formatAge } from "@/lib/arena-board-format";
 import { tokenSharePayload } from "@/lib/share-links";
 import { tokenDocumentTitle } from "@/lib/token-tab-title";
-import { shellTokenPagePaddingXClass } from "@/components/layout/layout-shell";
 import { useLiveChannel, resolveLivePollDelay } from "@/hooks/useLiveChannel";
 import { useRafMessageQueue } from "@/hooks/useRafMessageQueue";
 import { useBondingCurveMachine } from "@/hooks/useBondingCurveMachine";
@@ -89,14 +89,6 @@ import {
 const CHAIN_LIVE_POLL_MS = 2_000;
 const BURST_POLL_MS = 1_500;
 const BURST_DURATION_MS = 60_000;
-
-function formatToolbarPriceUsd(value: number | null): string {
-  if (value == null || !Number.isFinite(value)) return "—";
-  if (value >= 1) {
-    return value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 });
-  }
-  return formatPumpSubscriptPrice(value, "$");
-}
 
 function formatToolbarUsdAmount(value: number | null): string {
   if (value == null || !Number.isFinite(value)) return "—";
@@ -265,7 +257,7 @@ export function TokenDetailLive({
   const [copiedAddress, setCopiedAddress] = useState(false);
   const [profileAddress, setProfileAddress] = useState<string | null>(null);
   const [tradePrefill, setTradePrefill] = useState<TradePrefillConfig | null>(null);
-  const [tradeSheetOpen, setTradeSheetOpen] = useState(false);
+  const [mobileMainTab, setMobileMainTab] = useState<TokenMobileMainTab>("chart");
   const [shareOpen, setShareOpen] = useState(false);
   const [mobileMarketOpen, setMobileMarketOpen] = useState(false);
   const [, setAgeTick] = useState(0);
@@ -296,14 +288,9 @@ export function TokenDetailLive({
 
     tradePrefillCapturedRef.current = true;
     setTradePrefill(parsed);
-    setTradeSheetOpen(true);
+    setMobileMainTab("chart");
     router.replace(`/token/${tokenAddress}`, { scroll: false });
   }, [searchParams, router, tokenAddress]);
-
-  const openMobileTrade = useCallback((side: "buy" | "sell") => {
-    setTradePrefill({ side });
-    setTradeSheetOpen(true);
-  }, []);
 
   const trades = useMemo(
     () => mergeTrades(dbTrades, optimisticTrades),
@@ -756,6 +743,7 @@ export function TokenDetailLive({
 
   useEffect(() => {
     setMobileMarketOpen(false);
+    setMobileMainTab("chart");
   }, [tokenAddress]);
 
   useEffect(() => {
@@ -836,7 +824,14 @@ export function TokenDetailLive({
               <span className="token-detail-toolbar__stat-label">Last price (24h)</span>
               <span className="token-detail-toolbar__stat-value token-detail-toolbar__price-line financial-value">
                 <span className="token-detail-toolbar__price-amount">
-                  {formatToolbarPriceUsd(priceUsd)}
+                  {priceUsd != null && Number.isFinite(priceUsd) && priceUsd >= 1 ? (
+                    priceUsd.toLocaleString(undefined, {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 4,
+                    })
+                  ) : (
+                    <PumpSubscriptPrice value={priceUsd} />
+                  )}
                 </span>
                 <span className={changeToneClass(changeTone)}>
                   {formatToolbarChangePctOnly(change24h)}
@@ -958,41 +953,106 @@ export function TokenDetailLive({
               </div>
             ) : null}
           </div>
-          <div className="token-page-chart-slot">
-            <PriceChart
-              fillContainer
-              tokenAddress={streamAddress}
-              symbol={liveToken.symbol}
-              status={liveToken.status}
-              initialCandles={initialCandles}
-              actorOptimisticSpot={actorChartSpot}
-              curveSnapshot={tradeCurveSnapshot}
-              liveCandleUpdates={liveCandleUpdates}
-              fallbackTrades={chartFallbackTrades}
-              wsConnected={wsConnected}
-              bnbUsd={bnbUsd}
-              liveOnChainSpotBnb={onChainSpotBnb}
-            />
+
+          <TokenMobileMainTabs active={mobileMainTab} onChange={setMobileMainTab} />
+
+          <div className="token-page-content-slot">
+            <div
+              id="token-mobile-panel-chart"
+              role="tabpanel"
+              aria-labelledby="token-mobile-tab-chart"
+              hidden={mobileMainTab !== "chart"}
+              className={`token-page-chart-slot ${
+                mobileMainTab !== "chart" ? "max-lg:hidden" : ""
+              }`}
+            >
+              <PriceChart
+                fillContainer
+                tokenAddress={streamAddress}
+                symbol={liveToken.symbol}
+                status={liveToken.status}
+                initialCandles={initialCandles}
+                actorOptimisticSpot={actorChartSpot}
+                curveSnapshot={tradeCurveSnapshot}
+                liveCandleUpdates={liveCandleUpdates}
+                fallbackTrades={chartFallbackTrades}
+                wsConnected={wsConnected}
+                bnbUsd={bnbUsd}
+                liveOnChainSpotBnb={onChainSpotBnb}
+              />
+            </div>
+
+            {indexerSyncing ? (
+              <p
+                className={`panel-surface shrink-0 px-3 py-1.5 text-caption text-pump-muted ${
+                  mobileMainTab !== "chart" ? "max-lg:hidden" : ""
+                }`}
+              >
+                Indexer syncing…
+              </p>
+            ) : null}
+
+            {mobileMainTab !== "chart" ? (
+              <div
+                id={
+                  mobileMainTab === "holders"
+                    ? "token-mobile-panel-holders"
+                    : "token-mobile-panel-trades"
+                }
+                role="tabpanel"
+                aria-labelledby={`token-mobile-tab-${mobileMainTab === "holders" ? "holders" : "trades"}`}
+                className="token-page-tape-slot token-page-tape-slot--mobile lg:hidden"
+              >
+                <TradeTape
+                  tokenAddress={streamAddress}
+                  creatorAddress={liveToken.creatorAddress}
+                  symbol={liveToken.symbol}
+                  headTrades={trades}
+                  wsConnected={wsConnected}
+                  holdersRefreshKey={holdersRefreshKey}
+                  initialHolders={initialHolders}
+                  currentPriceBnb={displayPrice}
+                  bnbUsd={bnbUsd}
+                  onAddressClick={setProfileAddress}
+                  hideTabBar
+                  activeTab={mobileMainTab === "holders" ? "holders" : "trades"}
+                  mobileStickyHead
+                />
+              </div>
+            ) : null}
+
+            <div className="token-page-tape-slot hidden lg:flex">
+              <TradeTape
+                tokenAddress={streamAddress}
+                creatorAddress={liveToken.creatorAddress}
+                symbol={liveToken.symbol}
+                headTrades={trades}
+                wsConnected={wsConnected}
+                holdersRefreshKey={holdersRefreshKey}
+                initialHolders={initialHolders}
+                currentPriceBnb={displayPrice}
+                bnbUsd={bnbUsd}
+                onAddressClick={setProfileAddress}
+              />
+            </div>
           </div>
 
-          {indexerSyncing ? (
-            <p className="panel-surface shrink-0 px-3 py-1.5 text-caption text-pump-muted">
-              Indexer syncing…
-            </p>
-          ) : null}
-
-          <div className="token-page-tape-slot">
-            <TradeTape
-              tokenAddress={streamAddress}
-              creatorAddress={liveToken.creatorAddress}
+          <div className="token-mobile-trade-panel relative lg:hidden">
+            {tradeLocked ? <div className="token-page-trade-lock" aria-hidden /> : null}
+            <TradePanel
+              embedded
+              compact
+              tokenAddress={streamAddress as `0x${string}`}
               symbol={liveToken.symbol}
-              headTrades={trades}
-              wsConnected={wsConnected}
-              holdersRefreshKey={holdersRefreshKey}
-              initialHolders={initialHolders}
-              currentPriceBnb={displayPrice}
-              bnbUsd={bnbUsd}
-              onAddressClick={setProfileAddress}
+              status={liveToken.status}
+              reserveBnb={liveToken.reserveBnb}
+              tokenSold={liveToken.tokenSold ?? "0"}
+              prefill={tradePrefill}
+              onTradeOptimistic={handleTradeOptimistic}
+              onTradeOptimisticRollback={handleTradeOptimisticRollback}
+              onTradeSubmitted={handleTradeSubmitted}
+              onTradeConfirmed={handleTradeConfirmed}
+              chainCurveSnapshot={tradeCurveSnapshot}
             />
           </div>
         </div>
@@ -1032,45 +1092,6 @@ export function TokenDetailLive({
           ) : null}
         </aside>
       </div>
-
-      <div className="token-trade-dock lg:hidden" role="toolbar" aria-label="Trade actions">
-        <div className={`token-trade-dock-inner ${shellTokenPagePaddingXClass}`}>
-          <div className="token-trade-dock-actions">
-            <button
-              type="button"
-              className="token-trade-dock-buy"
-              disabled={tradeLocked}
-              onClick={() => openMobileTrade("buy")}
-            >
-              Buy ${liveToken.symbol}
-            </button>
-            <button
-              type="button"
-              className="token-trade-dock-sell"
-              disabled={tradeLocked}
-              onClick={() => openMobileTrade("sell")}
-            >
-              Sell ${liveToken.symbol}
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <TradeSheet
-        open={tradeSheetOpen && !tradeLocked}
-        onClose={() => setTradeSheetOpen(false)}
-        tokenAddress={streamAddress as `0x${string}`}
-        symbol={liveToken.symbol}
-        status={liveToken.status}
-        reserveBnb={liveToken.reserveBnb}
-        tokenSold={liveToken.tokenSold ?? "0"}
-        prefill={tradePrefill}
-        onTradeOptimistic={handleTradeOptimistic}
-        onTradeOptimisticRollback={handleTradeOptimisticRollback}
-        onTradeSubmitted={handleTradeSubmitted}
-        onTradeConfirmed={handleTradeConfirmed}
-        chainCurveSnapshot={tradeCurveSnapshot}
-      />
 
       <CreatorProfileModal
         open={profileAddress != null}

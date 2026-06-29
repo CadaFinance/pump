@@ -1027,30 +1027,62 @@ export function applyActorOptimisticSpotToCandles(
   return { candles: nextCandles, volumes: nextVolumes };
 }
 
-const SUBSCRIPTS = "₀₁₂₃₄₅₆₇₈₉";
+export type PumpSubscriptPriceParts =
+  | { kind: "plain"; text: string }
+  | { kind: "subscript"; prefix: string; zeroCount: number; mantissa: string };
 
-/** Pump.fun-style subscript for tiny prices: $0.0₄42 = $0.000042 */
-export function formatPumpSubscriptPrice(value: number, prefix = "$"): string {
-  if (!Number.isFinite(value) || value <= 0) return `${prefix}0`;
-  if (value >= 1) return `${prefix}${value.toFixed(2)}`;
-  if (value >= 0.01) return `${prefix}${value.toFixed(4)}`;
+/** Pump.fun-style subscript parts: $0.0₅79 = $0.000000079 (max 2 sig digits after sub). */
+export function parsePumpSubscriptPriceParts(
+  value: number,
+  prefix = "$"
+): PumpSubscriptPriceParts {
+  if (!Number.isFinite(value) || value <= 0) return { kind: "plain", text: `${prefix}0` };
+  if (value >= 1) return { kind: "plain", text: `${prefix}${value.toFixed(2)}` };
+  if (value >= 0.01) return { kind: "plain", text: `${prefix}${value.toFixed(4)}` };
 
   const scientific = value.toExponential(12);
   const match = /^(\d)\.(\d+)e-(\d+)$/.exec(scientific);
-  if (!match) return `${prefix}${value.toExponential(2)}`;
+  if (!match) return { kind: "plain", text: `${prefix}${value.toExponential(2)}` };
 
-  const mantissa = (match[1] + match[2]).replace(/0+$/, "").slice(0, 4);
+  const mantissa = (match[1] + match[2]).replace(/0+$/, "").slice(0, 2);
   const exp = Number(match[3]);
   const zeroCount = Math.max(0, exp - 1);
-  const sub =
-    zeroCount <= 9
-      ? SUBSCRIPTS[zeroCount]!
-      : String(zeroCount)
-          .split("")
-          .map((d) => SUBSCRIPTS[Number(d)]!)
-          .join("");
 
-  return `${prefix}0.0${sub}${mantissa}`;
+  return { kind: "subscript", prefix, zeroCount, mantissa };
+}
+
+const UNICODE_SUBSCRIPT_DIGITS = "₀₁₂₃₄₅₆₇₈₉";
+
+function toUnicodeSubscriptDigits(n: number): string {
+  return String(n)
+    .split("")
+    .map((digit) => UNICODE_SUBSCRIPT_DIGITS[Number(digit)] ?? digit)
+    .join("");
+}
+
+/** Canvas / plain-string pump price — $0.0₅79 (Unicode sub, no parentheses). */
+export function formatPumpSubscriptPriceAxis(value: number, prefix = "$"): string {
+  const parts = parsePumpSubscriptPriceParts(value, prefix);
+  if (parts.kind === "plain") return parts.text;
+  return `${parts.prefix}0.0${toUnicodeSubscriptDigits(parts.zeroCount)}${parts.mantissa}`;
+}
+
+/** Full decimal for tooltips and document.title. */
+export function formatPumpSubscriptPriceFull(value: number, prefix = "$"): string {
+  if (!Number.isFinite(value) || value <= 0) return `${prefix}0`;
+  if (value >= 1) return `${prefix}${value.toFixed(2)}`;
+  if (value >= 0.01) return `${prefix}${value.toFixed(4)}`;
+  const decimals =
+    value >= 0.001 ? 6 :
+    value >= 0.0001 ? 7 :
+    value >= 0.00001 ? 8 :
+    value >= 0.000001 ? 9 : 12;
+  return `${prefix}${value.toFixed(decimals).replace(/0+$/, "").replace(/\.$/, "")}`;
+}
+
+/** String form for compact labels — same as axis (Unicode sub). */
+export function formatPumpSubscriptPrice(value: number, prefix = "$"): string {
+  return formatPumpSubscriptPriceAxis(value, prefix);
 }
 
 export function formatChartPrice(value: number, currency: "bnb" | "usd" | "mcap"): string {
@@ -1136,10 +1168,10 @@ export function chartPriceFormatFromBase(
         return `$${usd.toFixed(2)}`;
       }
       if (currency === "usd") {
-        return formatPumpSubscriptPrice(price * usdRate, "$");
+        return formatPumpSubscriptPriceAxis(price * usdRate, "$");
       }
       if (price >= 0.001) return price.toFixed(Math.min(6, precision));
-      return formatPumpSubscriptPrice(price, "") + ` ${NATIVE_SYMBOL}`;
+      return formatPumpSubscriptPriceAxis(price, "") + ` ${NATIVE_SYMBOL}`;
     },
   };
 }

@@ -3,10 +3,22 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { TokenHolderSnapshot, TradeItem } from "@/lib/db/launchpad";
 import { explorerTxUrl, shortAddress } from "@/config/chain";
+import { PumpIcon, faCrown, faExternalLink } from "@/lib/icons";
 import { UserAvatarForAddress } from "@/components/user/UserAvatarForAddress";
 import { PctChange } from "@/components/ui/PctChange";
 import { ACTIVITY_PAGE_SIZE } from "@/lib/activity-page-size";
-import { DEFAULT_TOKEN_TOTAL_SUPPLY, formatUsdReadable, formatTradeFillPriceUsd, tradeNetUsdForDisplay, positionAvgEntryUsd, positionUnrealizedUsd, positionUnrealizedPct, scaleCostBasisUsdForBalance } from "@/lib/format-usd";
+import { PumpSubscriptPrice } from "@/components/ui/PumpSubscriptPrice";
+import {
+  DEFAULT_TOKEN_TOTAL_SUPPLY,
+  formatUsdReadable,
+  formatTradeAmountUsdFixed2,
+  tradeFillPriceUsd,
+  tradeNetUsdForDisplay,
+  positionAvgEntryUsd,
+  positionUnrealizedUsd,
+  positionUnrealizedPct,
+  scaleCostBasisUsdForBalance,
+} from "@/lib/format-usd";
 import {
   resolveVerifiedTokenBalance,
   scaleCostBasisForBalance,
@@ -15,6 +27,8 @@ import { useLiveTradeAnimations } from "@/hooks/useLiveTradeAnimations";
 import { useInfiniteScrollSentinel } from "@/hooks/useInfiniteScrollSentinel";
 
 type ActivityTab = "holders" | "trades";
+
+export type TradeTapeTab = ActivityTab;
 
 type HolderRow = {
   address: string;
@@ -31,13 +45,17 @@ type PagedMeta = {
 
 const activityTableScrollClass = "token-tape-table-wrap";
 
-function formatTradeClockTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString(undefined, {
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
-  });
+function formatTradeClockTime(iso: string, mobile = false): string {
+  return new Date(iso).toLocaleTimeString(
+    undefined,
+    mobile
+      ? { hour: "2-digit", minute: "2-digit", hour12: false }
+      : { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }
+  );
+}
+
+function ultraShortAddress(address: string): string {
+  return `${address.slice(0, 4)}…${address.slice(-2)}`;
 }
 
 function formatTokenAmount(value: number): string {
@@ -54,6 +72,65 @@ function formatSupplyShare(balance: number): string {
   if (!Number.isFinite(pct) || pct <= 0) return "0%";
   if (pct >= 0.01) return `${pct.toFixed(2)}%`;
   return `${pct.toFixed(4)}%`;
+}
+
+function formatTokenAmountMobile(value: number): string {
+  if (!Number.isFinite(value)) return "—";
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
+  if (value >= 10_000) return `${(value / 1_000).toFixed(1)}K`;
+  if (value >= 1_000) return `${(value / 1_000).toFixed(2)}K`;
+  if (value >= 1) return value.toFixed(1);
+  if (value > 0) return value.toFixed(2);
+  return "0";
+}
+
+function formatSupplyShareMobile(balance: number): string {
+  const pct = (balance / DEFAULT_TOKEN_TOTAL_SUPPLY) * 100;
+  if (!Number.isFinite(pct) || pct <= 0) return "0%";
+  if (pct >= 10) return `${pct.toFixed(1)}%`;
+  if (pct >= 0.1) return `${pct.toFixed(2)}%`;
+  return `${pct.toFixed(3)}%`;
+}
+
+type HolderMetrics = {
+  avgEntryUsd: number | null;
+  unrealizedPnlUsd: number | null;
+  unrealizedPnlPct: number | null;
+  pnlTone: string;
+};
+
+function computeHolderMetrics(
+  row: HolderRow,
+  currentPriceBnb: number,
+  bnbUsd: number | null
+): HolderMetrics {
+  const avgEntryUsd = positionAvgEntryUsd(
+    row.netTokens,
+    row.remainingCostBasisUsd,
+    row.remainingCostBasisBnb,
+    bnbUsd
+  );
+  const unrealizedPnlUsd = positionUnrealizedUsd(
+    row.netTokens,
+    currentPriceBnb,
+    row.remainingCostBasisUsd,
+    row.remainingCostBasisBnb,
+    bnbUsd
+  );
+  const unrealizedPnlPct = positionUnrealizedPct(
+    unrealizedPnlUsd,
+    row.remainingCostBasisUsd,
+    row.remainingCostBasisBnb,
+    bnbUsd
+  );
+  const pnlTone =
+    unrealizedPnlUsd == null
+      ? "text-pump-muted"
+      : unrealizedPnlUsd >= 0
+        ? "text-pump-success"
+        : "text-pump-danger";
+
+  return { avgEntryUsd, unrealizedPnlUsd, unrealizedPnlPct, pnlTone };
 }
 
 function mergeTradesByTxHash(...groups: TradeItem[][]): TradeItem[] {
@@ -121,9 +198,21 @@ function mergeHolderRows(existing: HolderRow[], incoming: HolderRow[]): HolderRo
   return [...byAddress.values()].sort((a, b) => b.netTokens - a.netTokens);
 }
 
-function CreatorBadge() {
+function CreatorBadge({ iconOnly = false }: { iconOnly?: boolean }) {
+  if (iconOnly) {
+    return (
+      <span
+        className="token-tape-creator-icon inline-flex shrink-0 items-center justify-center rounded-sm bg-pump-accent/15 text-pump-accent ring-1 ring-inset ring-pump-accent/30"
+        title="Creator"
+        aria-label="Creator"
+      >
+        <PumpIcon icon={faCrown} className="h-3 w-3 text-pump-accent" />
+      </span>
+    );
+  }
+
   return (
-    <span className="shrink-0 rounded-full bg-pump-accent/15 px-1.5 py-px text-[9px] font-semibold uppercase tracking-wide text-pump-accent">
+    <span className="shrink-0 rounded-full bg-pump-accent/15 px-1.5 py-px text-label font-semibold uppercase tracking-wide text-pump-accent ring-1 ring-inset ring-pump-accent/30">
       Creator
     </span>
   );
@@ -133,22 +222,28 @@ function IdentityPill({
   address,
   showCreatorBadge = false,
   onAddressClick,
+  compact = false,
 }: {
   address: string;
   showCreatorBadge?: boolean;
   onAddressClick: (address: string) => void;
+  compact?: boolean;
 }) {
-  const label = shortAddress(address, true);
+  const label = compact ? ultraShortAddress(address) : shortAddress(address, true);
   return (
     <button
       type="button"
       onClick={() => onAddressClick(address)}
-      className="token-tape-identity"
-      aria-label={`View profile ${label}`}
+      className={compact ? "token-tape-identity token-tape-identity--compact" : "token-tape-identity"}
+      aria-label={`View profile ${label}${showCreatorBadge ? ", creator" : ""}`}
     >
-      <UserAvatarForAddress address={address} size={18} className="shrink-0" />
+      <UserAvatarForAddress
+        address={address}
+        size={compact ? 16 : 18}
+        className="shrink-0"
+      />
       <span className="token-tape-identity__label">{label}</span>
-      {showCreatorBadge ? <CreatorBadge /> : null}
+      {showCreatorBadge ? <CreatorBadge iconOnly={compact} /> : null}
     </button>
   );
 }
@@ -178,6 +273,10 @@ export function TradeTape({
   currentPriceBnb,
   bnbUsd,
   onAddressClick,
+  activeTab: activeTabProp,
+  onActiveTabChange,
+  hideTabBar = false,
+  mobileStickyHead = false,
 }: {
   tokenAddress: string;
   creatorAddress: string;
@@ -190,9 +289,24 @@ export function TradeTape({
   currentPriceBnb: number;
   bnbUsd: number | null;
   onAddressClick: (address: string) => void;
+  /** Parent-controlled tab (mobile main tabs). */
+  activeTab?: TradeTapeTab;
+  onActiveTabChange?: (tab: TradeTapeTab) => void;
+  hideTabBar?: boolean;
+  /** Mobile main tabs — sticky thead, body scrolls in flex slot. */
+  mobileStickyHead?: boolean;
 }) {
   const creatorKey = creatorAddress.toLowerCase();
-  const [tab, setTab] = useState<ActivityTab>("trades");
+  const [internalTab, setInternalTab] = useState<ActivityTab>("trades");
+  const tab = activeTabProp ?? internalTab;
+
+  const setTab = useCallback(
+    (next: ActivityTab) => {
+      if (activeTabProp == null) setInternalTab(next);
+      onActiveTabChange?.(next);
+    },
+    [activeTabProp, onActiveTabChange]
+  );
 
   const [olderTrades, setOlderTrades] = useState<TradeItem[]>([]);
   const [tradeOffset, setTradeOffset] = useState(ACTIVITY_PAGE_SIZE);
@@ -334,35 +448,37 @@ export function TradeTape({
   }, [fetchHoldersPage, holdersRefreshKey]);
 
   return (
-    <section className="panel-surface token-trade-tape overflow-hidden">
-      <div className="trade-panel-mode-tabs shrink-0" role="tablist" aria-label="Trades and holders">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={tab === "trades"}
-          onClick={() => setTab("trades")}
-          className={
-            tab === "trades"
-              ? "trade-panel-mode-tab trade-panel-mode-tab--active"
-              : "trade-panel-mode-tab"
-          }
-        >
-          Trades
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={tab === "holders"}
-          onClick={() => setTab("holders")}
-          className={
-            tab === "holders"
-              ? "trade-panel-mode-tab trade-panel-mode-tab--active"
-              : "trade-panel-mode-tab"
-          }
-        >
-          Holders
-        </button>
-      </div>
+    <section className="panel-surface token-trade-tape token-trade-tape--sticky-head overflow-hidden">
+      {hideTabBar ? null : (
+        <div className="trade-panel-mode-tabs shrink-0" role="tablist" aria-label="Trades and holders">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === "trades"}
+            onClick={() => setTab("trades")}
+            className={
+              tab === "trades"
+                ? "trade-panel-mode-tab trade-panel-mode-tab--active"
+                : "trade-panel-mode-tab"
+            }
+          >
+            Trades
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === "holders"}
+            onClick={() => setTab("holders")}
+            className={
+              tab === "holders"
+                ? "trade-panel-mode-tab trade-panel-mode-tab--active"
+                : "trade-panel-mode-tab"
+            }
+          >
+            Holders
+          </button>
+        </div>
+      )}
 
       <div className="token-trade-tape__scroll">
         {tab === "holders" ? (
@@ -371,44 +487,84 @@ export function TradeTape({
           ) : holderRows.length === 0 ? (
             <p className="token-tape-empty">No holders yet.</p>
           ) : (
-            <div className={activityTableScrollClass}>
-              <table className="token-tape-table">
+            <div
+              className={
+                mobileStickyHead
+                  ? `${activityTableScrollClass} token-tape-table-wrap--mobile-holders`
+                  : activityTableScrollClass
+              }
+            >
+              <table
+                className={
+                  mobileStickyHead
+                    ? "token-tape-table token-tape-table--mobile-holders"
+                    : "token-tape-table"
+                }
+              >
+                {mobileStickyHead ? (
+                  <colgroup>
+                    <col className="token-tape-table__col-h-account" />
+                    <col className="token-tape-table__col-h-balance" />
+                    <col className="token-tape-table__col-h-supply" />
+                    <col className="token-tape-table__col-h-pnl" />
+                  </colgroup>
+                ) : null}
                 <thead>
                   <tr>
-                    <th>Account</th>
-                    <th className="token-tape-table__col-num">Balance</th>
-                    <th className="token-tape-table__col-num">Supply</th>
-                    <th className="token-tape-table__col-num">Entry</th>
-                    <th className="token-tape-table__col-end">P/L</th>
+                    {mobileStickyHead ? (
+                      <>
+                        <th className="token-tape-table__head-h-account">Account</th>
+                        <th className="token-tape-table__head-h-balance">Balance</th>
+                        <th className="token-tape-table__head-h-supply">Supply</th>
+                        <th className="token-tape-table__head-h-pnl">P/L</th>
+                      </>
+                    ) : (
+                      <>
+                        <th>Account</th>
+                        <th className="token-tape-table__col-num">Balance</th>
+                        <th className="token-tape-table__col-num">Supply</th>
+                        <th className="token-tape-table__col-num">Entry</th>
+                        <th className="token-tape-table__col-end">P/L</th>
+                      </>
+                    )}
                   </tr>
                 </thead>
                 <tbody>
                   {holderRows.map((row) => {
-                    const avgEntryUsd = positionAvgEntryUsd(
-                      row.netTokens,
-                      row.remainingCostBasisUsd,
-                      row.remainingCostBasisBnb,
-                      bnbUsd
-                    );
-                    const unrealizedPnlUsd = positionUnrealizedUsd(
-                      row.netTokens,
-                      currentPriceBnb,
-                      row.remainingCostBasisUsd,
-                      row.remainingCostBasisBnb,
-                      bnbUsd
-                    );
-                    const unrealizedPnlPct = positionUnrealizedPct(
-                      unrealizedPnlUsd,
-                      row.remainingCostBasisUsd,
-                      row.remainingCostBasisBnb,
-                      bnbUsd
-                    );
-                    const pnlTone =
-                      unrealizedPnlUsd == null
-                        ? "text-pump-muted"
-                        : unrealizedPnlUsd >= 0
-                          ? "text-pump-success"
-                          : "text-pump-danger";
+                    const { avgEntryUsd, unrealizedPnlUsd, unrealizedPnlPct, pnlTone } =
+                      computeHolderMetrics(row, currentPriceBnb, bnbUsd);
+
+                    if (mobileStickyHead) {
+                      return (
+                        <tr key={row.address}>
+                          <td className="token-tape-table__account">
+                            <IdentityPill
+                              address={row.address}
+                              showCreatorBadge={row.address.toLowerCase() === creatorKey}
+                              onAddressClick={onAddressClick}
+                              compact
+                            />
+                          </td>
+                          <td className="token-tape-table__cell-h-balance token-tape-table__value financial-value token-tape-table__cell-default">
+                            {formatTokenAmountMobile(row.netTokens)}
+                          </td>
+                          <td className="token-tape-table__cell-h-supply token-tape-table__value financial-value token-tape-table__muted">
+                            {formatSupplyShareMobile(row.netTokens)}
+                          </td>
+                          <td className="token-tape-table__cell-h-pnl">
+                            <span
+                              className={`financial-value font-medium ${pnlTone}`}
+                            >
+                              {formatUsdReadable(unrealizedPnlUsd, {
+                                compact: true,
+                                signed: true,
+                                twoDecimalsUnder: 10_000,
+                              })}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    }
 
                     return (
                       <tr key={row.address}>
@@ -430,12 +586,15 @@ export function TradeTape({
                         </td>
                         <td className="token-tape-table__col-end">
                           <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
-                            <span className={`financial-value text-caption font-medium ${pnlTone}`}>
-                              {formatUsdReadable(unrealizedPnlUsd, { compact: true, signed: true })}
+                            <span className={`financial-value font-medium ${pnlTone}`}>
+                              {formatUsdReadable(unrealizedPnlUsd, {
+                                compact: true,
+                                signed: true,
+                              })}
                             </span>
                             <PctChange
                               value={unrealizedPnlPct}
-                              className="text-[11px]"
+                              className="text-caption"
                               toneClassName={pnlTone}
                             />
                           </div>
@@ -452,6 +611,89 @@ export function TradeTape({
           )
         ) : displayedTrades.length === 0 ? (
           <p className="token-tape-empty">No trades yet.</p>
+        ) : mobileStickyHead && tab === "trades" ? (
+          <div className={`${activityTableScrollClass} token-tape-table-wrap--mobile-trades`}>
+            <table className="token-tape-table token-tape-table--mobile-trades">
+              <colgroup>
+                <col className="token-tape-table__col-amount" />
+                <col className="token-tape-table__col-account" />
+                <col className="token-tape-table__col-price" />
+                <col className="token-tape-table__col-time" />
+              </colgroup>
+              <thead>
+                <tr>
+                  <th className="token-tape-table__head-amount">Amount</th>
+                  <th className="token-tape-table__head-account">Account</th>
+                  <th className="token-tape-table__head-price">Price</th>
+                  <th className="token-tape-table__head-time">Time</th>
+                </tr>
+              </thead>
+              <tbody>
+                {displayedTrades.map((trade) => {
+                  const isBuy = trade.side === "BUY";
+                  const isOptimistic = trade.id.startsWith("optimistic:");
+                  const tradeNetUsd = tradeNetUsdForDisplay(trade, bnbUsd);
+                  return (
+                    <tr
+                      key={trade.id}
+                      className={tradeRowClass(trade.id, trade.side, isOptimistic)}
+                    >
+                      <td
+                        className={`token-tape-table__cell-amount token-tape-table__value financial-value font-medium ${
+                          isBuy ? "token-tape-table__amount--buy" : "token-tape-table__amount--sell"
+                        }`}
+                      >
+                        {formatTradeAmountUsdFixed2(tradeNetUsd)}
+                      </td>
+                      <td className="token-tape-table__account">
+                        <IdentityPill
+                          address={trade.traderAddress}
+                          showCreatorBadge={
+                            trade.traderAddress.toLowerCase() === creatorKey
+                          }
+                          onAddressClick={onAddressClick}
+                          compact
+                        />
+                      </td>
+                      <td className="token-tape-table__value financial-value token-tape-table__cell-default token-tape-table__cell-price">
+                        <PumpSubscriptPrice
+                          value={tradeFillPriceUsd(
+                            trade.nativeAmount,
+                            trade.tokenAmount,
+                            bnbUsd,
+                            trade.feeBnb,
+                            trade.netBnb,
+                            trade.priceBnb,
+                            trade.nativeUsdRate
+                          )}
+                        />
+                      </td>
+                      <td className="token-tape-table__time-cell">
+                        <div className="token-tape-time-txn">
+                          <span className="token-tape-time-txn__clock financial-value">
+                            {formatTradeClockTime(trade.blockTime, true)}
+                          </span>
+                          <a
+                            href={explorerTxUrl(trade.txHash)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="token-tape-txn-link"
+                            aria-label="View transaction on explorer"
+                            onClick={(event) => event.stopPropagation()}
+                          >
+                            <PumpIcon icon={faExternalLink} className="h-3.5 w-3.5" />
+                          </a>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            <div ref={tradeSentinelRef}>
+              <LoadMoreSentinel loading={loadingMoreTrades} label="Loading trades…" />
+            </div>
+          </div>
         ) : (
           <div className={activityTableScrollClass}>
             <table className="token-tape-table">
@@ -493,27 +735,36 @@ export function TradeTape({
                         {formatTokenAmount(Number(trade.tokenAmount))}
                       </td>
                       <td className="token-tape-table__col-num token-tape-table__value financial-value token-tape-table__muted token-tape-table__cell-default">
-                        {formatTradeFillPriceUsd(
-                          trade.nativeAmount,
-                          trade.tokenAmount,
-                          bnbUsd,
-                          trade.feeBnb,
-                          trade.netBnb,
-                          trade.priceBnb,
-                          trade.nativeUsdRate
-                        )}
+                        <PumpSubscriptPrice
+                          value={tradeFillPriceUsd(
+                            trade.nativeAmount,
+                            trade.tokenAmount,
+                            bnbUsd,
+                            trade.feeBnb,
+                            trade.netBnb,
+                            trade.priceBnb,
+                            trade.nativeUsdRate
+                          )}
+                        />
                       </td>
                       <td className="token-tape-table__col-end token-tape-table__muted">
                         {formatTradeClockTime(trade.blockTime)}
                       </td>
-                      <td className="token-tape-table__col-end">
+                      <td className="token-tape-table__col-end token-tape-table__txn-cell">
                         <a
                           href={explorerTxUrl(trade.txHash)}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="financial-value text-caption text-pump-muted transition hover:text-pump-accent"
+                          className="token-tape-txn-row financial-value"
+                          aria-label={`View transaction ${shortAddress(trade.txHash, true)} on explorer`}
+                          onClick={(event) => event.stopPropagation()}
                         >
-                          {shortAddress(trade.txHash, true)}
+                          <span className="token-tape-txn-row__hash">
+                            {shortAddress(trade.txHash, true)}
+                          </span>
+                          <span className="token-tape-txn-link" aria-hidden>
+                            <PumpIcon icon={faExternalLink} className="h-3.5 w-3.5" />
+                          </span>
                         </a>
                       </td>
                     </tr>

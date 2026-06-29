@@ -5,9 +5,9 @@ import { TokenAvatar } from "@/components/token/TokenAvatar";
 import { TokenDetailLink } from "@/components/token/TokenDetailLink";
 import { ArenaSymbolWithAirdropGift } from "@/components/arena/ArenaSymbolWithAirdropGift";
 import { PctChange } from "@/components/ui/PctChange";
+import { UsdReadablePrice } from "@/components/ui/UsdReadablePrice";
 import {
   formatExploreMcapLabel,
-  formatExplorePriceUsd,
   listTokenPriceUsd,
 } from "@/lib/arena-board-format";
 
@@ -76,7 +76,7 @@ export function ArenaExploreCoinRow({
         <p
           className={`financial-value text-body-sm font-medium leading-tight text-pump-text ${flashText(priceFlash)}`}
         >
-          {formatExplorePriceUsd(resolvedPriceUsd)}
+          <UsdReadablePrice value={resolvedPriceUsd} compact />
         </p>
         <PctChange value={change} className="mt-0.5 text-caption leading-tight" />
       </div>

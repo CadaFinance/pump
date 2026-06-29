@@ -14,13 +14,14 @@ import {
   ColorType,
   CrosshairMode,
 } from "lightweight-charts";
+import { PumpSubscriptPrice } from "@/components/ui/PumpSubscriptPrice";
+import { UsdReadablePrice } from "@/components/ui/UsdReadablePrice";
 import {
   applyCandleSeriesPriceFormat,
   buildCandlesFromTrades,
   CANDLE_INTERVALS,
   DEFAULT_CHART_INTERVAL,
   createOptimisticCandleBar,
-  formatPumpSubscriptPrice,
   resolveChartPriceFormat,
   seriesHasTemporalGaps,
   type ActorOptimisticChartSpot,
@@ -141,16 +142,36 @@ function resolveChartHeight(el: HTMLElement | null, fillContainer: boolean): num
   return chartHeightPx();
 }
 
-function formatOhlc(
-  value: number,
-  currency: "usd" | "mcap",
-  bnbUsd: number | null | undefined
-): string {
+/** LWC canvas axis — desktop uses body-sm scale (15px), mobile slightly smaller. */
+function resolveChartAxisFontSize(): number {
+  if (typeof window === "undefined") return 15;
+  return window.matchMedia("(min-width: 768px)").matches ? 15 : 13;
+}
+
+function ChartOhlcValue({
+  value,
+  currency,
+  bnbUsd,
+  className = "",
+}: {
+  value: number;
+  currency: "usd" | "mcap";
+  bnbUsd: number | null | undefined;
+  className?: string;
+}) {
   const rate = bnbUsd != null && bnbUsd > 0 ? bnbUsd : 0;
-  if (currency === "mcap") return formatUsd(value * rate, { compact: true }) ?? "$0";
-  if (currency === "usd") return formatPumpSubscriptPrice(value * rate, "$");
-  if (value >= 0.001) return value.toFixed(6);
-  return formatPumpSubscriptPrice(value, "");
+  if (currency === "mcap") {
+    const usd = value * rate;
+    const text = formatUsd(usd, { compact: true }) ?? "$0";
+    return <span className={className}>{text}</span>;
+  }
+  return (
+    <UsdReadablePrice
+      value={value * rate}
+      compact
+      className={className}
+    />
+  );
 }
 
 /** User-local time for crosshair + axis labels. */
@@ -600,11 +621,12 @@ export function PriceChart({
     const crosshairColor = `rgb(${cssVar("--pump-border", "96 116 148")} / 0.32)`;
     const upColor = `rgb(${cssVar("--pump-success", "56 197 129")})`;
     const downColor = `rgb(${cssVar("--pump-danger", "227 95 95")})`;
+    const chartAxisFontSize = resolveChartAxisFontSize();
     const chart = createChart(el, {
       layout: {
         background: { type: ColorType.Solid, color: bgColor },
         textColor,
-        fontSize: 12,
+        fontSize: chartAxisFontSize,
       },
       grid: {
         vertLines: { color: gridColor },
@@ -736,7 +758,7 @@ export function PriceChart({
       layout: {
         background: { type: ColorType.Solid, color: bgColor },
         textColor,
-        fontSize: 12,
+        fontSize: resolveChartAxisFontSize(),
       },
       grid: {
         vertLines: { color: gridColor },
@@ -956,18 +978,42 @@ export function PriceChart({
       </div>
 
       {displayCandle ? (
-        <div className={`financial-value flex items-center gap-x-3 overflow-x-auto border-t border-pump-border/10 px-3 py-1.5 text-[11px] text-pump-muted [scrollbar-width:none] md:gap-x-4 md:py-2 md:text-xs [&::-webkit-scrollbar]:hidden ${chromeBlockClass}`}>
+        <div className={`financial-value flex items-center gap-x-3 overflow-x-auto border-t border-pump-border/10 px-3 py-1.5 text-body-sm text-pump-muted [scrollbar-width:none] md:gap-x-4 md:py-2 [&::-webkit-scrollbar]:hidden ${chromeBlockClass}`}>
           <span className="shrink-0">
-            O <span className="text-pump-text">{formatOhlc(displayCandle.open, currency, bnbUsd)}</span>
+            O{" "}
+            <ChartOhlcValue
+              value={displayCandle.open}
+              currency={currency}
+              bnbUsd={bnbUsd}
+              className="text-pump-text"
+            />
           </span>
           <span className="shrink-0">
-            H <span className="text-pump-accent">{formatOhlc(displayCandle.high, currency, bnbUsd)}</span>
+            H{" "}
+            <ChartOhlcValue
+              value={displayCandle.high}
+              currency={currency}
+              bnbUsd={bnbUsd}
+              className="text-pump-accent"
+            />
           </span>
           <span className="shrink-0">
-            L <span className="text-pump-danger">{formatOhlc(displayCandle.low, currency, bnbUsd)}</span>
+            L{" "}
+            <ChartOhlcValue
+              value={displayCandle.low}
+              currency={currency}
+              bnbUsd={bnbUsd}
+              className="text-pump-danger"
+            />
           </span>
           <span className="shrink-0">
-            C <span className="text-pump-text">{formatOhlc(displayCandle.close, currency, bnbUsd)}</span>
+            C{" "}
+            <ChartOhlcValue
+              value={displayCandle.close}
+              currency={currency}
+              bnbUsd={bnbUsd}
+              className="text-pump-text"
+            />
           </span>
           {hoverOhlc && displayTimeLabel ? (
             <span className="hidden shrink-0 sm:inline">{displayTimeLabel}</span>

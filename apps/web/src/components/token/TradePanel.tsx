@@ -153,6 +153,8 @@ type TradePanelProps = {
   reserveBnb?: string;
   tokenSold?: string;
   embedded?: boolean;
+  /** Mobile inline trade box — tighter spacing below chart. */
+  compact?: boolean;
   prefill?: TradePrefillConfig | null;
   onTradeOptimistic?: (payload: TradeOptimisticPayload) => void;
   onTradeOptimisticRollback?: (payload: { pendingId: string }) => void;
@@ -293,6 +295,7 @@ export function TradePanel({
   reserveBnb,
   tokenSold = "0",
   embedded = false,
+  compact = false,
   prefill = null,
   onTradeOptimistic,
   onTradeOptimisticRollback,
@@ -2206,7 +2209,11 @@ export function TradePanel({
 
   return (
     <section
-      className={embedded ? "trade-panel-embedded overflow-hidden p-0" : "panel-surface overflow-hidden p-0"}
+      className={
+        embedded
+          ? `trade-panel-embedded overflow-hidden p-0${compact ? " trade-panel--compact" : ""}`
+          : `panel-surface overflow-hidden p-0${compact ? " trade-panel--compact" : ""}`
+      }
     >
       <form onSubmit={onSubmit}>
         <div className="trade-panel-mode-tabs" role="tablist" aria-label="Order type">

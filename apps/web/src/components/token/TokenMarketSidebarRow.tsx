@@ -6,10 +6,10 @@ import { TokenAvatar } from "@/components/token/TokenAvatar";
 import { TokenDetailLink } from "@/components/token/TokenDetailLink";
 import { seedTokenDetailFromListItem } from "@/lib/token-detail-client";
 import { PctChange } from "@/components/ui/PctChange";
+import { UsdReadablePrice } from "@/components/ui/UsdReadablePrice";
 import { formatUsdReadable } from "@/lib/format-usd";
 import {
   formatCapForBoard,
-  formatExplorePriceUsd,
   listTokenPriceUsd,
 } from "@/lib/arena-board-format";
 import { flashText, type FlashTone } from "@/lib/arena-explore-board-core";
@@ -117,7 +117,7 @@ export function TokenMarketSidebarRow({
           <span
             className={`token-market-sidebar__price financial-value ${flashText(priceFlash)}`}
           >
-            {formatExplorePriceUsd(resolvedPriceUsd)}
+            <UsdReadablePrice value={resolvedPriceUsd} compact />
           </span>
           <PctChange
             value={token.change24hPct ?? null}

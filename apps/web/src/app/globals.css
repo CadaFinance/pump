@@ -4,31 +4,26 @@
 
 :root,
 html[data-theme="light"] {
-  /* Typography scale — 16px base, fluid headings (EU / fintech conventions) */
+  /* Typography — Coinbase CDS–aligned (body 16px, label 14px, caption 13px) */
   --text-display: clamp(1.75rem, 1.5rem + 0.75vw, 2rem);
   --text-h1: clamp(1.5rem, 1.35rem + 0.5vw, 1.75rem);
   --text-h2: clamp(1.25rem, 1.15rem + 0.35vw, 1.5rem);
   --text-h3: clamp(1.125rem, 1.05rem + 0.2vw, 1.25rem);
   --text-body: 1rem;
   --text-body-sm: 0.875rem;
-  --text-caption: 0.75rem;
-  --text-label: 0.6875rem;
+  --text-caption: 0.8125rem;
+  --text-label: 0.75rem;
   --leading-display: 1.2;
   --leading-heading: 1.25;
   --leading-body: 1.5;
-  --leading-caption: 1.4;
+  --leading-caption: 1.35;
   --leading-label: 1.35;
   --tracking-heading: -0.02em;
   --tracking-label: 0.06em;
 
   /* Layout — mobile chrome */
-  --mobile-bottom-bar-content-height: 3.5rem;
-  --mobile-trade-dock-padding-block: 0.875rem;
   --mobile-bottom-nav-height: calc(4.25rem + env(safe-area-inset-bottom, 0px));
-  --mobile-trade-dock-height: calc(
-    var(--mobile-bottom-bar-content-height) + var(--mobile-trade-dock-padding-block) +
-      env(safe-area-inset-bottom, 0px)
-  );
+  --mobile-trade-dock-height: calc(3.75rem + env(safe-area-inset-bottom, 0px));
   --mobile-token-footer-height: var(--mobile-trade-dock-height);
   --app-header-height: 3.25rem;
 
@@ -80,6 +75,20 @@ html[data-theme="dark"] {
   color-scheme: dark;
 }
 
+/* Desktop — corporate fintech density: 16px shell, 15px data rows, 13px meta */
+@media (min-width: 1024px) {
+  :root,
+  html[data-theme="light"],
+  html[data-theme="dark"] {
+    --text-body-sm: 0.9375rem;
+    --leading-caption: 1.4;
+  }
+
+  body {
+    font-size: var(--text-body);
+  }
+}
+
 * {
   border-color: rgb(var(--pump-border) / 0.24);
 }
@@ -124,6 +133,24 @@ code,
 
 .font-subscript {
   font-feature-settings: "subs" 1;
+}
+
+/* Pump tiny-price: $0.0<sub>5</sub>79 — readable zero-count vs Unicode ₅ */
+.pump-subscript-price {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.pump-subscript-price__exp {
+  font-size: 0.72em;
+  font-weight: inherit;
+  line-height: 0;
+  vertical-align: baseline;
+  position: relative;
+  bottom: -0.32em;
+  margin: 0 0.04em;
+  color: currentColor;
+  font-variant-numeric: tabular-nums;
 }
 
 @layer components {
@@ -301,7 +328,7 @@ code,
   }
 
   .share-sheet-option-label {
-    font-size: 11px;
+    font-size: var(--text-caption);
     font-weight: 500;
     line-height: 1.2;
   }
@@ -869,15 +896,13 @@ code,
 
   @media (max-width: 1023px) {
     .token-page-main {
-      height: calc(100dvh - var(--app-header-height) - var(--mobile-token-footer-height));
-      max-height: calc(100dvh - var(--app-header-height) - var(--mobile-token-footer-height));
+      height: calc(100dvh - var(--app-header-height));
     }
   }
 
   html.token-page-lock,
   html.token-page-lock body {
-    height: 100dvh;
-    max-height: 100dvh;
+    height: 100%;
     overflow: hidden;
   }
 
@@ -959,16 +984,11 @@ code,
   .token-page-chart-slot {
     display: flex;
     min-height: 0;
+    flex: 0 0 65dvh;
+    height: 65dvh;
+    max-height: 65dvh;
     flex-direction: column;
     border-bottom: 1px solid rgb(var(--pump-border) / 0.32);
-  }
-
-  @media (min-width: 1024px) {
-    .token-page-chart-slot {
-      flex: 0 0 65dvh;
-      height: 65dvh;
-      max-height: 65dvh;
-    }
   }
 
   .token-page-chart-slot .segment-control {
@@ -1010,7 +1030,15 @@ code,
 
   .token-page-tape-slot {
     display: flex;
-    min-height: 8rem;
+    min-height: 0;
+    flex: 1 1 auto;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .token-page-content-slot {
+    display: flex;
+    min-height: 0;
     flex: 1 1 auto;
     flex-direction: column;
     overflow: hidden;
@@ -1037,6 +1065,14 @@ code,
   }
 
   @media (max-width: 1023px) {
+    .token-page-stack--main {
+      display: flex;
+      min-height: 0;
+      flex: 1 1 auto;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
     .token-mobile-toolbar-host {
       display: flex;
       flex-direction: column;
@@ -1044,36 +1080,135 @@ code,
       border-bottom: 1px solid rgb(var(--pump-border) / 0.32);
     }
 
-    .token-page-grid {
+    .token-mobile-main-tabs {
       display: flex;
-      min-height: 0;
-      flex: 1;
-      flex-direction: column;
+      flex-shrink: 0;
+      align-items: stretch;
+      border-bottom: 1px solid rgb(var(--pump-border) / 0.32);
+      background: rgb(var(--pump-bg));
     }
 
-    .token-page-stack--main {
-      display: grid;
-      min-height: 0;
+    .token-mobile-main-tab {
+      position: relative;
       flex: 1;
-      grid-template-rows: auto minmax(8.5rem, 36dvh) minmax(7.5rem, 1fr);
+      margin: 0;
+      padding: 0.625rem 0.5rem;
+      border: none;
+      background: transparent;
+      font-size: var(--text-body-sm);
+      font-weight: 500;
+      line-height: 1.25;
+      color: rgb(var(--pump-muted));
+      cursor: pointer;
+      transition: color 0.15s ease;
+    }
+
+    .token-mobile-main-tab:hover {
+      color: rgb(var(--pump-text));
+    }
+
+    .token-mobile-main-tab--active {
+      color: rgb(var(--pump-text));
+      font-weight: 600;
+    }
+
+    .token-mobile-main-tab--active::after {
+      content: "";
+      position: absolute;
+      right: 0.75rem;
+      bottom: 0;
+      left: 0.75rem;
+      height: 2px;
+      border-radius: 2px 2px 0 0;
+      background: rgb(var(--pump-accent));
+    }
+
+    .token-page-content-slot {
+      display: flex;
+      min-height: 0;
+      flex: 1 1 auto;
+      flex-direction: column;
       overflow: hidden;
     }
 
     .token-page-chart-slot {
-      flex: none;
+      flex: 1 1 0;
       height: auto;
-      min-height: 8.5rem;
-      max-height: 36dvh;
+      max-height: none;
+      min-height: 10rem;
     }
 
-    .token-page-tape-slot {
+    .token-page--market-open .token-page-chart-slot {
+      flex: 1 1 28dvh;
+      height: auto;
+      max-height: 28dvh;
+      min-height: 8rem;
+    }
+
+    .token-page-tape-slot--mobile {
+      display: flex;
       min-height: 0;
-      flex: none;
+      flex: 1 1 0;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .token-mobile-trade-panel {
+      flex-shrink: 0;
+      max-height: min(42dvh, 22rem);
+      overflow-x: hidden;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      border-top: 1px solid rgb(var(--pump-border) / 0.32);
+      background: rgb(var(--pump-bg));
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .token-trade-tape--sticky-head {
+      display: flex;
+      min-height: 0;
+      flex: 1 1 auto;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .trade-panel--compact .trade-panel-mode-tabs {
+      padding: 0.375rem 0.625rem 0;
+    }
+
+    .trade-panel--compact .trade-panel-mode-tab {
+      padding-bottom: 0.375rem;
+      font-size: var(--text-caption);
+    }
+
+    .trade-panel--compact .trade-panel-tabs {
+      padding: 0.375rem 0.625rem 0;
+    }
+
+    .trade-panel--compact .trade-panel-input-zone {
+      padding: 0.5rem 0.625rem;
+    }
+
+    .trade-panel--compact .trade-teeth-slider {
+      margin-top: 0.375rem;
+    }
+
+    .trade-panel--compact .trade-panel-details-zone {
+      padding: 0.375rem 0.625rem 0.5rem;
+    }
+
+    .trade-panel--compact .trade-action-zone {
+      padding: 0.375rem 0.625rem 0.625rem;
+    }
+
+    .trade-panel--compact .trade-submit-button {
+      min-height: 2.75rem;
+      font-size: var(--text-body-sm);
     }
 
     .token-mobile-market-drawer {
       display: flex;
-      max-height: min(40dvh, 22rem);
+      max-height: min(48dvh, 26rem);
       min-height: 0;
       flex-direction: column;
       overflow: hidden;
@@ -1087,12 +1222,15 @@ code,
       border-radius: 0;
     }
 
-    .token-page--market-open .token-page-stack--main {
-      grid-template-rows: auto minmax(7rem, 28dvh) minmax(6.5rem, 1fr);
+    .token-page--market-open .token-page-chart-slot {
+      flex: 1 1 28dvh;
+      height: auto;
+      max-height: 28dvh;
+      min-height: 8rem;
     }
 
-    .token-page--market-open .token-page-chart-slot {
-      max-height: 28dvh;
+    .token-page--market-open .token-page-tape-slot {
+      min-height: 6rem;
     }
   }
 
@@ -1104,7 +1242,7 @@ code,
 
     to {
       opacity: 1;
-      max-height: min(40dvh, 22rem);
+      max-height: min(48dvh, 26rem);
     }
   }
 
@@ -1152,13 +1290,19 @@ code,
 
   .token-market-sidebar__head {
     flex-shrink: 0;
-    padding-block: 0.375rem 0.3125rem;
+    padding-block: 0.4375rem 0.375rem;
     border-bottom: 1px solid rgb(var(--pump-border) / 0.22);
+    font-size: var(--text-caption);
+    font-weight: 500;
+    line-height: var(--leading-caption);
+    color: rgb(var(--pump-muted));
   }
 
   .token-market-sidebar__row {
     padding-block: 0.4375rem;
     border-bottom: 1px solid rgb(var(--pump-border) / 0.1);
+    font-size: var(--text-body-sm);
+    line-height: var(--leading-body);
     color: inherit;
     text-decoration: none;
   }
@@ -1207,15 +1351,15 @@ code,
   }
 
   .token-market-sidebar__mcap-chg {
-    font-size: 10px;
-    line-height: 1.15;
+    font-size: var(--text-caption);
+    line-height: var(--leading-caption);
   }
 
   .token-market-sidebar__col-label {
-    font-size: 9px;
+    font-size: var(--text-label);
     font-weight: 500;
-    line-height: 1.2;
-    letter-spacing: 0.04em;
+    line-height: var(--leading-label);
+    letter-spacing: var(--tracking-label);
     text-transform: uppercase;
     color: rgb(var(--pump-muted));
     white-space: nowrap;
@@ -1293,8 +1437,8 @@ code,
   }
 
   .token-market-sidebar__search .arena-search-input {
-    font-size: 11px;
-    line-height: 1.25;
+    font-size: var(--text-body-sm);
+    line-height: var(--leading-body);
     color: rgb(var(--pump-text));
   }
 
@@ -1374,12 +1518,12 @@ code,
     position: relative;
     flex-shrink: 0;
     margin: 0;
-    padding: 0.25rem 0 0.375rem;
+    padding: 0.3125rem 0 0.4375rem;
     border: none;
     background: transparent;
-    font-size: 10px;
+    font-size: var(--text-caption);
     font-weight: 400;
-    line-height: 1.2;
+    line-height: var(--leading-caption);
     color: rgb(var(--pump-muted));
     white-space: nowrap;
     cursor: pointer;
@@ -1439,36 +1583,38 @@ code,
   }
 
   .token-market-sidebar__pair-line {
-    font-size: 11px;
+    font-size: var(--text-body-sm);
     font-weight: 500;
-    line-height: 1.15;
+    line-height: var(--leading-body);
     color: rgb(var(--pump-text));
     white-space: nowrap;
   }
 
   .token-market-sidebar__vol-line {
     margin-top: 0.0625rem;
-    font-size: 10px;
-    line-height: 1.15;
+    font-size: var(--text-caption);
+    line-height: var(--leading-caption);
     color: rgb(var(--pump-muted));
     white-space: nowrap;
   }
 
   .token-market-sidebar__price {
-    font-size: 11px;
+    font-size: var(--text-body-sm);
     font-weight: 400;
+    line-height: var(--leading-body);
     color: rgb(var(--pump-text));
     white-space: nowrap;
   }
 
   .token-market-sidebar__price-chg {
-    font-size: 10px;
-    line-height: 1.15;
+    font-size: var(--text-caption);
+    line-height: var(--leading-caption);
   }
 
   .token-market-sidebar__mcap {
-    font-size: 11px;
+    font-size: var(--text-body-sm);
     font-weight: 400;
+    line-height: var(--leading-body);
     color: rgb(var(--pump-text));
     white-space: nowrap;
   }
@@ -1480,6 +1626,10 @@ code,
   .token-market-sidebar__note {
     padding: 0.75rem 0.625rem 1rem;
     text-align: center;
+  }
+
+  .token-page-chart-slot .pump-subscript-price__exp {
+    font-size: 0.78em;
   }
 
   .token-trade-tape {
@@ -1498,6 +1648,14 @@ code,
     -webkit-overflow-scrolling: touch;
   }
 
+  .token-trade-tape .token-tape-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: rgb(var(--pump-bg));
+    box-shadow: 0 1px 0 rgb(var(--pump-border) / 0.28);
+  }
+
   .token-tape-empty {
     padding: 1.25rem 0.75rem;
     font-size: var(--text-caption);
@@ -1514,8 +1672,8 @@ code,
     width: 100%;
     border-collapse: collapse;
     table-layout: auto;
-    font-size: var(--text-caption);
-    line-height: 1.35;
+    font-size: var(--text-body-sm);
+    line-height: 1.4;
   }
 
   .token-tape-table thead th {
@@ -1523,15 +1681,15 @@ code,
     border: none;
     background: transparent;
     font-weight: 500;
-    font-size: var(--text-caption);
-    line-height: var(--leading-caption);
+    font-size: var(--text-body-sm);
+    line-height: var(--leading-body);
     color: rgb(var(--pump-muted));
     text-align: left;
     white-space: nowrap;
   }
 
   .token-tape-table tbody td {
-    padding: 0.3125rem 0.75rem;
+    padding: 0.375rem 0.75rem;
     border: none;
     vertical-align: middle;
     background: transparent;
@@ -1578,6 +1736,56 @@ code,
     white-space: nowrap;
   }
 
+  .token-tape-txn-row {
+    display: inline-flex;
+    max-width: 100%;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.375rem;
+    color: rgb(var(--pump-muted));
+    text-decoration: none;
+    transition: color 0.12s ease;
+  }
+
+  .token-tape-txn-row:hover {
+    color: rgb(var(--pump-accent));
+  }
+
+  .token-tape-txn-row__hash {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .token-tape-txn-link {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    width: 1.625rem;
+    height: 1.625rem;
+    border-radius: var(--radius-sm);
+    color: inherit;
+    text-decoration: none;
+    transition: color 0.12s ease, background 0.12s ease;
+  }
+
+  a.token-tape-txn-link {
+    color: rgb(var(--pump-muted));
+  }
+
+  .token-tape-txn-link svg {
+    width: 0.875rem;
+    height: 0.875rem;
+  }
+
+  .token-tape-txn-row:hover .token-tape-txn-link,
+  a.token-tape-txn-link:hover {
+    color: rgb(var(--pump-accent));
+    background: rgb(var(--pump-border) / 0.1);
+  }
+
   .token-tape-identity {
     display: inline-flex;
     min-width: 0;
@@ -1604,6 +1812,198 @@ code,
     text-overflow: ellipsis;
     white-space: nowrap;
     font-weight: 500;
+  }
+
+  .token-tape-identity--compact {
+    gap: 0.1875rem;
+    max-width: 100%;
+  }
+
+  .token-tape-identity--compact .token-tape-identity__label {
+    font-size: var(--text-caption);
+    font-weight: 500;
+    letter-spacing: -0.01em;
+  }
+
+  .token-tape-identity--compact span.rounded-full {
+    font-size: var(--text-label);
+    padding: 0 0.3125rem;
+  }
+
+  .token-tape-creator-icon {
+    width: 1.125rem;
+    height: 1.125rem;
+  }
+
+  @media (max-width: 1023px) {
+    .token-tape-table-wrap--mobile-trades {
+      overflow-x: hidden;
+    }
+
+    .token-tape-table--mobile-trades {
+      table-layout: fixed;
+      width: 100%;
+      font-size: var(--text-body-sm);
+      line-height: 1.3;
+    }
+
+    .token-tape-table--mobile-trades col.token-tape-table__col-amount {
+      width: 20%;
+    }
+
+    .token-tape-table--mobile-trades col.token-tape-table__col-account {
+      width: 30%;
+    }
+
+    .token-tape-table--mobile-trades col.token-tape-table__col-price {
+      width: 22%;
+    }
+
+    .token-tape-table--mobile-trades col.token-tape-table__col-time {
+      width: 28%;
+    }
+
+    .token-tape-table--mobile-trades thead th,
+    .token-tape-table--mobile-trades tbody td {
+      padding-block: 0.4375rem;
+      vertical-align: middle;
+    }
+
+    .token-tape-table--mobile-trades thead th {
+      font-size: var(--text-caption);
+      line-height: var(--leading-caption);
+      font-weight: 500;
+    }
+
+    .token-tape-table--mobile-trades .token-tape-table__head-amount,
+    .token-tape-table--mobile-trades .token-tape-table__cell-amount {
+      text-align: left;
+      padding-left: 0.625rem;
+      padding-right: 0.25rem;
+    }
+
+    .token-tape-table--mobile-trades .token-tape-table__head-account,
+    .token-tape-table--mobile-trades .token-tape-table__account {
+      text-align: left;
+      padding-inline: 0.25rem;
+    }
+
+    .token-tape-table--mobile-trades .token-tape-table__head-price,
+    .token-tape-table--mobile-trades .token-tape-table__cell-price {
+      text-align: right;
+      padding-left: 0.125rem;
+      padding-right: 0.625rem;
+    }
+
+    .token-tape-table--mobile-trades .token-tape-table__head-time {
+      text-align: right;
+      padding-left: 0.5rem;
+      padding-right: 0.625rem;
+    }
+
+    .token-tape-table--mobile-trades .token-tape-table__time-cell {
+      text-align: right;
+      padding-left: 0.5rem;
+      padding-right: 0.625rem;
+    }
+
+    .token-tape-table--mobile-trades .token-tape-table__account {
+      max-width: 0;
+      overflow: hidden;
+    }
+
+    .token-tape-table--mobile-trades .token-tape-table__cell-price {
+      overflow: visible;
+    }
+
+    .token-tape-table--mobile-trades .pump-subscript-price__exp {
+      font-size: 0.78em;
+      bottom: -0.28em;
+    }
+
+    .token-tape-table-wrap--mobile-holders {
+      overflow-x: hidden;
+    }
+
+    .token-tape-table--mobile-holders {
+      table-layout: fixed;
+      width: 100%;
+      font-size: var(--text-body-sm);
+      line-height: 1.3;
+    }
+
+    .token-tape-table--mobile-holders col.token-tape-table__col-h-account {
+      width: 32%;
+    }
+
+    .token-tape-table--mobile-holders col.token-tape-table__col-h-balance {
+      width: 22%;
+    }
+
+    .token-tape-table--mobile-holders col.token-tape-table__col-h-supply {
+      width: 18%;
+    }
+
+    .token-tape-table--mobile-holders col.token-tape-table__col-h-pnl {
+      width: 28%;
+    }
+
+    .token-tape-table--mobile-holders thead th,
+    .token-tape-table--mobile-holders tbody td {
+      padding-block: 0.4375rem;
+      vertical-align: middle;
+    }
+
+    .token-tape-table--mobile-holders thead th {
+      font-size: var(--text-caption);
+      line-height: var(--leading-caption);
+      font-weight: 500;
+    }
+
+    .token-tape-table--mobile-holders .token-tape-table__head-h-account,
+    .token-tape-table--mobile-holders .token-tape-table__account {
+      text-align: left;
+      padding-left: 0.625rem;
+      padding-right: 0.25rem;
+    }
+
+    .token-tape-table--mobile-holders .token-tape-table__head-h-balance,
+    .token-tape-table--mobile-holders .token-tape-table__cell-h-balance {
+      text-align: right;
+      padding-inline: 0.25rem;
+    }
+
+    .token-tape-table--mobile-holders .token-tape-table__head-h-supply,
+    .token-tape-table--mobile-holders .token-tape-table__cell-h-supply {
+      text-align: right;
+      padding-inline: 0.25rem;
+    }
+
+    .token-tape-table--mobile-holders .token-tape-table__head-h-pnl,
+    .token-tape-table--mobile-holders .token-tape-table__cell-h-pnl {
+      text-align: right;
+      padding-left: 0.25rem;
+      padding-right: 0.625rem;
+    }
+
+    .token-tape-table--mobile-holders .token-tape-table__account {
+      max-width: 0;
+      overflow: hidden;
+    }
+
+    .token-tape-time-txn {
+      display: inline-flex;
+      max-width: 100%;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 0.375rem;
+    }
+
+    .token-tape-time-txn__clock {
+      font-size: var(--text-caption);
+      color: rgb(var(--pump-muted));
+      font-variant-numeric: tabular-nums;
+    }
   }
 
   .token-detail-toolbar-skeleton {
@@ -1755,9 +2155,9 @@ code,
   }
 
   .token-detail-toolbar__age {
-    font-size: 0.75rem;
+    font-size: var(--text-caption);
     font-weight: 400;
-    line-height: 1.2;
+    line-height: var(--leading-caption);
     color: rgb(var(--pump-muted));
     white-space: nowrap;
   }
@@ -3467,9 +3867,9 @@ code,
     min-height: 3.5rem;
     padding: 6px 2px 8px;
     color: rgb(var(--pump-muted));
-    font-size: 10px;
+    font-size: var(--text-label);
     font-weight: 500;
-    line-height: 1.2;
+    line-height: var(--leading-label);
     transition: color 0.15s ease;
   }
 
@@ -3500,9 +3900,9 @@ code,
     min-height: 3.5rem;
     padding: 0 4px 8px;
     color: rgb(var(--pump-accent));
-    font-size: 10px;
+    font-size: var(--text-label);
     font-weight: 600;
-    line-height: 1.2;
+    line-height: var(--leading-label);
   }
 
   .bottom-nav-fab-active {
@@ -3745,10 +4145,10 @@ code,
 
   .koth-banner__tag {
     font-family: var(--font-geist-sans), system-ui, sans-serif;
-    font-size: 10px;
+    font-size: var(--text-label);
     font-weight: 700;
-    line-height: 1;
-    letter-spacing: 0.07em;
+    line-height: var(--leading-label);
+    letter-spacing: var(--tracking-label);
     text-transform: uppercase;
     color: rgb(var(--pump-muted));
   }
