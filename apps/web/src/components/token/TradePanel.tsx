@@ -1014,17 +1014,34 @@ export function TradePanel({
   const [teethDragging, setTeethDragging] = useState(false);
   const [teethDragPct, setTeethDragPct] = useState<number | null>(null);
   const sliderDraggingRef = useRef(false);
+  const teethFrameRef = useRef<HTMLDivElement>(null);
+  const applySliderPercentRef = useRef<(pct: number) => void>(() => {});
 
   useEffect(() => {
     if (!teethDragging) return;
+    const onMove = (e: PointerEvent) => {
+      if (!sliderDraggingRef.current) return;
+      const frame = teethFrameRef.current;
+      if (!frame) return;
+      const rect = frame.getBoundingClientRect();
+      if (rect.width <= 0) return;
+      const pct = Math.max(
+        0,
+        Math.min(100, Math.round(((e.clientX - rect.left) / rect.width) * 100))
+      );
+      setTeethDragPct(pct);
+      applySliderPercentRef.current(pct);
+    };
     const endDrag = () => {
       sliderDraggingRef.current = false;
       setTeethDragging(false);
       setTeethDragPct(null);
     };
+    window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", endDrag);
     window.addEventListener("pointercancel", endDrag);
     return () => {
+      window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", endDrag);
       window.removeEventListener("pointercancel", endDrag);
     };
@@ -2188,17 +2205,46 @@ export function TradePanel({
     !paused &&
     (!isConnected || (!wrongChain && maxSellTokenWei > 0n));
 
-  const sliderPct = side === "buy" ? buySliderPct : sellSliderPct;
   const canUseSlider = side === "buy" ? canUseMaxBuy : canUseMaxSell;
   const applySliderPercent = side === "buy" ? applyBuySliderPercent : applySellSliderPercent;
+  applySliderPercentRef.current = applySliderPercent;
+  const sliderPct = side === "buy" ? buySliderPct : sellSliderPct;
   const displayTeethPct = teethDragPct ?? sliderPct;
   const teethTooltipLeft =
     displayTeethPct <= 4 ? 4 : displayTeethPct >= 96 ? 96 : displayTeethPct;
 
-  function onTeethSliderPointerDown() {
+  function updateTeethFromClientX(clientX: number) {
+    const frame = teethFrameRef.current;
+    if (!frame) return;
+    const rect = frame.getBoundingClientRect();
+    if (rect.width <= 0) return;
+    const pct = Math.max(
+      0,
+      Math.min(100, Math.round(((clientX - rect.left) / rect.width) * 100))
+    );
+    setTeethDragPct(pct);
+    applySliderPercent(pct);
+  }
+
+  function onTeethFramePointerDown(e: React.PointerEvent<HTMLDivElement>) {
     if (!canUseSlider) return;
+    e.preventDefault();
     sliderDraggingRef.current = true;
     setTeethDragging(true);
+    updateTeethFromClientX(e.clientX);
+  }
+
+  function onTeethFramePointerMove(e: React.PointerEvent<HTMLDivElement>) {
+    if (!sliderDraggingRef.current || !canUseSlider) return;
+    e.preventDefault();
+    updateTeethFromClientX(e.clientX);
+  }
+
+  function endTeethDrag() {
+    if (!sliderDraggingRef.current) return;
+    sliderDraggingRef.current = false;
+    setTeethDragging(false);
+    setTeethDragPct(null);
   }
 
   function onTeethSliderInput(value: number) {
@@ -2372,7 +2418,18 @@ export function TradePanel({
             </div>
 
             <div className={`trade-teeth-slider trade-teeth-slider--${side}`}>
-              <div className="trade-teeth-slider__frame">
+              <div
+                ref={teethFrameRef}
+                className={
+                  teethDragging
+                    ? "trade-teeth-slider__frame trade-teeth-slider__frame--dragging"
+                    : "trade-teeth-slider__frame"
+                }
+                onPointerDown={onTeethFramePointerDown}
+                onPointerMove={onTeethFramePointerMove}
+                onPointerUp={endTeethDrag}
+                onPointerCancel={endTeethDrag}
+              >
               {teethDragging ? (
                 <span
                   className={`trade-teeth-tooltip trade-teeth-tooltip--${side}`}
@@ -2412,13 +2469,15 @@ export function TradePanel({
                 min={0}
                 max={100}
                 step={1}
-                value={sliderPct}
-                onPointerDown={onTeethSliderPointerDown}
+                value={displayTeethPct}
                 onChange={(e) => onTeethSliderInput(Number(e.target.value))}
                 onInput={(e) => onTeethSliderInput(Number(e.currentTarget.value))}
                 disabled={!canUseSlider}
                 className="trade-teeth-slider__input"
                 aria-label={side === "buy" ? "Buy amount slider" : "Sell amount slider"}
+                aria-valuenow={displayTeethPct}
+                aria-valuemin={0}
+                aria-valuemax={100}
                 aria-valuetext={
                   amountOverMax
                     ? "Over available balance"
