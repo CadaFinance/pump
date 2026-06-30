@@ -21,6 +21,7 @@ export {
   faCoins,
   faCopy,
   faCrown,
+  faEllipsis,
   faEnvelope,
   faEye,
   faEyeSlash,

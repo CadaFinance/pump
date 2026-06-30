@@ -21,8 +21,11 @@ html[data-theme="light"] {
   --tracking-heading: -0.02em;
   --tracking-label: 0.06em;
 
-  /* Layout — mobile chrome (bottom tab bar removed; top hamburger menu) */
-  --mobile-bottom-nav-height: 0px;
+  /* Layout — mobile chrome */
+  --mobile-bottom-bar-content-height: 3.5rem;
+  --mobile-bottom-nav-height: calc(
+    var(--mobile-bottom-bar-content-height) + env(safe-area-inset-bottom, 0px)
+  );
   --mobile-trade-dock-bar-height: 2.25rem;
   --mobile-trade-dock-pad-block: 0.5rem;
   --mobile-trade-dock-height: calc(
@@ -3350,99 +3353,70 @@ code,
     align-items: center;
   }
 
-  .app-header-menu-btn {
+  .app-header-account-btn {
     display: inline-flex;
     width: var(--app-header-control-height);
     height: var(--app-header-control-height);
     flex-shrink: 0;
     align-items: center;
     justify-content: center;
+    overflow: hidden;
     border: 1px solid rgb(var(--pump-border) / 0.35);
-    border-radius: var(--radius-md);
+    border-radius: var(--radius-full);
     background: rgb(var(--pump-card-soft) / 0.35);
-    color: rgb(var(--pump-text));
-    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+    padding: 0;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
   }
 
-  .app-header-menu-btn:hover {
-    border-color: rgb(var(--pump-border) / 0.55);
-    background: rgb(var(--pump-border) / 0.12);
+  .app-header-account-btn:hover {
+    border-color: rgb(var(--pump-accent) / 0.45);
+    box-shadow: 0 0 0 3px rgb(var(--pump-accent) / 0.12);
+  }
+
+  .app-header-account-btn__fallback {
+    display: inline-flex;
+    width: 100%;
+    height: 100%;
+    align-items: center;
+    justify-content: center;
+    background: rgb(var(--pump-accent) / 0.14);
+    font-size: var(--text-caption);
+    font-weight: 700;
     color: rgb(var(--pump-accent));
   }
 
-  .app-mobile-menu {
-    position: fixed;
-    inset: 0;
-    z-index: 70;
+  .app-account-sheet,
+  .app-more-sheet {
     display: flex;
-    justify-content: flex-end;
-  }
-
-  .app-mobile-menu__backdrop {
-    position: absolute;
-    inset: 0;
-    margin: 0;
-    padding: 0;
-    appearance: none;
-    border: none;
-    background: rgb(var(--modal-overlay-color) / var(--modal-overlay-opacity));
-    backdrop-filter: blur(calc(var(--modal-overlay-blur) * 0.35))
-      saturate(var(--modal-overlay-saturate));
-    -webkit-backdrop-filter: blur(calc(var(--modal-overlay-blur) * 0.35))
-      saturate(var(--modal-overlay-saturate));
-    cursor: default;
-  }
-
-  .app-mobile-menu__panel {
-    position: relative;
-    z-index: 1;
-    display: flex;
-    width: min(21rem, 100vw);
-    max-width: 100%;
-    height: 100%;
+    width: 100%;
     flex-direction: column;
-    border-left: 1px solid rgb(var(--pump-border) / 0.35);
-    background: rgb(var(--pump-surface));
-    box-shadow: -12px 0 40px rgb(var(--pump-shadow) / 0.28);
-    animation: app-mobile-menu-slide-in 0.22s ease-out;
   }
 
-  @keyframes app-mobile-menu-slide-in {
-    from {
-      transform: translateX(100%);
-    }
-    to {
-      transform: translateX(0);
-    }
-  }
-
-  .app-mobile-menu__header {
+  .app-account-sheet__header,
+  .app-more-sheet__header {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 0.75rem;
-    padding: 1rem 1rem 0.875rem;
+    padding: 1rem 1rem 0.75rem;
     border-bottom: 1px solid rgb(var(--pump-border) / 0.28);
   }
 
-  .app-mobile-menu__brand {
-    display: flex;
-    min-width: 0;
-    align-items: center;
-    gap: 0.625rem;
-    font-size: var(--text-body-sm);
+  .app-account-sheet__title,
+  .app-more-sheet__title {
+    margin: 0;
+    font-size: 1.0625rem;
     font-weight: 600;
+    line-height: 1.25;
+    letter-spacing: -0.01em;
     color: rgb(var(--pump-text));
   }
 
-  .app-mobile-menu__brand-name {
-    letter-spacing: -0.01em;
-  }
-
-  .app-mobile-menu__close {
+  .app-account-sheet__close,
+  .app-more-sheet__close {
     display: inline-flex;
-    width: 2.25rem;
-    height: 2.25rem;
+    width: 2rem;
+    height: 2rem;
     flex-shrink: 0;
     align-items: center;
     justify-content: center;
@@ -3450,25 +3424,31 @@ code,
     border-radius: var(--radius-md);
     background: transparent;
     color: rgb(var(--pump-muted));
+    font-size: 1.375rem;
+    line-height: 1;
     transition: background-color 0.15s ease, color 0.15s ease;
   }
 
-  .app-mobile-menu__close:hover {
+  .app-account-sheet__close:hover,
+  .app-more-sheet__close:hover {
     background: rgb(var(--pump-border) / 0.12);
     color: rgb(var(--pump-text));
   }
 
-  .app-mobile-menu__nav {
+  .app-account-sheet__body {
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 1rem 1rem calc(1rem + env(safe-area-inset-bottom, 0px));
+  }
+
+  .app-more-sheet__nav {
     display: flex;
-    min-height: 0;
-    flex: 1;
     flex-direction: column;
     gap: 0.125rem;
-    overflow-y: auto;
     padding: 0.75rem 0.625rem;
   }
 
-  .app-mobile-menu__link {
+  .app-more-sheet__link {
     display: flex;
     align-items: center;
     gap: 0.75rem;
@@ -3482,17 +3462,17 @@ code,
     transition: background-color 0.15s ease, color 0.15s ease;
   }
 
-  .app-mobile-menu__link:hover {
+  .app-more-sheet__link:hover {
     background: rgb(var(--pump-border) / 0.1);
   }
 
-  .app-mobile-menu__link--active {
+  .app-more-sheet__link--active {
     background: rgb(var(--pump-accent) / 0.1);
     color: rgb(var(--pump-accent));
     font-weight: 600;
   }
 
-  .app-mobile-menu__link-icon {
+  .app-more-sheet__link-icon {
     display: inline-flex;
     width: 2rem;
     height: 2rem;
@@ -3504,56 +3484,43 @@ code,
     color: rgb(var(--pump-muted));
   }
 
-  .app-mobile-menu__link--active .app-mobile-menu__link-icon {
+  .app-more-sheet__link--active .app-more-sheet__link-icon {
     background: rgb(var(--pump-accent) / 0.14);
     color: rgb(var(--pump-accent));
   }
 
-  .app-mobile-menu__link-label {
+  .app-more-sheet__link-label {
     min-width: 0;
     flex: 1;
   }
 
-  .app-mobile-menu__link-chevron {
+  .app-more-sheet__link-chevron {
     width: 0.875rem;
     height: 0.875rem;
     flex-shrink: 0;
     opacity: 0.35;
   }
 
-  .app-mobile-menu__footer {
-    display: flex;
-    flex-direction: column;
-    gap: 0.75rem;
-    padding: 0.875rem 1rem calc(1rem + env(safe-area-inset-bottom, 0px));
+  .app-more-sheet__footer {
+    padding: 0.75rem 1rem calc(1rem + env(safe-area-inset-bottom, 0px));
     border-top: 1px solid rgb(var(--pump-border) / 0.28);
     background: rgb(var(--pump-card-soft) / 0.22);
   }
 
-  .app-mobile-menu__create {
-    display: inline-flex;
-    width: 100%;
-    align-items: center;
-    justify-content: center;
-    gap: 0.5rem;
-    min-height: 2.75rem;
-  }
-
-  .app-mobile-menu__theme-row {
+  .app-more-sheet__theme-row {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 0.75rem;
-    padding: 0 0.125rem;
   }
 
-  .app-mobile-menu__theme-label {
+  .app-more-sheet__theme-label {
     font-size: var(--text-caption);
     font-weight: 500;
     color: rgb(var(--pump-muted));
   }
 
-  .app-mobile-menu__theme-toggle {
+  .app-more-sheet__theme-toggle {
     display: inline-flex;
     width: 2.5rem;
     height: 2.5rem;
@@ -3563,6 +3530,69 @@ code,
     border-radius: var(--radius-md);
     background: rgb(var(--pump-card) / 0.8);
     color: rgb(var(--pump-muted));
+  }
+
+  .wallet-account-panel__balance-toggle {
+    display: block;
+    margin-top: 0.25rem;
+    border: none;
+    background: transparent;
+    padding: 0;
+    text-align: left;
+    transition: color 0.15s ease;
+  }
+
+  .wallet-account-panel__balance-toggle:hover {
+    color: rgb(var(--pump-accent));
+  }
+
+  .wallet-account-panel__balance-value {
+    font-size: 1.75rem;
+    font-weight: 600;
+    line-height: 1.15;
+    color: rgb(var(--pump-text));
+  }
+
+  .wallet-account-panel__address {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    margin-top: 1rem;
+    border: 1px solid rgb(var(--pump-border) / 0.45);
+    background: rgb(var(--pump-border) / 0.04);
+    padding: 0.625rem 0.75rem;
+    font-size: var(--text-caption);
+    color: rgb(var(--pump-text));
+    transition: background-color 0.15s ease;
+  }
+
+  .wallet-account-panel__address:hover {
+    background: rgb(var(--pump-border) / 0.08);
+  }
+
+  .wallet-account-panel__actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.5rem;
+    margin-top: 0.75rem;
+  }
+
+  .wallet-account-panel__logout {
+    width: 100%;
+    margin-top: 0.75rem;
+    border: none;
+    background: transparent;
+    padding: 0.625rem 0;
+    font-size: var(--text-body-sm);
+    font-weight: 500;
+    color: rgb(var(--pump-danger));
+    transition: background-color 0.15s ease;
+  }
+
+  .wallet-account-panel__logout:hover {
+    background: rgb(var(--pump-danger) / 0.08);
   }
 
   .app-header-actions .toolbar-btn {
@@ -4344,12 +4374,12 @@ code,
   .create-mobile-dock {
     position: fixed;
     right: 0;
-    bottom: 0;
+    bottom: var(--mobile-bottom-nav-height);
     left: 0;
     z-index: 35;
     border-top: 1px solid rgb(var(--pump-border) / 0.3);
     background: rgb(var(--pump-surface) / 0.96);
-    padding: 10px 12px calc(10px + env(safe-area-inset-bottom, 0px));
+    padding: 10px 12px;
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
   }
@@ -6427,9 +6457,10 @@ code,
   .chip-button:focus-visible,
   .arena-filter-chip:focus-visible,
   .bottom-nav-item:focus-visible,
-  .app-header-menu-btn:focus-visible,
-  .app-mobile-menu__close:focus-visible,
-  .app-mobile-menu__link:focus-visible,
+  .app-header-account-btn:focus-visible,
+  .app-account-sheet__close:focus-visible,
+  .app-more-sheet__close:focus-visible,
+  .app-more-sheet__link:focus-visible,
   .share-sheet-copy-button:focus-visible,
   .share-sheet-option:focus-visible,
   .toolbar-sheet-header__close:focus-visible,
@@ -6462,8 +6493,7 @@ code,
     .hourglass-icon-svg,
     .hourglass-sand-top,
     .hourglass-sand-stream,
-    .hourglass-sand-bottom,
-    .app-mobile-menu__panel {
+    .hourglass-sand-bottom {
       animation: none;
     }
     .airdrop-promo-icon,

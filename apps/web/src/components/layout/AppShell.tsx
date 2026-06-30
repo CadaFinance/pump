@@ -3,6 +3,7 @@
 import { usePathname } from "next/navigation";
 import { useEffect, useLayoutEffect } from "react";
 import { AppHeaderView } from "@/components/layout/AppHeader";
+import { AppNavView } from "@/components/layout/AppNav";
 import {
   isTokenRoute,
   shellMaxWidthClassForPath,
@@ -27,6 +28,7 @@ type AppShellFrameProps = AppShellProps & {
 export function AppShellFrame({ children, wide = false, pathname }: AppShellFrameProps) {
   const mainMaxWidth = wide ? shellWideMaxWidthClass : shellMaxWidthClassForPath(pathname);
   const onTokenPage = isTokenRoute(pathname);
+  const mobileBottomOffset = "max-md:pb-[var(--mobile-bottom-nav-height)]";
   const mainPadding = onTokenPage
     ? shellTokenPagePaddingClass
     : `py-5 md:py-8 md:pb-8 ${shellPaddingXClass}`;
@@ -38,10 +40,11 @@ export function AppShellFrame({ children, wide = false, pathname }: AppShellFram
     <div className={onTokenPage ? "app-shell app-shell--token" : "flex min-h-screen flex-col"}>
       <AppHeaderView pathname={pathname} />
       <main
-        className={`flex min-h-0 flex-col ${mainPadding} ${mainLayoutClass}`}
+        className={`flex min-h-0 flex-col ${mainPadding} ${mobileBottomOffset} ${mainLayoutClass}`}
       >
         {children}
       </main>
+      <AppNavView pathname={pathname} />
     </div>
   );
 }

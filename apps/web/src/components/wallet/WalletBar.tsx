@@ -1,21 +1,19 @@
 "use client";
 
-import { useEffect, useRef, useState, type MouseEvent } from "react";
-import Link from "next/link";
+import { useEffect, useRef, useState } from "react";
 import { formatEther } from "viem";
 import { useAccount } from "wagmi";
 import { useScwBalance } from "@/hooks/useScwBalance";
-import { startScwDepositWatch } from "@/lib/scw-balance-sync";
-import { NATIVE_SYMBOL, shortAddress } from "@/config/chain";
 import { UserAvatar } from "@/components/user/UserAvatar";
 import { useUserAvatar } from "@/components/user/UserAvatarProvider";
 import { useBnbUsdPrice } from "@/hooks/useBnbUsdPrice";
 import { bnbToUsd } from "@/lib/format-usd";
-import { copyToClipboard } from "@/lib/copy-to-clipboard";
-import { useWalletFunding } from "@/components/wallet/WalletFundingProvider";
 import { usePumpWallet } from "@/components/wallet/PumpWalletProvider";
 import { isPumpAuthConfigured } from "@/lib/auth-config";
-import { PumpIcon, faArrowLeftRight, faChevronDown, faCopy, faWallet } from "@/lib/icons";
+import { PumpIcon, faChevronDown } from "@/lib/icons";
+import { NATIVE_SYMBOL } from "@/config/chain";
+import { AccountSheet } from "@/components/wallet/AccountSheet";
+import { WalletAccountPanel } from "@/components/wallet/WalletAccountPanel";
 
 function formatHeaderBalanceUsd(usd: number | null): string {
   if (usd == null || !Number.isFinite(usd)) return "$0.00";
@@ -29,143 +27,25 @@ function formatHeaderBalanceNative(native: number): string {
   return `${native.toFixed(6)} ${NATIVE_SYMBOL}`;
 }
 
-function formatNativeAvailable(native: number): string {
-  return formatHeaderBalanceNative(native);
-}
+function useMobileAccountEntry(): boolean {
+  const [isMobile, setIsMobile] = useState(false);
 
-type WalletMenuProps = {
-  address: string;
-  bnbAmount: number;
-  usdAmount: number | null;
-  showBnb: boolean;
-  onToggleBalanceUnit: () => void;
-  onClose: () => void;
-  onLogout: () => void;
-};
+  useEffect(() => {
+    const media = window.matchMedia("(max-width: 767px)");
+    const sync = () => setIsMobile(media.matches);
+    sync();
+    media.addEventListener("change", sync);
+    return () => media.removeEventListener("change", sync);
+  }, []);
 
-function WalletMenu({
-  address,
-  bnbAmount,
-  usdAmount,
-  showBnb,
-  onToggleBalanceUnit,
-  onClose,
-  onLogout,
-}: WalletMenuProps) {
-  const { openDeposit, openWithdraw } = useWalletFunding();
-  const [copied, setCopied] = useState(false);
-
-  async function onCopyAddress(event: MouseEvent<HTMLButtonElement>) {
-    event.stopPropagation();
-    const ok = await copyToClipboard(address);
-    setCopied(ok);
-    if (ok) {
-      startScwDepositWatch();
-      setTimeout(() => setCopied(false), 2000);
-    }
-  }
-
-  return (
-    <div
-      className="absolute right-0 top-[calc(100%+0.5rem)] z-50 w-[min(18rem,calc(100vw-2rem))] border border-pump-border/50 bg-pump-card p-3"
-      role="menu"
-    >
-      <p className="section-label text-pump-muted">Your balance</p>
-      <button
-        type="button"
-        onClick={onToggleBalanceUnit}
-        className="mt-1 block text-left transition hover:text-pump-accent"
-        aria-label={showBnb ? "Show balance in USD" : `Show balance in ${NATIVE_SYMBOL}`}
-      >
-        <span className="financial-value text-2xl font-semibold text-pump-text">
-          {showBnb ? formatHeaderBalanceNative(bnbAmount) : formatHeaderBalanceUsd(usdAmount)}
-        </span>
-      </button>
-      <p className="mt-0.5 text-caption text-pump-muted">
-        {showBnb
-          ? `${formatHeaderBalanceUsd(usdAmount)} available`
-          : `${formatNativeAvailable(bnbAmount)} available`}
-      </p>
-
-      <button
-        type="button"
-        onClick={(event) => void onCopyAddress(event)}
-        className="mt-4 flex w-full items-center justify-between gap-2 border border-pump-border/45 bg-pump-border/4 px-3 py-2 text-caption text-pump-text transition hover:bg-pump-border/8"
-        aria-label={copied ? "Address copied" : "Copy smart wallet address"}
-      >
-        <span className="financial-value">{shortAddress(address)}</span>
-        <span className="flex items-center gap-1 text-pump-muted">
-          {copied ? "Copied" : <PumpIcon icon={faCopy} className="h-3.5 w-3.5" />}
-        </span>
-      </button>
-      <p className="mt-1 text-caption text-pump-muted">Smart wallet · deposit address</p>
-
-      <div className="mt-3 grid grid-cols-2 gap-2">
-        <button
-          type="button"
-          onClick={() => {
-            onClose();
-            openDeposit();
-          }}
-          className="primary-button py-2.5 text-body-sm"
-        >
-          Deposit
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            onClose();
-            openWithdraw();
-          }}
-          className="secondary-button py-2.5 text-body-sm"
-        >
-          Withdraw
-        </button>
-      </div>
-
-      <div className="mt-2 grid grid-cols-2 gap-2">
-        <Link
-          href="/portfolio"
-          onClick={onClose}
-          className="flex flex-col items-center gap-2 border border-pump-border/45 bg-pump-border/4 px-3 py-3 text-center transition hover:bg-pump-border/8"
-        >
-          <span className="text-pump-muted">
-            <PumpIcon icon={faWallet} className="h-5 w-5" />
-          </span>
-          <span className="text-body-sm font-semibold text-pump-text">Portfolio</span>
-          <span className="text-caption text-pump-muted">Holdings</span>
-        </Link>
-        <Link
-          href="/"
-          onClick={onClose}
-          className="flex flex-col items-center gap-2 border border-pump-border/45 bg-pump-border/4 px-3 py-3 text-center transition hover:bg-pump-border/8"
-        >
-          <span className="text-pump-muted">
-            <PumpIcon icon={faArrowLeftRight} className="h-5 w-5" />
-          </span>
-          <span className="text-body-sm font-semibold text-pump-text">Trade</span>
-          <span className="text-caption text-pump-muted">Browse Arena</span>
-        </Link>
-      </div>
-
-      <button
-        type="button"
-        onClick={() => {
-          onLogout();
-          onClose();
-        }}
-        className="mt-3 w-full py-2.5 text-body-sm font-medium text-pump-danger transition hover:bg-pump-danger/10"
-      >
-        Log out
-      </button>
-    </div>
-  );
+  return isMobile;
 }
 
 function ConnectedWalletButton({ address }: { address: string }) {
   const { avatarId } = useUserAvatar();
   const { bnbUsd } = useBnbUsdPrice();
   const { logout } = usePumpWallet();
+  const isMobileAccountEntry = useMobileAccountEntry();
   const [open, setOpen] = useState(false);
   const [showBnb, setShowBnb] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -177,8 +57,18 @@ function ConnectedWalletButton({ address }: { address: string }) {
     ? formatHeaderBalanceNative(bnbAmount)
     : formatHeaderBalanceUsd(usdAmount);
 
+  const panelProps = {
+    address,
+    bnbAmount,
+    usdAmount,
+    showBnb,
+    onToggleBalanceUnit: () => setShowBnb((value) => !value),
+    onClose: () => setOpen(false),
+    onLogout: () => void logout(),
+  };
+
   useEffect(() => {
-    if (!open) return;
+    if (!open || isMobileAccountEntry) return;
 
     function onPointerDown(event: globalThis.MouseEvent) {
       if (!containerRef.current?.contains(event.target as Node)) {
@@ -188,7 +78,31 @@ function ConnectedWalletButton({ address }: { address: string }) {
 
     document.addEventListener("mousedown", onPointerDown);
     return () => document.removeEventListener("mousedown", onPointerDown);
-  }, [open]);
+  }, [open, isMobileAccountEntry]);
+
+  if (isMobileAccountEntry) {
+    return (
+      <>
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="app-header-account-btn"
+          aria-expanded={open}
+          aria-haspopup="dialog"
+          aria-label="Open account"
+        >
+          {avatarId ? (
+            <UserAvatar address={address} avatarId={avatarId} size={28} />
+          ) : (
+            <span className="app-header-account-btn__fallback" aria-hidden>
+              {address.slice(2, 4).toUpperCase()}
+            </span>
+          )}
+        </button>
+        <AccountSheet open={open} {...panelProps} />
+      </>
+    );
+  }
 
   return (
     <div className="relative" ref={containerRef}>
@@ -211,15 +125,12 @@ function ConnectedWalletButton({ address }: { address: string }) {
         />
       </button>
       {open ? (
-        <WalletMenu
-          address={address}
-          bnbAmount={bnbAmount}
-          usdAmount={usdAmount}
-          showBnb={showBnb}
-          onToggleBalanceUnit={() => setShowBnb((value) => !value)}
-          onClose={() => setOpen(false)}
-          onLogout={() => void logout()}
-        />
+        <div
+          className="wallet-account-dropdown absolute right-0 top-[calc(100%+0.5rem)] z-50 w-[min(18rem,calc(100vw-2rem))] border border-pump-border/50 bg-pump-card p-3"
+          role="menu"
+        >
+          <WalletAccountPanel {...panelProps} variant="dropdown" />
+        </div>
       ) : null}
     </div>
   );
