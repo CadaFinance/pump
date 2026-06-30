@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
+  releaseMobileViewportAfterKeyboard,
   useMobileModalClose,
   useMobileModalScrollLock,
 } from "@/hooks/useMobileModalScrollLock";
@@ -22,6 +23,7 @@ export function TokenMobileMarketSheet({
   activeTokenAddress,
 }: TokenMobileMarketSheetProps) {
   const [mounted, setMounted] = useState(false);
+  const wasOpenRef = useRef(false);
   const handleClose = useMobileModalClose(onClose);
 
   useEffect(() => {
@@ -29,6 +31,16 @@ export function TokenMobileMarketSheet({
   }, []);
 
   useMobileModalScrollLock(open);
+
+  useEffect(() => {
+    if (open) {
+      wasOpenRef.current = true;
+      return;
+    }
+    if (!wasOpenRef.current) return;
+    wasOpenRef.current = false;
+    releaseMobileViewportAfterKeyboard();
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;

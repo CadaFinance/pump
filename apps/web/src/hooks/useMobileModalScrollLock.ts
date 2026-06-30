@@ -59,17 +59,46 @@ function resetScrollContainers(selectors: readonly string[]) {
   }
 }
 
-function shouldPreserveTokenPageScroll(): boolean {
+function shouldPreserveTokenPageInnerScroll(): boolean {
   return isTokenPageLockActive() && isMobileViewport();
 }
 
-function resetWindowViewportOnly() {
-  if (shouldPreserveTokenPageScroll()) return;
-
+/** iOS Safari may scroll the window even when html/body are overflow:hidden. */
+function resetWindowScrollPosition() {
   window.scrollTo(0, 0);
   document.documentElement.scrollTop = 0;
   document.body.scrollTop = 0;
-  resetScrollContainers(TOKEN_PAGE_SCROLL_SELECTORS);
+
+  const offsetTop = window.visualViewport?.offsetTop ?? 0;
+  if (offsetTop > 0) {
+    window.scrollTo(0, offsetTop);
+    window.scrollTo(0, 0);
+  }
+}
+
+function clearStuckKeyboardBodyStyles() {
+  if (!isMobileViewport()) return;
+
+  const { body } = document;
+  if (body.style.position !== "fixed") return;
+
+  // Token page never uses our fixed-body lock; clear stray iOS/keyboard styles.
+  if (isTokenPageLockActive() || lockCount <= 0) {
+    body.style.position = "";
+    body.style.top = "";
+    body.style.left = "";
+    body.style.right = "";
+    body.style.width = "";
+  }
+}
+
+function resetWindowViewportOnly() {
+  resetWindowScrollPosition();
+  clearStuckKeyboardBodyStyles();
+
+  if (!shouldPreserveTokenPageInnerScroll()) {
+    resetScrollContainers(TOKEN_PAGE_SCROLL_SELECTORS);
+  }
 }
 
 function resetModalScrollOnly() {
@@ -78,23 +107,24 @@ function resetModalScrollOnly() {
 
 function resetViewportScroll() {
   resetWindowViewportOnly();
-  resetModalScrollOnly();
+  if (!shouldPreserveTokenPageInnerScroll()) {
+    resetModalScrollOnly();
+  }
 }
 
 /** Reset scroll offsets after mobile keyboard + modal close (iOS Safari). */
 export function releaseMobileViewportAfterKeyboard() {
-  if (typeof window === "undefined") return;
+  if (typeof window === "undefined" || !isMobileViewport()) return;
 
   blurActiveElement();
 
   const run = () => resetViewportScroll();
 
   run();
-  requestAnimationFrame(() => {
-    run();
-    window.setTimeout(run, 120);
-    window.setTimeout(run, 280);
-  });
+  requestAnimationFrame(run);
+  window.setTimeout(run, 120);
+  window.setTimeout(run, 320);
+  window.setTimeout(run, 520);
 }
 
 function captureBodySnapshot(): BodySnapshot {
@@ -147,20 +177,24 @@ function attachViewportResizeGuard() {
 
   viewportResizeHandler = () => {
     if (lockCount <= 0) return;
-    if (shouldPreserveTokenPageScroll()) return;
     requestAnimationFrame(() => {
       if (lockCount <= 0) return;
-      if (shouldPreserveTokenPageScroll()) return;
-      resetWindowViewportOnly();
+      resetWindowScrollPosition();
+      clearStuckKeyboardBodyStyles();
+      if (!shouldPreserveTokenPageInnerScroll()) {
+        resetScrollContainers(TOKEN_PAGE_SCROLL_SELECTORS);
+      }
     });
   };
 
   window.visualViewport?.addEventListener("resize", viewportResizeHandler);
+  window.visualViewport?.addEventListener("scroll", viewportResizeHandler);
 }
 
 function detachViewportResizeGuard() {
   if (!viewportResizeHandler) return;
   window.visualViewport?.removeEventListener("resize", viewportResizeHandler);
+  window.visualViewport?.removeEventListener("scroll", viewportResizeHandler);
   viewportResizeHandler = null;
 }
 

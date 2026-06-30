@@ -219,14 +219,24 @@ function formatAmountFromWei(wei: bigint): string {
   return raw.replace(/0+$/, "").replace(/\.$/, "");
 }
 
-function usdToNativeAmountString(usd: number, nativeUsd: number): string {
-  const native = usd / nativeUsd;
-  if (!Number.isFinite(native) || native <= 0) return "";
+function usdStringToSpendWei(usdStr: string, nativeUsd: number): bigint {
+  const trimmed = usdStr.trim();
+  if (!trimmed) return 0n;
+  const usd = Number(trimmed);
+  if (!Number.isFinite(usd) || usd <= 0) return 0n;
   try {
-    return formatAmountFromWei(parseEther(native.toFixed(12)));
+    return parseEther((usd / nativeUsd).toFixed(12));
   } catch {
-    return "";
+    return 0n;
   }
+}
+
+function formatUsdInputAmount(wei: bigint, nativeUsd: number): string {
+  const native = Number(formatEther(wei));
+  if (!Number.isFinite(native) || native <= 0 || nativeUsd <= 0) return "";
+  const usd = native * nativeUsd;
+  const fixed = usd >= 1 ? usd.toFixed(2) : usd.toFixed(4);
+  return fixed.replace(/\.?0+$/, "");
 }
 
 function formatTokenInputAmount(wei: bigint): string {
@@ -442,10 +452,11 @@ export function TradePanel({
     if (side !== "sell") return 0n;
     if (linkedSellTokenWei != null) return linkedSellTokenWei;
     if (sellInputMode === "token") return parseTokenAmount(amount);
-    const targetBnbOut = parseBnbAmount(amount);
+    if (bnbUsd == null || bnbUsd <= 0) return 0n;
+    const targetBnbOut = usdStringToSpendWei(amount, bnbUsd);
     if (targetBnbOut === 0n || !bondingCurve || protocolFeeBps === undefined) return 0n;
     return resolveTokenInForBnbOut(bondingCurve, protocolFeeBps, targetBnbOut) ?? 0n;
-  }, [side, linkedSellTokenWei, sellInputMode, amount, bondingCurve, protocolFeeBps]);
+  }, [side, linkedSellTokenWei, sellInputMode, amount, bondingCurve, protocolFeeBps, bnbUsd]);
 
   const targetTokenWei = side === "sell" ? sellTokenWei : buyTargetTokenWei;
 
@@ -458,8 +469,9 @@ export function TradePanel({
   const buySpendWei = useMemo(() => {
     if (side !== "buy") return 0n;
     if (buyInputMode === "token") return resolvedBuyBnbWei ?? 0n;
-    return parseBnbAmount(amount);
-  }, [side, buyInputMode, amount, resolvedBuyBnbWei]);
+    if (bnbUsd == null || bnbUsd <= 0) return 0n;
+    return usdStringToSpendWei(amount, bnbUsd);
+  }, [side, buyInputMode, amount, resolvedBuyBnbWei, bnbUsd]);
 
   const buyCostWei = useMemo(() => {
     if (side !== "buy") return 0n;
@@ -709,12 +721,7 @@ export function TradePanel({
 
   const activeInputMode = side === "buy" ? buyInputMode : sellInputMode;
 
-  const displayInputValue =
-    activeInputMode === "usd" && bnbUsd != null
-      ? amount && Number(amount) > 0
-        ? (Number(amount) * bnbUsd).toFixed(2).replace(/\.?0+$/, "")
-        : amount
-      : amount;
+  const displayInputValue = amount;
 
   const hasTradeAmount =
     side === "buy"
@@ -1176,6 +1183,8 @@ export function TradePanel({
         maxBuySpendWei
       );
       if (tokenOut > 0n) setAmount(formatTokenInputAmount(tokenOut));
+    } else if (bnbUsd != null && bnbUsd > 0) {
+      setAmount(formatUsdInputAmount(maxBuySpendWei, bnbUsd));
     } else {
       setAmount(formatAmountFromWei(maxBuySpendWei));
     }
@@ -1186,6 +1195,7 @@ export function TradePanel({
     buyInputMode,
     bondingCurve,
     protocolFeeBps,
+    bnbUsd,
   ]);
 
   useEffect(() => {
@@ -1285,17 +1295,6 @@ export function TradePanel({
     setLinkedSellTokenWei(null);
     setNumpadPreset(null);
     const cleaned = raw.replace(/,/g, ".").replace(/[^\d.]/g, "");
-    if (activeInputMode === "usd" && bnbUsd != null && bnbUsd > 0) {
-      if (!cleaned) {
-        setAmount("");
-        return;
-      }
-      const usd = Number(cleaned);
-      if (!Number.isFinite(usd)) return;
-      const nativeAmount = usdToNativeAmountString(usd, bnbUsd);
-      setAmount(nativeAmount);
-      return;
-    }
     setAmount(cleaned);
   }
 
@@ -1325,7 +1324,11 @@ export function TradePanel({
       return;
     }
 
-    setAmount(formatAmountFromWei(spendWei));
+    if (bnbUsd != null && bnbUsd > 0) {
+      setAmount(formatUsdInputAmount(spendWei, bnbUsd));
+    } else {
+      setAmount(formatAmountFromWei(spendWei));
+    }
     setLinkedBuySpendWei(spendWei);
     setError(null);
   }
@@ -1376,7 +1379,11 @@ export function TradePanel({
 
     const { ethOut } = quoteSellFromCurveState(bondingCurve, protocolFeeBps, tokenWei);
     if (ethOut === 0n) return;
-    setAmount(formatAmountFromWei(ethOut));
+    if (bnbUsd != null && bnbUsd > 0) {
+      setAmount(formatUsdInputAmount(ethOut, bnbUsd));
+    } else {
+      setAmount(formatAmountFromWei(ethOut));
+    }
     setError(null);
   }
 
