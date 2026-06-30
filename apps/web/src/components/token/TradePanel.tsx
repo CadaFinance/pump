@@ -333,6 +333,7 @@ export function TradePanel({
   const autoSubmitPendingRef = useRef(false);
   const autoSubmitTriggeredRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
+  const [amountInputHint, setAmountInputHint] = useState<string | null>(null);
   const [assetMenuOpen, setAssetMenuOpen] = useState(false);
   const assetMenuRef = useRef<HTMLDivElement>(null);
   const [pendingReservationTick, setPendingReservationTick] = useState(0);
@@ -905,18 +906,12 @@ export function TradePanel({
   const insufficientTokenOnly =
     side === "sell" && insufficientSellTokenBalance && !insufficientSellGas;
 
-  const sellHasNoTokenBalance =
-    side === "sell" &&
-    isConnected &&
-    !wrongChain &&
-    tokenBalance !== undefined &&
-    maxSellTokenWei === 0n;
-
   const showInsufficientTokenBalance =
     side === "sell" &&
     isConnected &&
     !wrongChain &&
-    (sellHasNoTokenBalance || (sellTokenWei > 0n && insufficientSellTokenBalance));
+    hasSubmitAmount &&
+    insufficientSellTokenBalance;
 
   const balancePending =
     side === "buy"
@@ -1283,6 +1278,7 @@ export function TradePanel({
   ]);
 
   function onDisplayInputChange(raw: string) {
+    setAmountInputHint(null);
     setLinkedBuySpendWei(null);
     setLinkedSellTokenWei(null);
     const cleaned = raw.replace(/,/g, ".").replace(/[^\d.]/g, "");
@@ -1998,11 +1994,11 @@ export function TradePanel({
       return;
     }
     if (side === "buy" && buyCostWei === 0n) {
-      toast.error("Enter amount", instantTradeGateMessage("zero_amount"));
+      setAmountInputHint("Please input amount");
       return;
     }
     if (side === "sell" && sellTokenWei === 0n) {
-      toast.error("Enter amount", instantTradeGateMessage("zero_amount"));
+      setAmountInputHint("Please input amount");
       return;
     }
 
@@ -2167,7 +2163,6 @@ export function TradePanel({
     if (wrongChain) return "Switch to Base Sepolia";
     if (paused) return "Trading paused";
     if (showInsufficientTokenBalance) return "Insufficient balance";
-    if (!hasSubmitAmount) return "Enter amount";
     if (tradeSubmitPending) return side === "buy" ? `Buy ${symbol}` : `Sell ${symbol}`;
     if (showDepositCta) return `Deposit ${NATIVE_SYMBOL}`;
     if (buyGateBlocked) return `Not enough ${NATIVE_SYMBOL}`;
@@ -2185,7 +2180,6 @@ export function TradePanel({
     if (!isConnected) return false;
     if (wrongChain || paused) return true;
     if (showInsufficientTokenBalance) return true;
-    if (!hasSubmitAmount) return true;
     if (tradeSubmitPending) return true;
     if (showDepositCta) return false;
     if (buyGateBlocked) return true;
@@ -2307,6 +2301,7 @@ export function TradePanel({
                   setLinkedBuySpendWei(null);
                   setLinkedSellTokenWei(null);
                   setError(null);
+                  setAmountInputHint(null);
                   setAssetMenuOpen(false);
                 }}
                 className={side === "buy" ? "trade-side-button-active-buy" : "trade-side-button"}
@@ -2321,6 +2316,7 @@ export function TradePanel({
                   setLinkedBuySpendWei(null);
                   setLinkedSellTokenWei(null);
                   setError(null);
+                  setAmountInputHint(null);
                   setAssetMenuOpen(false);
                 }}
                 className={side === "sell" ? "trade-side-button-active-sell" : "trade-side-button"}
@@ -2413,6 +2409,12 @@ export function TradePanel({
                 ) : null}
               </div>
             </div>
+
+            {amountInputHint ? (
+              <p className="trade-field-hint text-caption text-pump-danger" role="alert">
+                {amountInputHint}
+              </p>
+            ) : null}
 
             <div className={`trade-teeth-slider trade-teeth-slider--${side}`}>
               <div
