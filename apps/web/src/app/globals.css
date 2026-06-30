@@ -1985,6 +1985,12 @@ code,
     color: rgb(var(--pump-text));
   }
 
+  @media (max-width: 1023px) {
+    .token-market-sidebar__search .arena-search-input {
+      font-size: 1rem;
+    }
+  }
+
   .token-market-sidebar__search .arena-search-input::placeholder {
     color: rgb(var(--pump-muted));
   }
@@ -5277,9 +5283,14 @@ code,
     outline: none;
   }
 
-  /* iOS Safari auto-zooms focused inputs below 16px — keep toolbar search at body size on mobile. */
-  @media (max-width: 767px) {
+  /* iOS Safari auto-zooms focused inputs below 16px — keep mobile search at body size. */
+  @media (max-width: 1023px) {
     .arena-search-input {
+      font-size: var(--text-body);
+    }
+
+    .modal-panel .field-input,
+    .modal-sheet-panel .field-input {
       font-size: var(--text-body);
     }
   }

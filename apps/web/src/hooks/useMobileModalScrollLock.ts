@@ -33,19 +33,24 @@ function blurActiveElement() {
   }
 }
 
-function resetWindowViewportOnly() {
-  window.scrollTo(0, 0);
-  document.documentElement.scrollTop = 0;
-  document.body.scrollTop = 0;
+const TOKEN_PAGE_SCROLL_SELECTORS = [
+  "main.token-page-main",
+  ".app-shell--token",
+  ".token-page-grid",
+  ".token-page-content-slot",
+  ".token-page-stack--main",
+  ".token-mobile-toolbar-host",
+] as const;
 
-  for (const selector of [
-    "main.token-page-main",
-    ".app-shell--token",
-    ".token-page-grid",
-    ".token-page-content-slot",
-    ".token-page-stack--main",
-    ".token-mobile-toolbar-host",
-  ] as const) {
+const MODAL_SCROLL_SELECTORS = [
+  ".modal-sheet-host",
+  ".modal-sheet-panel",
+  ".token-mobile-market-sheet__body",
+  ".token-market-sidebar__list",
+] as const;
+
+function resetScrollContainers(selectors: readonly string[]) {
+  for (const selector of selectors) {
     document.querySelectorAll(selector).forEach((node) => {
       if (node instanceof HTMLElement) {
         node.scrollTop = 0;
@@ -54,21 +59,26 @@ function resetWindowViewportOnly() {
   }
 }
 
+function shouldPreserveTokenPageScroll(): boolean {
+  return isTokenPageLockActive() && isMobileViewport();
+}
+
+function resetWindowViewportOnly() {
+  if (shouldPreserveTokenPageScroll()) return;
+
+  window.scrollTo(0, 0);
+  document.documentElement.scrollTop = 0;
+  document.body.scrollTop = 0;
+  resetScrollContainers(TOKEN_PAGE_SCROLL_SELECTORS);
+}
+
+function resetModalScrollOnly() {
+  resetScrollContainers(MODAL_SCROLL_SELECTORS);
+}
+
 function resetViewportScroll() {
   resetWindowViewportOnly();
-
-  for (const selector of [
-    ".modal-sheet-host",
-    ".modal-sheet-panel",
-    ".token-mobile-market-sheet__body",
-    ".token-market-sidebar__list",
-  ] as const) {
-    document.querySelectorAll(selector).forEach((node) => {
-      if (node instanceof HTMLElement) {
-        node.scrollTop = 0;
-      }
-    });
-  }
+  resetModalScrollOnly();
 }
 
 /** Reset scroll offsets after mobile keyboard + modal close (iOS Safari). */
@@ -137,8 +147,10 @@ function attachViewportResizeGuard() {
 
   viewportResizeHandler = () => {
     if (lockCount <= 0) return;
+    if (shouldPreserveTokenPageScroll()) return;
     requestAnimationFrame(() => {
       if (lockCount <= 0) return;
+      if (shouldPreserveTokenPageScroll()) return;
       resetWindowViewportOnly();
     });
   };

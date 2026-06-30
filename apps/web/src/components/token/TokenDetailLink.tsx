@@ -37,6 +37,7 @@ export function TokenDetailLink({
   return (
     <Link
       href={href}
+      scroll={false}
       prefetch={prefetch}
       onMouseEnter={(event) => {
         prefetchBundle();

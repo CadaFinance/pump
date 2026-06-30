@@ -80,7 +80,7 @@ export function TokenMarketSidebar({
           placeholder="Search"
           aria-label="Search coins"
           wrapperClassName="token-market-sidebar__search"
-          className="!h-8 !pl-8 !pr-2 text-caption"
+          className="!h-9 !pl-8 !pr-2"
         />
 
         <TokenMarketSidebarFilterStrip
