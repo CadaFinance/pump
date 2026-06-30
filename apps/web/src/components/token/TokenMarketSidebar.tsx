@@ -18,6 +18,7 @@ type TokenMarketSidebarProps = {
   headWrapRef?: Ref<HTMLDivElement>;
   className?: string;
   onTokenSelect?: () => void;
+  onSearchFocusChange?: (focused: boolean) => void;
 };
 
 export function TokenMarketSidebar({
@@ -27,6 +28,7 @@ export function TokenMarketSidebar({
   headWrapRef,
   className = "",
   onTokenSelect,
+  onSearchFocusChange,
 }: TokenMarketSidebarProps) {
   const {
     exploreBoardTokens,
@@ -77,6 +79,8 @@ export function TokenMarketSidebar({
           embedded
           value={search}
           onChange={(event) => setSearch(event.target.value)}
+          onFocus={onSearchFocusChange ? () => onSearchFocusChange(true) : undefined}
+          onBlur={onSearchFocusChange ? () => onSearchFocusChange(false) : undefined}
           placeholder="Search"
           aria-label="Search coins"
           wrapperClassName="token-market-sidebar__search"

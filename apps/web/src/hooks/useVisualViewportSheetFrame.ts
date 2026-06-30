@@ -5,23 +5,27 @@ import { useEffect, useState, type CSSProperties } from "react";
 const MOBILE_MQ = "(max-width: 1023px)";
 
 export type VisualViewportSheetFrame = {
-  backdropStyle: CSSProperties;
   hostStyle: CSSProperties;
+  /** Lift sheet host to sit above the software keyboard. */
   useVisualViewport: boolean;
+  keyboardOpen: boolean;
 };
 
 const EMPTY_FRAME: VisualViewportSheetFrame = {
-  backdropStyle: {},
   hostStyle: {},
   useVisualViewport: false,
+  keyboardOpen: false,
 };
 
-/** Pin bottom sheets to the visible viewport so iOS keyboard does not cover them. */
-export function useVisualViewportSheetFrame(enabled: boolean): VisualViewportSheetFrame {
+/**
+ * Pin a bottom sheet to visualViewport while an input is focused (iOS keyboard).
+ * When `active` is false the sheet returns to the default bottom anchor.
+ */
+export function useVisualViewportSheetFrame(active: boolean): VisualViewportSheetFrame {
   const [frame, setFrame] = useState<VisualViewportSheetFrame>(EMPTY_FRAME);
 
   useEffect(() => {
-    if (!enabled || typeof window === "undefined") {
+    if (!active || typeof window === "undefined") {
       setFrame(EMPTY_FRAME);
       return;
     }
@@ -35,30 +39,34 @@ export function useVisualViewportSheetFrame(enabled: boolean): VisualViewportShe
     if (!vv) return;
 
     const update = () => {
-      const top = vv.offsetTop;
-      const height = vv.height;
-      const shared: CSSProperties = {
-        top: `${top}px`,
-        height: `${height}px`,
-        maxHeight: `${height}px`,
-      };
-
       setFrame({
-        backdropStyle: shared,
-        hostStyle: shared,
+        hostStyle: {
+          top: `${vv.offsetTop}px`,
+          height: `${vv.height}px`,
+          maxHeight: `${vv.height}px`,
+        },
         useVisualViewport: true,
+        keyboardOpen: true,
       });
     };
 
-    update();
-    vv.addEventListener("resize", update);
-    vv.addEventListener("scroll", update);
+    const scheduleUpdate = () => {
+      update();
+      requestAnimationFrame(update);
+    };
+
+    scheduleUpdate();
+    vv.addEventListener("resize", scheduleUpdate);
+    vv.addEventListener("scroll", scheduleUpdate);
+    window.addEventListener("resize", scheduleUpdate);
+
     return () => {
-      vv.removeEventListener("resize", update);
-      vv.removeEventListener("scroll", update);
+      vv.removeEventListener("resize", scheduleUpdate);
+      vv.removeEventListener("scroll", scheduleUpdate);
+      window.removeEventListener("resize", scheduleUpdate);
       setFrame(EMPTY_FRAME);
     };
-  }, [enabled]);
+  }, [active]);
 
   return frame;
 }

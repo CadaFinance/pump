@@ -48,7 +48,7 @@ export function TradeSheet({
   const [mounted, setMounted] = useState(false);
   const isModal = presentation === "modal";
   const handleClose = useMobileModalClose(onClose);
-  const sheetFrame = useVisualViewportSheetFrame(open && !isModal);
+  const sheetFrame = useVisualViewportSheetFrame(false);
 
   useEffect(() => {
     setMounted(true);
@@ -76,8 +76,7 @@ export function TradeSheet({
         type="button"
         className={`modal-backdrop modal-backdrop-dismiss z-[100] cursor-default transition-opacity ${
           isModal ? "" : "lg:hidden"
-        }${sheetFrame.useVisualViewport ? " modal-backdrop--visual-viewport" : ""}`}
-        style={sheetFrame.backdropStyle}
+        }${sheetFrame.keyboardOpen ? " modal-backdrop--keyboard-open" : ""}`}
         aria-label="Close trade panel"
         onClick={handleClose}
       />

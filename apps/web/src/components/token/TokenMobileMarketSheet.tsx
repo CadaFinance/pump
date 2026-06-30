@@ -24,13 +24,19 @@ export function TokenMobileMarketSheet({
   activeTokenAddress,
 }: TokenMobileMarketSheetProps) {
   const [mounted, setMounted] = useState(false);
+  const [searchFocused, setSearchFocused] = useState(false);
   const wasOpenRef = useRef(false);
   const handleClose = useMobileModalClose(onClose);
-  const sheetFrame = useVisualViewportSheetFrame(open);
+  const sheetFrame = useVisualViewportSheetFrame(open && searchFocused);
 
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  useEffect(() => {
+    if (open) return;
+    setSearchFocused(false);
+  }, [open]);
 
   useMobileModalScrollLock(open);
 
@@ -60,9 +66,8 @@ export function TokenMobileMarketSheet({
       <button
         type="button"
         className={`modal-backdrop modal-backdrop-dismiss z-[100] cursor-default lg:hidden${
-          sheetFrame.useVisualViewport ? " modal-backdrop--visual-viewport" : ""
+          searchFocused || sheetFrame.keyboardOpen ? " modal-backdrop--keyboard-open" : ""
         }`}
-        style={sheetFrame.backdropStyle}
         aria-label="Close markets list"
         onClick={handleClose}
       />
@@ -96,6 +101,7 @@ export function TokenMobileMarketSheet({
               activeTokenAddress={activeTokenAddress}
               density="compact"
               onTokenSelect={handleClose}
+              onSearchFocusChange={setSearchFocused}
             />
           </div>
         </div>

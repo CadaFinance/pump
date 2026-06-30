@@ -183,12 +183,17 @@ code,
 
   @media (max-width: 1023px) {
     .modal-backdrop {
-      background: rgb(var(--pump-bg));
-      backdrop-filter: none;
-      -webkit-backdrop-filter: none;
+      background: rgb(var(--pump-bg) / 0.82);
+      backdrop-filter: blur(40px) saturate(135%);
+      -webkit-backdrop-filter: blur(40px) saturate(135%);
     }
 
-    .modal-backdrop--visual-viewport,
+    .modal-backdrop--keyboard-open {
+      background: rgb(var(--pump-bg) / 0.9);
+      backdrop-filter: blur(48px) saturate(140%);
+      -webkit-backdrop-filter: blur(48px) saturate(140%);
+    }
+
     .modal-sheet-host--visual-viewport {
       inset: auto;
       left: 0;
