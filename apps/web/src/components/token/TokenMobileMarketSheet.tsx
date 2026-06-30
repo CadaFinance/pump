@@ -7,6 +7,7 @@ import {
   useMobileModalClose,
   useMobileModalScrollLock,
 } from "@/hooks/useMobileModalScrollLock";
+import { useVisualViewportSheetFrame } from "@/hooks/useVisualViewportSheetFrame";
 import { PumpIcon, faX } from "@/lib/icons";
 import { TokenMarketSidebar } from "@/components/token/TokenMarketSidebar";
 
@@ -25,6 +26,7 @@ export function TokenMobileMarketSheet({
   const [mounted, setMounted] = useState(false);
   const wasOpenRef = useRef(false);
   const handleClose = useMobileModalClose(onClose);
+  const sheetFrame = useVisualViewportSheetFrame(open);
 
   useEffect(() => {
     setMounted(true);
@@ -57,17 +59,23 @@ export function TokenMobileMarketSheet({
     <>
       <button
         type="button"
-        className="modal-backdrop modal-backdrop-dismiss z-[100] cursor-default lg:hidden"
+        className={`modal-backdrop modal-backdrop-dismiss z-[100] cursor-default lg:hidden${
+          sheetFrame.useVisualViewport ? " modal-backdrop--visual-viewport" : ""
+        }`}
+        style={sheetFrame.backdropStyle}
         aria-label="Close markets list"
         onClick={handleClose}
       />
       <div
-        className="modal-sheet-host z-[101] lg:hidden"
+        className={`modal-sheet-host z-[101] lg:hidden${
+          sheetFrame.useVisualViewport ? " modal-sheet-host--visual-viewport" : ""
+        }`}
+        style={sheetFrame.hostStyle}
         role="dialog"
         aria-modal="true"
         aria-label="Explore coins"
       >
-        <div className="token-mobile-market-sheet modal-panel modal-sheet-panel pointer-events-auto flex max-h-[min(85dvh,640px)] flex-col overflow-hidden border-x-0 border-b-0 rounded-t-2xl">
+        <div className="token-mobile-market-sheet modal-panel modal-sheet-panel pointer-events-auto flex max-h-full flex-col overflow-hidden border-x-0 border-b-0 rounded-t-2xl">
           <div className="shrink-0 border-b border-pump-border/32 px-4 pb-3 pt-2">
             <div className="mx-auto mb-3 h-1 w-9 bg-pump-border/45" aria-hidden />
             <div className="flex items-center justify-between gap-3">

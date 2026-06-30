@@ -181,6 +181,21 @@ code,
     }
   }
 
+  @media (max-width: 1023px) {
+    .modal-backdrop--visual-viewport,
+    .modal-sheet-host--visual-viewport {
+      inset: auto;
+      left: 0;
+      right: 0;
+      bottom: auto;
+      width: 100%;
+    }
+
+    .modal-sheet-host--visual-viewport .modal-sheet-panel {
+      max-height: 100%;
+    }
+  }
+
   .modal-sheet-host {
     position: fixed;
     inset: 0;

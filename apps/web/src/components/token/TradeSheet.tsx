@@ -6,6 +6,7 @@ import {
   useMobileModalClose,
   useMobileModalScrollLock,
 } from "@/hooks/useMobileModalScrollLock";
+import { useVisualViewportSheetFrame } from "@/hooks/useVisualViewportSheetFrame";
 import { TradePanel, type TradeConfirmedPayload, type TradeOptimisticPayload, type TradeSubmittedPayload } from "@/components/token/TradePanel";
 import type { TradePrefillConfig } from "@/lib/token-trade-prefill";
 import type { BondingCurveSnapshot } from "@/lib/bonding-curve";
@@ -45,7 +46,9 @@ export function TradeSheet({
   presentation = "sheet",
 }: TradeSheetProps) {
   const [mounted, setMounted] = useState(false);
+  const isModal = presentation === "modal";
   const handleClose = useMobileModalClose(onClose);
+  const sheetFrame = useVisualViewportSheetFrame(open && !isModal);
 
   useEffect(() => {
     setMounted(true);
@@ -64,7 +67,6 @@ export function TradeSheet({
 
   if (!open || !mounted) return null;
 
-  const isModal = presentation === "modal";
   const tradeSide = prefill?.side ?? "buy";
   const tradeTitle = tradeSide === "sell" ? `Sell $${symbol}` : `Buy $${symbol}`;
 
@@ -72,12 +74,18 @@ export function TradeSheet({
     <>
       <button
         type="button"
-        className={`modal-backdrop modal-backdrop-dismiss z-[100] cursor-default transition-opacity ${isModal ? "" : "lg:hidden"}`}
+        className={`modal-backdrop modal-backdrop-dismiss z-[100] cursor-default transition-opacity ${
+          isModal ? "" : "lg:hidden"
+        }${sheetFrame.useVisualViewport ? " modal-backdrop--visual-viewport" : ""}`}
+        style={sheetFrame.backdropStyle}
         aria-label="Close trade panel"
         onClick={handleClose}
       />
       <div
-        className={`modal-sheet-host z-[101] ${isModal ? "items-center p-4" : "lg:hidden"}`}
+        className={`modal-sheet-host z-[101] ${isModal ? "items-center p-4" : "lg:hidden"}${
+          sheetFrame.useVisualViewport ? " modal-sheet-host--visual-viewport" : ""
+        }`}
+        style={sheetFrame.hostStyle}
         role="dialog"
         aria-modal="true"
         aria-label={isModal ? tradeTitle : `Trade ${symbol}`}
@@ -86,7 +94,7 @@ export function TradeSheet({
           className={`modal-panel modal-sheet-panel pointer-events-auto flex flex-col overflow-hidden ${
             isModal
               ? "max-w-md max-h-[min(85dvh,640px)]"
-              : "max-h-[min(85dvh,720px)] border-x-0 border-b-0 rounded-t-2xl"
+              : "max-h-full border-x-0 border-b-0 rounded-t-2xl"
           }`}
         >
           {isModal ? (

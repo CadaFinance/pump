@@ -173,22 +173,8 @@ function unlockBodyScroll(snapshot: BodySnapshot) {
 }
 
 function attachViewportResizeGuard() {
-  if (!isMobileViewport() || viewportResizeHandler) return;
-
-  viewportResizeHandler = () => {
-    if (lockCount <= 0) return;
-    requestAnimationFrame(() => {
-      if (lockCount <= 0) return;
-      resetWindowScrollPosition();
-      clearStuckKeyboardBodyStyles();
-      if (!shouldPreserveTokenPageInnerScroll()) {
-        resetScrollContainers(TOKEN_PAGE_SCROLL_SELECTORS);
-      }
-    });
-  };
-
-  window.visualViewport?.addEventListener("resize", viewportResizeHandler);
-  window.visualViewport?.addEventListener("scroll", viewportResizeHandler);
+  // Intentionally no-op while modal is open — resetting window scroll on keyboard
+  // resize traps bottom sheets under the iOS keyboard. Restore runs on unlock only.
 }
 
 function detachViewportResizeGuard() {

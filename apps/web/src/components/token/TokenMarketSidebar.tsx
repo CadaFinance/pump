@@ -77,17 +77,6 @@ export function TokenMarketSidebar({
           embedded
           value={search}
           onChange={(event) => setSearch(event.target.value)}
-          onFocus={
-            density === "compact"
-              ? () => {
-                  requestAnimationFrame(() => {
-                    window.scrollTo(0, 0);
-                    document.documentElement.scrollTop = 0;
-                    document.body.scrollTop = 0;
-                  });
-                }
-              : undefined
-          }
           placeholder="Search"
           aria-label="Search coins"
           wrapperClassName="token-market-sidebar__search"
