@@ -4,6 +4,7 @@ export {
   faArrowTrendUp,
   faArrowUpRightFromSquare,
   faArrowsRotate,
+  faBars,
   faBell,
   faBolt,
   faBookmark as faBookmarkSolid,
@@ -133,6 +134,9 @@ export { faPen as faPencil } from "@fortawesome/free-solid-svg-icons";
 
 /** Lucide Trash2 */
 export { faTrash as faTrash2 } from "@fortawesome/free-solid-svg-icons";
+
+/** Lucide Menu / hamburger */
+export { faBars as faMenu } from "@fortawesome/free-solid-svg-icons";
 
 /** Lucide X */
 export { faXmark as faX } from "@fortawesome/free-solid-svg-icons";
