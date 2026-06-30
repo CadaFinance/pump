@@ -64,7 +64,9 @@ function shouldPreserveTokenPageInnerScroll(): boolean {
 }
 
 /** iOS Safari may scroll the window even when html/body are overflow:hidden. */
-function resetWindowScrollPosition() {
+export function pinMobileWindowScroll() {
+  if (typeof window === "undefined" || !isMobileViewport()) return;
+
   window.scrollTo(0, 0);
   document.documentElement.scrollTop = 0;
   document.body.scrollTop = 0;
@@ -74,6 +76,10 @@ function resetWindowScrollPosition() {
     window.scrollTo(0, offsetTop);
     window.scrollTo(0, 0);
   }
+}
+
+function resetWindowScrollPosition() {
+  pinMobileWindowScroll();
 }
 
 function clearStuckKeyboardBodyStyles() {
@@ -173,8 +179,20 @@ function unlockBodyScroll(snapshot: BodySnapshot) {
 }
 
 function attachViewportResizeGuard() {
-  // Intentionally no-op while modal is open — resetting window scroll on keyboard
-  // resize traps bottom sheets under the iOS keyboard. Restore runs on unlock only.
+  if (!isMobileViewport() || viewportResizeHandler) return;
+
+  viewportResizeHandler = () => {
+    if (lockCount <= 0) return;
+    requestAnimationFrame(() => {
+      if (lockCount <= 0) return;
+      // Pin window only — do not reset inner token scroll or modal list scroll.
+      pinMobileWindowScroll();
+      clearStuckKeyboardBodyStyles();
+    });
+  };
+
+  window.visualViewport?.addEventListener("resize", viewportResizeHandler);
+  window.visualViewport?.addEventListener("scroll", viewportResizeHandler);
 }
 
 function detachViewportResizeGuard() {
@@ -201,6 +219,32 @@ function acquireMobileModalScrollLock(): () => void {
     bodySnapshot = null;
     unlockBodyScroll(snapshot);
   };
+}
+
+/** Keep the token page from shifting when iOS keyboard opens inside a sheet. */
+export function usePinMobileWindowScrollWhile(active: boolean) {
+  useEffect(() => {
+    if (!active) return;
+
+    const pin = () => pinMobileWindowScroll();
+
+    pin();
+    requestAnimationFrame(pin);
+
+    const vv = window.visualViewport;
+    vv?.addEventListener("resize", pin);
+    vv?.addEventListener("scroll", pin);
+
+    const t1 = window.setTimeout(pin, 80);
+    const t2 = window.setTimeout(pin, 200);
+
+    return () => {
+      vv?.removeEventListener("resize", pin);
+      vv?.removeEventListener("scroll", pin);
+      window.clearTimeout(t1);
+      window.clearTimeout(t2);
+    };
+  }, [active]);
 }
 
 /** Ref-counted body scroll lock with iOS keyboard viewport restore on release. */

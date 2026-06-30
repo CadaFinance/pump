@@ -6,6 +6,7 @@ import {
   releaseMobileViewportAfterKeyboard,
   useMobileModalClose,
   useMobileModalScrollLock,
+  usePinMobileWindowScrollWhile,
 } from "@/hooks/useMobileModalScrollLock";
 import { useVisualViewportSheetFrame } from "@/hooks/useVisualViewportSheetFrame";
 import { PumpIcon, faX } from "@/lib/icons";
@@ -39,6 +40,7 @@ export function TokenMobileMarketSheet({
   }, [open]);
 
   useMobileModalScrollLock(open);
+  usePinMobileWindowScrollWhile(open && searchFocused);
 
   useEffect(() => {
     if (open) {

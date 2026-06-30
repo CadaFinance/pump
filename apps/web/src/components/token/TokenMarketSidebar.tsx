@@ -8,6 +8,7 @@ import { TokenMarketSidebarRow } from "@/components/token/TokenMarketSidebarRow"
 import { TokenMarketSidebarHead } from "@/components/token/TokenMarketSidebarHead";
 import { TokenMarketSidebarFilterStrip } from "@/components/token/TokenMarketSidebarFilterStrip";
 import { FieldSearchInput } from "@/components/ui/FieldSearchInput";
+import { pinMobileWindowScroll } from "@/hooks/useMobileModalScrollLock";
 import type { TokenSidebarDensity } from "@/hooks/useTokenSidebarWidth";
 import type { Ref } from "react";
 
@@ -79,7 +80,15 @@ export function TokenMarketSidebar({
           embedded
           value={search}
           onChange={(event) => setSearch(event.target.value)}
-          onFocus={onSearchFocusChange ? () => onSearchFocusChange(true) : undefined}
+          onFocus={
+            onSearchFocusChange
+              ? () => {
+                  pinMobileWindowScroll();
+                  requestAnimationFrame(() => pinMobileWindowScroll());
+                  onSearchFocusChange(true);
+                }
+              : undefined
+          }
           onBlur={onSearchFocusChange ? () => onSearchFocusChange(false) : undefined}
           placeholder="Search"
           aria-label="Search coins"
