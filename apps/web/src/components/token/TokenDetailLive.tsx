@@ -262,7 +262,6 @@ export function TokenDetailLive({
   const [tradePrefill, setTradePrefill] = useState<TradePrefillConfig | null>(null);
   const [shareOpen, setShareOpen] = useState(false);
   const [mobileMarketOpen, setMobileMarketOpen] = useState(false);
-  const [mobileHeroDetailsOpen, setMobileHeroDetailsOpen] = useState(true);
   const [tradeSheetOpen, setTradeSheetOpen] = useState(false);
   const [, setAgeTick] = useState(0);
   const tradePrefillCapturedRef = useRef(false);
@@ -757,28 +756,20 @@ export function TokenDetailLive({
 
   useEffect(() => {
     setMobileMarketOpen(false);
-    setMobileHeroDetailsOpen(false);
     setTradeSheetOpen(false);
     setTradePrefill(null);
   }, [tokenAddress]);
 
   const closeMobileMarket = useCallback(() => setMobileMarketOpen(false), []);
   const openMobileMarket = useCallback(() => {
-    setMobileHeroDetailsOpen(false);
     setMobileMarketOpen(true);
   }, []);
 
   const openMarketFromTradeSheet = useCallback(() => {
     setTradeSheetOpen(false);
     setTradePrefill(null);
-    setMobileHeroDetailsOpen(false);
     setMobileMarketOpen(true);
   }, []);
-
-  const toggleMobileHeroDetails = useCallback(
-    () => setMobileHeroDetailsOpen((open) => !open),
-    []
-  );
 
   const closeTradeSheet = useCallback(() => {
     setTradeSheetOpen(false);
@@ -977,8 +968,6 @@ export function TokenDetailLive({
               favorited={favorited}
               tradeLocked={tradeLocked}
               copiedAddress={copiedAddress}
-              detailsOpen={mobileHeroDetailsOpen}
-              onToggleDetails={toggleMobileHeroDetails}
               onOpenMarket={openMobileMarket}
               onToggleFavorite={() => toggleFavorite(streamAddress)}
               onShare={() => setShareOpen(true)}

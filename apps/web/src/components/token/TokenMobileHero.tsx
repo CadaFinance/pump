@@ -6,14 +6,7 @@ import { FavoriteIcon } from "@/components/icons/FavoriteIcon";
 import { TokenAvatar } from "@/components/token/TokenAvatar";
 import { TokenSocialLinksBar } from "@/components/token/TokenSocialLinksBar";
 import { UserAvatarForAddress } from "@/components/user/UserAvatarForAddress";
-import {
-  PumpIcon,
-  faCheck,
-  faChevronDown,
-  faCopy,
-  faList,
-  faShare,
-} from "@/lib/icons";
+import { PumpIcon, faCheck, faCopy, faList, faShare } from "@/lib/icons";
 import { shortAddress } from "@/config/chain";
 
 type TokenMobileHeroProps = {
@@ -26,8 +19,6 @@ type TokenMobileHeroProps = {
   favorited: boolean;
   tradeLocked: boolean;
   copiedAddress: boolean;
-  detailsOpen: boolean;
-  onToggleDetails: () => void;
   onOpenMarket: () => void;
   onToggleFavorite: () => void;
   onShare: () => void;
@@ -65,7 +56,7 @@ function PriceHero({ priceUsd }: { priceUsd: number | null }) {
   return <PumpSubscriptPrice value={priceUsd} prefix="$" />;
 }
 
-/** Mobile token hero — explore + pair row, expandable 2-column price / stats grid. */
+/** Mobile token hero — pair row + always-visible price / stats grid. */
 export function TokenMobileHero({
   token,
   priceUsd,
@@ -76,8 +67,6 @@ export function TokenMobileHero({
   favorited,
   tradeLocked,
   copiedAddress,
-  detailsOpen,
-  onToggleDetails,
   onOpenMarket,
   onToggleFavorite,
   onShare,
@@ -119,23 +108,6 @@ export function TokenMobileHero({
         <div className="token-mobile-hero__actions">
           <button
             type="button"
-            className="token-mobile-hero__icon-btn"
-            aria-expanded={detailsOpen}
-            aria-controls="token-mobile-hero-stats"
-            aria-label={detailsOpen ? "Hide token details" : "Show token details"}
-            onClick={onToggleDetails}
-          >
-            <PumpIcon
-              icon={faChevronDown}
-              className={
-                detailsOpen
-                  ? "token-mobile-hero__details-chevron token-mobile-hero__details-chevron--open"
-                  : "token-mobile-hero__details-chevron"
-              }
-            />
-          </button>
-          <button
-            type="button"
             onClick={onToggleFavorite}
             disabled={tradeLocked}
             aria-label={favorited ? "Remove from favorites" : "Add to favorites"}
@@ -158,15 +130,7 @@ export function TokenMobileHero({
         </div>
       </div>
 
-      <div
-        id="token-mobile-hero-stats"
-        className={
-          detailsOpen
-            ? "token-mobile-hero__stats token-mobile-hero__stats--open"
-            : "token-mobile-hero__stats"
-        }
-        aria-hidden={!detailsOpen}
-      >
+      <div id="token-mobile-hero-stats" className="token-mobile-hero__stats">
         <div className="token-mobile-hero__stats-grid">
           <div className="token-mobile-hero__stats-col token-mobile-hero__stats-col--quote">
             <div className="token-mobile-hero__price">
