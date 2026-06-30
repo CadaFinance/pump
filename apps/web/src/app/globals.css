@@ -898,22 +898,81 @@ code,
   }
 
   .token-page-main {
-    height: calc(100dvh - var(--app-header-height));
     min-height: 0;
     overflow: hidden;
     background: rgb(var(--pump-bg));
   }
 
-  @media (max-width: 1023px) {
-    .token-page-main {
-      height: calc(100dvh - var(--app-header-height));
+  .app-shell--token {
+    display: flex;
+    height: 100vh;
+    max-height: 100vh;
+    flex-direction: column;
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
+
+  @supports (height: 100dvh) {
+    .app-shell--token {
+      height: 100dvh;
+      max-height: 100dvh;
     }
   }
 
-  html.token-page-lock,
-  html.token-page-lock body {
-    height: 100%;
+  @media (max-width: 1023px) {
+    @supports (height: 100svh) {
+      .app-shell--token {
+        height: 100svh;
+        max-height: 100svh;
+      }
+    }
+
+    .app-shell--token .token-page-main {
+      flex: 1 1 auto;
+      height: auto;
+      max-height: none;
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .app-shell--token .token-page-main {
+      height: calc(100vh - var(--app-header-height));
+      max-height: calc(100vh - var(--app-header-height));
+    }
+
+    @supports (height: 100dvh) {
+      .app-shell--token .token-page-main {
+        height: calc(100dvh - var(--app-header-height));
+        max-height: calc(100dvh - var(--app-header-height));
+      }
+    }
+  }
+
+  html.token-page-lock {
     overflow: hidden;
+    overscroll-behavior: none;
+  }
+
+  html.token-page-lock body {
+    overflow: hidden;
+    overscroll-behavior: none;
+    touch-action: manipulation;
+  }
+
+  @media (max-width: 1023px) {
+    html.token-page-lock,
+    html.token-page-lock body {
+      height: 100vh;
+      max-height: 100vh;
+    }
+
+    @supports (height: 100svh) {
+      html.token-page-lock,
+      html.token-page-lock body {
+        height: 100svh;
+        max-height: 100svh;
+      }
+    }
   }
 
   .token-page-grid {

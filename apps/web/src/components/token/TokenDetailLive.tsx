@@ -740,11 +740,6 @@ export function TokenDetailLive({
   const favorited = isFavorite(streamAddress);
 
   useEffect(() => {
-    document.documentElement.classList.add("token-page-lock");
-    return () => document.documentElement.classList.remove("token-page-lock");
-  }, []);
-
-  useEffect(() => {
     const timer = setInterval(() => setAgeTick((tick) => tick + 1), 60_000);
     return () => clearInterval(timer);
   }, []);

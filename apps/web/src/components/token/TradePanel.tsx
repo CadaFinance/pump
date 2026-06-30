@@ -2077,6 +2077,10 @@ export function TradePanel({
     applyBuySliderPercent(100);
   }, [side, maxBuySpendWei, bondingCurve, protocolFeeBps]);
 
+  useEffect(() => {
+    if (hasSubmitAmount) setAmountInputHint(null);
+  }, [hasSubmitAmount]);
+
   async function confirmPendingTrade(rememberAutoConfirm: boolean) {
     if (!pendingTrade) return;
     setTradeConfirmError(null);

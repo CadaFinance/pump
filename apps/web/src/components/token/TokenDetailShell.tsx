@@ -47,6 +47,11 @@ export function TokenDetailShell({
   const normalized = address.toLowerCase();
 
   useEffect(() => {
+    document.documentElement.classList.add("token-page-lock");
+    return () => document.documentElement.classList.remove("token-page-lock");
+  }, []);
+
+  useEffect(() => {
     if (initialBundle) seedTokenDetailBundle(normalized, initialBundle);
   }, [initialBundle, normalized]);
 
@@ -209,7 +214,7 @@ export function TokenDetailShell({
   return (
     <AppShell wide>
       {indexerSyncing && !contentSynced ? (
-        <p className="notice-warning mt-4 text-xs">
+        <p className="notice-warning mt-4 hidden text-xs lg:block">
           On-chain confirmed — indexer syncing token to Arena. Stats update automatically.
         </p>
       ) : null}

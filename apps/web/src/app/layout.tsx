@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { RootProviders } from "@/components/layout/RootProviders";
 import { ThemeProvider } from "@/components/theme/ThemeProvider";
 import { geistMono, geistSans } from "@/lib/fonts";
@@ -35,6 +35,12 @@ export const metadata: Metadata = {
     description: defaultDescription,
     images: ["/opengraph-image"],
   },
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
