@@ -3121,7 +3121,12 @@ code,
   }
 
   .trade-teeth-slider {
+    position: relative;
     user-select: none;
+  }
+
+  .trade-teeth-slider--dragging {
+    padding-bottom: 1.375rem;
   }
 
   .trade-teeth-slider__frame {
@@ -3243,8 +3248,9 @@ code,
 
   .trade-teeth-tooltip {
     position: absolute;
-    bottom: calc(100% + 0.25rem);
-    top: auto;
+    top: 50%;
+    margin-top: 0.25rem;
+    bottom: auto;
     transform: translateX(-50%);
     min-width: 2.25rem;
     padding: 0.1875rem 0.4375rem;

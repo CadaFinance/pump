@@ -2409,7 +2409,11 @@ export function TradePanel({
               </p>
             ) : null}
 
-            <div className={`trade-teeth-slider trade-teeth-slider--${side}`}>
+            <div
+              className={`trade-teeth-slider trade-teeth-slider--${side}${
+                teethDragging ? " trade-teeth-slider--dragging" : ""
+              }`}
+            >
               <div
                 ref={teethFrameRef}
                 className={
@@ -2422,15 +2426,6 @@ export function TradePanel({
                 onPointerUp={endTeethDrag}
                 onPointerCancel={endTeethDrag}
               >
-              {teethDragging ? (
-                <span
-                  className={`trade-teeth-tooltip trade-teeth-tooltip--${side}`}
-                  style={{ left: `${teethTooltipLeft}%` }}
-                  role="tooltip"
-                >
-                  {displayTeethPct}%
-                </span>
-              ) : null}
               <div className="trade-teeth-stack" aria-hidden>
                 <div className="trade-teeth-row trade-teeth-row--idle">
                   {Array.from({ length: TRADE_TEETH_COUNT }, (_, index) => (
@@ -2479,6 +2474,15 @@ export function TradePanel({
                 }
               />
             </div>
+              {teethDragging ? (
+                <span
+                  className={`trade-teeth-tooltip trade-teeth-tooltip--${side}`}
+                  style={{ left: `${teethTooltipLeft}%` }}
+                  role="tooltip"
+                >
+                  {displayTeethPct}%
+                </span>
+              ) : null}
             </div>
           </div>
         </div>
