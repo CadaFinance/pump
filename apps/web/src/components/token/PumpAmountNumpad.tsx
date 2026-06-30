@@ -56,7 +56,7 @@ export function PumpAmountNumpad({
 
   const scheduleBackspaceRepeat = useCallback(
     (delayMs: number) => {
-      repeatTimeoutRef.current = window.setTimeout(() => {
+      repeatTimeoutRef.current = setTimeout(() => {
         if (!holdingBackspaceRef.current || disabled) {
           clearBackspaceRepeat();
           return;
@@ -88,7 +88,7 @@ export function PumpAmountNumpad({
       hapticTap();
     }
 
-    repeatTimeoutRef.current = window.setTimeout(() => {
+    repeatTimeoutRef.current = setTimeout(() => {
       if (!holdingBackspaceRef.current) return;
       scheduleBackspaceRepeat(BACKSPACE_REPEAT_START_MS);
     }, BACKSPACE_HOLD_DELAY_MS);
