@@ -1,9 +1,13 @@
 "use client";
 
+import { TokenAvatar } from "@/components/token/TokenAvatar";
+
 type TradeQuickOrderSide = "buy" | "sell";
 
 type TradeQuickOrderHeaderProps = {
+  tokenAddress: string;
   symbol: string;
+  logoUrl?: string | null;
   changePct?: number | null;
   side: TradeQuickOrderSide;
   onSideChange: (side: TradeQuickOrderSide) => void;
@@ -25,7 +29,9 @@ function changeBadgeClass(pct: number | null | undefined): string {
 }
 
 export function TradeQuickOrderHeader({
+  tokenAddress,
   symbol,
+  logoUrl = null,
   changePct = null,
   side,
   onSideChange,
@@ -47,6 +53,13 @@ export function TradeQuickOrderHeader({
 
       <div className="trade-quick-order-header__meta">
         <div className="trade-quick-order-header__pair-row">
+          <TokenAvatar
+            address={tokenAddress}
+            symbol={symbol}
+            logoUrl={logoUrl}
+            size={26}
+            className="trade-quick-order-header__logo !ring-0"
+          />
           <span className="trade-quick-order-header__pair financial-value">{symbol}/USD</span>
           <span className={changeBadgeClass(changePct)}>{formatChangePct(changePct)}</span>
         </div>

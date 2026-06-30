@@ -169,6 +169,8 @@ type TradePanelProps = {
   changePct?: number | null;
   /** Mobile trade sheet — close handler for Quick Order header. */
   sheetOnClose?: () => void;
+  /** Token logo for mobile Quick Order header. */
+  logoUrl?: string | null;
 };
 
 function parseBnbAmount(value: string): bigint {
@@ -321,6 +323,7 @@ export function TradePanel({
   chainCurveSnapshot,
   changePct = null,
   sheetOnClose,
+  logoUrl = null,
 }: TradePanelProps) {
   const { address, isConnected, chain } = useAccount();
   const { data: gasPrice } = useGasPrice({ chainId: pumpChain.id });
@@ -2340,7 +2343,9 @@ export function TradePanel({
 
         {tradeMode === "market" && useQuickOrderHeader ? (
           <TradeQuickOrderHeader
+            tokenAddress={tokenAddress}
             symbol={symbol}
+            logoUrl={logoUrl}
             changePct={changePct}
             side={side}
             onSideChange={switchTradeSide}

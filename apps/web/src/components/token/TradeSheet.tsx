@@ -27,6 +27,8 @@ type TradeSheetProps = {
   chainCurveSnapshot?: BondingCurveSnapshot;
   /** 24h price change for mobile Quick Order header. */
   changePct?: number | null;
+  /** Token logo for mobile Quick Order header. */
+  logoUrl?: string | null;
   /** Bottom sheet on mobile token page; centered modal for portfolio quick actions. */
   presentation?: "sheet" | "modal";
 };
@@ -46,6 +48,7 @@ export function TradeSheet({
   onTradeConfirmed,
   chainCurveSnapshot,
   changePct = null,
+  logoUrl = null,
   presentation = "sheet",
 }: TradeSheetProps) {
   const [mounted, setMounted] = useState(false);
@@ -131,6 +134,7 @@ export function TradeSheet({
               onTradeConfirmed={onTradeConfirmed}
               chainCurveSnapshot={chainCurveSnapshot}
               changePct={changePct}
+              logoUrl={logoUrl}
               sheetOnClose={isModal ? undefined : handleClose}
             />
           </div>

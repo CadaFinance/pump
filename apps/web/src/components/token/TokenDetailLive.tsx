@@ -1086,6 +1086,7 @@ export function TokenDetailLive({
         onTradeConfirmed={handleMobileTradeConfirmed}
         chainCurveSnapshot={tradeCurveSnapshot}
         changePct={changeTone}
+        logoUrl={liveToken.logoUrl}
       />
 
     </div>
