@@ -306,7 +306,7 @@ export function TradePanel({
   const { address, isConnected, chain } = useAccount();
   const { data: gasPrice } = useGasPrice({ chainId: pumpChain.id });
   const { openConnectModal } = useOpenConnectModal();
-  const { openFundChoice } = useWalletFunding();
+  const { openDeposit } = useWalletFunding();
   const [tradeConfirmOpen, setTradeConfirmOpen] = useState(false);
   const [tradeConfirmError, setTradeConfirmError] = useState<string | null>(null);
   const [pendingTrade, setPendingTrade] = useState<{
@@ -1976,13 +1976,7 @@ export function TradePanel({
       return;
     }
     if (showDepositCta) {
-      openFundChoice({
-        title: `Add ${NATIVE_SYMBOL} to trade`,
-        message:
-          side === "buy"
-            ? `You need more ${NATIVE_SYMBOL} on Base to complete this buy, including network fees.`
-            : `You need a small ${NATIVE_SYMBOL} balance to pay network fees for this sell.`,
-      });
+      openDeposit();
       return;
     }
     if (wrongChain) {
@@ -2164,13 +2158,12 @@ export function TradePanel({
     if (paused) return "Trading paused";
     if (showInsufficientTokenBalance) return "Insufficient balance";
     if (tradeSubmitPending) return side === "buy" ? `Buy ${symbol}` : `Sell ${symbol}`;
-    if (showDepositCta) return `Deposit ${NATIVE_SYMBOL}`;
     if (buyGateBlocked) return `Not enough ${NATIVE_SYMBOL}`;
     return side === "buy" ? `Buy ${symbol}` : `Sell ${symbol}`;
   })();
 
   const submitButtonClass =
-    showDepositCta || side === "buy"
+    side === "buy"
       ? "trade-submit-button--buy"
       : showInsufficientTokenBalance
         ? "trade-submit-button--sell trade-submit-button--insufficient"
