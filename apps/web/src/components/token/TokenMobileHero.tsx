@@ -6,7 +6,7 @@ import { FavoriteIcon } from "@/components/icons/FavoriteIcon";
 import { TokenAvatar } from "@/components/token/TokenAvatar";
 import { TokenSocialLinksBar } from "@/components/token/TokenSocialLinksBar";
 import { UserAvatarForAddress } from "@/components/user/UserAvatarForAddress";
-import { PumpIcon, faCheck, faCopy, faList, faShare } from "@/lib/icons";
+import { PumpIcon, faCheck, faChevronDown, faChevronUp, faCopy } from "@/lib/icons";
 import { shortAddress } from "@/config/chain";
 
 type TokenMobileHeroProps = {
@@ -19,9 +19,9 @@ type TokenMobileHeroProps = {
   favorited: boolean;
   tradeLocked: boolean;
   copiedAddress: boolean;
+  marketSelectorOpen: boolean;
   onOpenMarket: () => void;
   onToggleFavorite: () => void;
-  onShare: () => void;
   onCopyAddress: () => void;
   onOpenCreator?: (address: string) => void;
   isRefreshing?: boolean;
@@ -41,6 +41,14 @@ function formatChangePct(pct: number | null): string {
   return `${pct >= 0 && pct !== 0 ? "+" : ""}${pct.toFixed(2)}%`;
 }
 
+function formatHolderCount(count: number): string {
+  if (!Number.isFinite(count) || count <= 0) return "—";
+  if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(1)}M`;
+  if (count >= 10_000) return `${(count / 1_000).toFixed(1)}K`;
+  if (count >= 1_000) return `${(count / 1_000).toFixed(2)}K`;
+  return count.toLocaleString();
+}
+
 function PriceHero({ priceUsd }: { priceUsd: number | null }) {
   if (priceUsd != null && Number.isFinite(priceUsd) && priceUsd >= 1) {
     return (
@@ -56,7 +64,22 @@ function PriceHero({ priceUsd }: { priceUsd: number | null }) {
   return <PumpSubscriptPrice value={priceUsd} prefix="$" />;
 }
 
-/** Mobile token hero — pair row + always-visible price / stats grid. */
+function StatCell({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="token-mobile-hero__stat-cell">
+      <span className="token-mobile-hero__stat-label">{label}</span>
+      <div className="token-mobile-hero__stat-value">{children}</div>
+    </div>
+  );
+}
+
+/** Mobile token hero — pair selector + always-visible stats grid. */
 export function TokenMobileHero({
   token,
   priceUsd,
@@ -67,9 +90,9 @@ export function TokenMobileHero({
   favorited,
   tradeLocked,
   copiedAddress,
+  marketSelectorOpen,
   onOpenMarket,
   onToggleFavorite,
-  onShare,
   onCopyAddress,
   onOpenCreator,
   isRefreshing = false,
@@ -87,25 +110,33 @@ export function TokenMobileHero({
       <div className="token-mobile-hero__top">
         <button
           type="button"
-          className="token-mobile-hero__icon-btn"
+          className="token-mobile-hero__pair-select"
           onClick={onOpenMarket}
-          aria-label="Explore coins"
+          aria-expanded={marketSelectorOpen}
+          aria-controls="token-mobile-market-sheet"
+          aria-label="Select token"
         >
-          <PumpIcon icon={faList} className="token-mobile-hero__explore-icon" />
-        </button>
-
-        <div className="token-mobile-hero__pair">
           <TokenAvatar
             address={token.address}
             symbol={token.symbol}
             logoUrl={token.logoUrl}
-            size={28}
+            size={26}
             className="token-mobile-hero__logo shrink-0 !ring-0"
           />
           <span className="token-mobile-hero__symbol financial-value">{token.symbol}/USD</span>
-        </div>
+          <PumpIcon
+            icon={marketSelectorOpen ? faChevronUp : faChevronDown}
+            className="token-mobile-hero__chevron"
+          />
+        </button>
 
-        <div className="token-mobile-hero__actions">
+        <div className="token-mobile-hero__end">
+          <div className="token-mobile-hero__quote">
+            <div className="token-mobile-hero__price">
+              <PriceHero priceUsd={priceUsd} />
+            </div>
+            <p className={changeToneClass(changePct)}>{formatChangePct(changePct)}</p>
+          </div>
           <button
             type="button"
             onClick={onToggleFavorite}
@@ -119,24 +150,18 @@ export function TokenMobileHero({
           >
             <FavoriteIcon active={favorited} className="token-mobile-hero__fav-icon" />
           </button>
-          <button
-            type="button"
-            onClick={onShare}
-            className="token-mobile-hero__icon-btn"
-            aria-label="Share token"
-          >
-            <PumpIcon icon={faShare} className="h-3.5 w-3.5" />
-          </button>
         </div>
       </div>
 
       <div id="token-mobile-hero-stats" className="token-mobile-hero__stats">
         <div className="token-mobile-hero__stats-grid">
-          <div className="token-mobile-hero__stats-col token-mobile-hero__stats-col--quote">
-            <div className="token-mobile-hero__price">
-              <PriceHero priceUsd={priceUsd} />
-            </div>
-            <p className={changeToneClass(changePct)}>{formatChangePct(changePct)}</p>
+          <StatCell label="MCAP">
+            <span className="financial-value">{fdvLabel}</span>
+          </StatCell>
+          <StatCell label="24H Vol.">
+            <span className="financial-value">{volume24hLabel}</span>
+          </StatCell>
+          <StatCell label="Contract">
             <div className="token-mobile-hero__address-row">
               <span className="token-mobile-hero__address financial-value">
                 {shortAddress(token.address, true)}
@@ -154,48 +179,38 @@ export function TokenMobileHero({
                 )}
               </button>
             </div>
-          </div>
-
-          <div className="token-mobile-hero__stats-col token-mobile-hero__stats-col--metrics">
-            <div className="token-mobile-hero__stat-row">
-              <span className="token-mobile-hero__stat-label">Market Cap</span>
-              <span className="token-mobile-hero__stat-value financial-value">{fdvLabel}</span>
-            </div>
-            <div className="token-mobile-hero__stat-row">
-              <span className="token-mobile-hero__stat-label">24H Vol.</span>
-              <span className="token-mobile-hero__stat-value financial-value">{volume24hLabel}</span>
-            </div>
-            <div className="token-mobile-hero__stat-row">
-              <span className="token-mobile-hero__stat-label">Creator</span>
-              {creatorAddress ? (
-                <button
-                  type="button"
-                  className="token-mobile-hero__stat-value token-mobile-hero__creator-hit financial-value"
-                  onClick={() => onOpenCreator?.(creatorAddress)}
-                  disabled={!onOpenCreator}
-                >
-                  <UserAvatarForAddress
-                    address={creatorAddress}
-                    size={14}
-                    className="token-mobile-hero__creator-avatar shrink-0 !ring-0"
-                  />
-                  <span className="truncate">{shortAddress(creatorAddress, true)}</span>
-                </button>
+          </StatCell>
+          <StatCell label="Creator">
+            {creatorAddress ? (
+              <button
+                type="button"
+                className="token-mobile-hero__creator-hit financial-value"
+                onClick={() => onOpenCreator?.(creatorAddress)}
+                disabled={!onOpenCreator}
+              >
+                <UserAvatarForAddress
+                  address={creatorAddress}
+                  size={14}
+                  className="token-mobile-hero__creator-avatar shrink-0 !ring-0"
+                />
+                <span className="truncate">{shortAddress(creatorAddress, true)}</span>
+              </button>
+            ) : (
+              <span>—</span>
+            )}
+          </StatCell>
+          <StatCell label="Holders">
+            <span className="financial-value">{formatHolderCount(token.holderCount)}</span>
+          </StatCell>
+          <StatCell label="Links">
+            <div className="token-mobile-hero__links-value">
+              {showSocialLinks ? (
+                <TokenSocialLinksBar links={token.socialLinks} variant="toolbar" />
               ) : (
-                <span className="token-mobile-hero__stat-value">—</span>
+                <span>—</span>
               )}
             </div>
-            <div className="token-mobile-hero__stat-row">
-              <span className="token-mobile-hero__stat-label">Links</span>
-              <div className="token-mobile-hero__stat-value token-mobile-hero__links-value">
-                {showSocialLinks ? (
-                  <TokenSocialLinksBar links={token.socialLinks} variant="toolbar" />
-                ) : (
-                  <span>—</span>
-                )}
-              </div>
-            </div>
-          </div>
+          </StatCell>
         </div>
       </div>
     </div>

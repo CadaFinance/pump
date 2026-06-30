@@ -968,9 +968,9 @@ export function TokenDetailLive({
               favorited={favorited}
               tradeLocked={tradeLocked}
               copiedAddress={copiedAddress}
+              marketSelectorOpen={mobileMarketOpen}
               onOpenMarket={openMobileMarket}
               onToggleFavorite={() => toggleFavorite(streamAddress)}
-              onShare={() => setShareOpen(true)}
               onCopyAddress={() => void onCopyAddress()}
               onOpenCreator={setProfileAddress}
               isRefreshing={isRefreshing}
