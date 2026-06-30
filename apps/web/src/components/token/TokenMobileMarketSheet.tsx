@@ -31,10 +31,11 @@ export function TokenMobileMarketSheet({
   const handleClose = useMobileModalClose(onClose);
 
   const handleTokenSelect = () => {
-    const inputFocused = document.activeElement instanceof HTMLInputElement;
+    const active = document.activeElement;
+    const inputFocused = active instanceof HTMLInputElement;
     setSearchFocused(false);
     if (inputFocused) {
-      document.activeElement.blur();
+      active.blur();
     }
     onClose();
     if (inputFocused) {
