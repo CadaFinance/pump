@@ -1,10 +1,9 @@
 "use client";
 
-import Link from "next/link";
 import { useState, type MouseEvent } from "react";
 import { NATIVE_SYMBOL, shortAddress } from "@/config/chain";
 import { ThemePicker } from "@/components/theme/ThemePicker";
-import { PumpIcon, faCopy, faWallet } from "@/lib/icons";
+import { PumpIcon, faCopy } from "@/lib/icons";
 import { copyToClipboard } from "@/lib/copy-to-clipboard";
 import { startScwDepositWatch } from "@/lib/scw-balance-sync";
 import { useWalletFunding } from "@/components/wallet/WalletFundingProvider";
@@ -64,8 +63,7 @@ export function WalletAccountPanel({
   if (variant === "sheet") {
     return (
       <div className={rootClass} role="menu">
-        <div className="wallet-account-panel__hero">
-          <p className="wallet-account-panel__hero-label">Available balance</p>
+        <div className="wallet-account-panel__balance-block">
           <button
             type="button"
             onClick={onToggleBalanceUnit}
@@ -78,8 +76,9 @@ export function WalletAccountPanel({
           </button>
           <p className="wallet-account-panel__hero-sub">
             {showBnb
-              ? `${formatHeaderBalanceUsd(usdAmount)} · tap to switch units`
-              : `${formatNativeAvailable(bnbAmount)} · tap to switch units`}
+              ? formatHeaderBalanceUsd(usdAmount)
+              : formatNativeAvailable(bnbAmount)}{" "}
+            · tap to switch
           </p>
         </div>
 
@@ -106,38 +105,25 @@ export function WalletAccountPanel({
           </button>
         </div>
 
-        <div className="wallet-account-panel__section">
-          <p className="wallet-account-panel__section-label">Smart wallet</p>
+        <div className="wallet-account-panel__menu">
           <button
             type="button"
             onClick={(event) => void onCopyAddress(event)}
-            className="wallet-account-panel__address wallet-account-panel__address--sheet"
+            className="wallet-account-panel__menu-item wallet-account-panel__menu-item--button"
             aria-label={copied ? "Address copied" : "Copy smart wallet address"}
           >
-            <span className="financial-value">{shortAddress(address)}</span>
+            <span className="wallet-account-panel__menu-leading">
+              <span className="section-label text-pump-muted">Wallet</span>
+              <span className="financial-value text-body-sm text-pump-text">{shortAddress(address)}</span>
+            </span>
             <span className="wallet-account-panel__address-copy">
               {copied ? "Copied" : <PumpIcon icon={faCopy} className="h-3.5 w-3.5" />}
             </span>
           </button>
-          <p className="wallet-account-panel__section-hint">Deposit address · BSC smart wallet</p>
-        </div>
-
-        <div className="wallet-account-panel__menu">
-          <Link
-            href="/portfolio"
-            onClick={onClose}
-            className="wallet-account-panel__menu-item"
-          >
-            <span className="wallet-account-panel__menu-leading">
-              <PumpIcon icon={faWallet} className="h-4 w-4 shrink-0 opacity-80" />
-              Portfolio
-            </span>
-            <span className="wallet-account-panel__menu-chevron" aria-hidden>
-              ›
-            </span>
-          </Link>
           <div className="wallet-account-panel__menu-item wallet-account-panel__menu-item--static">
-            <span className="wallet-account-panel__menu-leading">Appearance</span>
+            <span className="wallet-account-panel__menu-leading">
+              <span className="text-body-sm text-pump-text">Appearance</span>
+            </span>
             <ThemePicker className="wallet-account-panel__appearance-toggle" />
           </div>
         </div>
@@ -148,7 +134,7 @@ export function WalletAccountPanel({
             onLogout();
             onClose();
           }}
-          className="secondary-button wallet-account-panel__logout-btn"
+          className="wallet-account-panel__logout-text"
         >
           Log out
         </button>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import QRCode from "qrcode";
 import { isAddress, parseEther } from "viem";
 import { pumpChain, shortAddress } from "@/config/chain";
@@ -11,7 +11,7 @@ import { usePumpWallet } from "@/components/wallet/PumpWalletProvider";
 import { formatTradeError } from "@/lib/trade-errors";
 import type { WalletFundingOptions, WalletFundingView } from "@/components/wallet/WalletFundingProvider";
 import { invalidateScwBalance, startScwDepositWatch } from "@/lib/scw-balance-sync";
-import { PumpIcon, faArrowLeft, faArrowUpRight, faWallet } from "@/lib/icons";
+import { PumpIcon, faArrowLeft, faArrowUpRight, faCopy, faWallet, faX } from "@/lib/icons";
 
 type WalletFundingModalProps = {
   open: boolean;
@@ -21,6 +21,45 @@ type WalletFundingModalProps = {
   onClose: () => void;
   onViewChange: (view: WalletFundingView) => void;
 };
+
+function FundingSheetFrame({
+  title,
+  subtitle,
+  canReturnToChoice,
+  onBack,
+  onClose,
+  children,
+}: {
+  title: string;
+  subtitle?: string;
+  canReturnToChoice?: boolean;
+  onBack?: () => void;
+  onClose: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <div className="app-sheet app-sheet--funding">
+      <div className="app-sheet__grab" aria-hidden />
+      <div className="app-sheet__header">
+        <div className="app-sheet__header-main">
+          {canReturnToChoice && onBack ? (
+            <button type="button" onClick={onBack} className="app-sheet__back" aria-label="Back">
+              <PumpIcon icon={faArrowLeft} className="h-4 w-4" />
+            </button>
+          ) : null}
+          <div className="min-w-0">
+            <h2 className="app-sheet__title">{title}</h2>
+            {subtitle ? <p className="app-sheet__subtitle">{subtitle}</p> : null}
+          </div>
+        </div>
+        <button type="button" onClick={onClose} className="app-sheet__close" aria-label="Close">
+          <PumpIcon icon={faX} className="h-4 w-4" />
+        </button>
+      </div>
+      <div className="app-sheet__body">{children}</div>
+    </div>
+  );
+}
 
 function DepositView({ address, onClose }: { address: string; onClose: () => void }) {
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
@@ -32,7 +71,7 @@ function DepositView({ address, onClose }: { address: string; onClose: () => voi
 
   useEffect(() => {
     let cancelled = false;
-    void QRCode.toDataURL(address, { margin: 1, width: 200 }).then((url) => {
+    void QRCode.toDataURL(address, { margin: 1, width: 220 }).then((url) => {
       if (!cancelled) setQrDataUrl(url);
     });
     return () => {
@@ -50,34 +89,27 @@ function DepositView({ address, onClose }: { address: string; onClose: () => voi
   }
 
   return (
-    <div className="mt-4 space-y-4">
-      <p className="text-caption text-pump-muted">
-        Send {pumpChain.nativeCurrency.symbol} on {FUNDING_CHAIN_LABEL} to your smart wallet
-        address below. Funds appear after on-chain confirmation.
+    <div className="wallet-funding-deposit">
+      <p className="wallet-funding-deposit__hint">
+        Scan or copy your smart wallet address. Funds appear after on-chain confirmation on{" "}
+        {FUNDING_CHAIN_LABEL}.
       </p>
 
-      {qrDataUrl ? (
-        <div className="flex justify-center">
-          <img
-            src={qrDataUrl}
-            alt="Deposit address QR code"
-            className="h-48 w-48 border border-pump-border/45 bg-white p-2"
-          />
-        </div>
-      ) : (
-        <div className="flex h-48 items-center justify-center border border-pump-border/45 bg-pump-border/4 text-caption text-pump-muted">
-          Generating QR…
-        </div>
-      )}
+      <div className="wallet-funding-deposit__qr panel-surface">
+        {qrDataUrl ? (
+          <img src={qrDataUrl} alt="Deposit address QR code" className="wallet-funding-deposit__qr-img" />
+        ) : (
+          <div className="wallet-funding-deposit__qr-placeholder">Generating QR…</div>
+        )}
+      </div>
 
-      <button
-        type="button"
-        onClick={() => void onCopy()}
-        className="flex w-full items-center justify-between gap-2 border border-pump-border/45 bg-pump-border/4 px-3 py-2.5 text-caption text-pump-text transition hover:bg-pump-border/8"
-      >
-        <span className="financial-value break-all text-left">{address}</span>
-        <span className="shrink-0 text-pump-muted">{copied ? "Copied" : shortAddress(address)}</span>
-      </button>
+      <div className="wallet-funding-deposit__address panel-surface">
+        <span className="financial-value wallet-funding-deposit__address-text">{shortAddress(address)}</span>
+        <button type="button" onClick={() => void onCopy()} className="secondary-button wallet-funding-deposit__copy">
+          <PumpIcon icon={faCopy} className="h-3.5 w-3.5 shrink-0" />
+          {copied ? "Copied" : "Copy"}
+        </button>
+      </div>
 
       <button type="button" onClick={onClose} className="primary-button w-full">
         Done
@@ -130,12 +162,7 @@ function WithdrawForm({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <form onSubmit={(e) => void onSubmit(e)} className="mt-4 space-y-4">
-      <p className="text-caption text-pump-muted">
-        Transfer {pumpChain.nativeCurrency.symbol} from your Pump smart wallet to an external
-        address. Gas is paid from your smart wallet {pumpChain.nativeCurrency.symbol} balance.
-      </p>
-
+    <form onSubmit={(e) => void onSubmit(e)} className="wallet-funding-withdraw">
       <div>
         <label className="field-label" htmlFor="withdraw-destination">
           Destination address
@@ -163,6 +190,7 @@ function WithdrawForm({ onClose }: { onClose: () => void }) {
           inputMode="decimal"
           autoComplete="off"
         />
+        <p className="field-hint mt-1.5">Gas is paid from your smart wallet balance.</p>
       </div>
 
       {error ? <p className="notice-warning leading-snug">{error}</p> : null}
@@ -180,7 +208,7 @@ function WithdrawForm({ onClose }: { onClose: () => void }) {
         </p>
       ) : null}
 
-      <div className="grid grid-cols-2 gap-2">
+      <div className="wallet-funding-withdraw__actions">
         <button type="button" onClick={onClose} className="secondary-button w-full">
           Cancel
         </button>
@@ -217,13 +245,12 @@ export function WalletFundingModal({
         ? `Deposit ${pumpChain.nativeCurrency.symbol}`
         : (options.title ?? "Add funds");
 
-  const description =
+  const subtitle =
     view === "withdraw"
-      ? `Move ${pumpChain.nativeCurrency.symbol} from your smart wallet to an external address.`
+      ? "Send to an external wallet address."
       : view === "deposit"
-        ? `Send ${pumpChain.nativeCurrency.symbol} to your smart wallet on ${FUNDING_CHAIN_LABEL}.`
-        : (options.message ??
-          `Choose how you want to fund your wallet on ${FUNDING_CHAIN_LABEL}.`);
+        ? `Smart wallet on ${FUNDING_CHAIN_LABEL}.`
+        : (options.message ?? `Fund your wallet on ${FUNDING_CHAIN_LABEL}.`);
 
   return (
     <ModalPortal open={open}>
@@ -234,88 +261,53 @@ export function WalletFundingModal({
           aria-label="Close"
           onClick={onClose}
         />
-        <div
-          className="modal-sheet-host z-[111]"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="wallet-funding-title"
-        >
-          <div className="modal-panel modal-sheet-panel max-w-md rounded-t-2xl border-x-0 border-b-0 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:rounded-xl sm:border-x sm:border-b sm:p-5">
-            <div className="flex items-start justify-between gap-3 border-b border-pump-border/45 pb-3">
-              <div className="min-w-0">
-                {(view === "withdraw" || view === "deposit") && canReturnToChoice ? (
-                  <button
-                    type="button"
-                    onClick={() => onViewChange("choice")}
-                    className="mb-2 inline-flex items-center gap-1 text-caption text-pump-muted transition hover:text-pump-text"
-                  >
-                    <PumpIcon icon={faArrowLeft} className="h-3.5 w-3.5" />
-                    Back
+        <div className="modal-sheet-host z-[111]" role="dialog" aria-modal="true" aria-labelledby="wallet-funding-title">
+          <div className="modal-panel modal-sheet-panel app-sheet-host-panel pointer-events-auto max-w-md rounded-t-2xl border-x-0 border-b-0 sm:rounded-xl sm:border-x sm:border-b">
+            <FundingSheetFrame
+              title={title}
+              subtitle={subtitle}
+              canReturnToChoice={(view === "withdraw" || view === "deposit") && canReturnToChoice}
+              onBack={() => onViewChange("choice")}
+              onClose={onClose}
+            >
+              {view === "choice" ? (
+                <div className="wallet-funding-choice">
+                  <button type="button" onClick={() => onViewChange("deposit")} className="wallet-funding-choice__item panel-surface">
+                    <span className="wallet-funding-choice__icon">
+                      <PumpIcon icon={faWallet} className="h-5 w-5" />
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block text-body-sm font-semibold text-pump-text">Deposit</span>
+                      <span className="mt-0.5 block text-caption leading-snug text-pump-muted">
+                        Receive {pumpChain.nativeCurrency.symbol} to your smart wallet.
+                      </span>
+                    </span>
                   </button>
-                ) : null}
-                <h2 id="wallet-funding-title" className="text-h3 font-semibold text-pump-text">
-                  {title}
-                </h2>
-                <p className="mt-0.5 text-caption text-pump-muted">{description}</p>
-              </div>
-              <button
-                type="button"
-                onClick={onClose}
-                className="inline-flex h-8 w-8 shrink-0 items-center justify-center text-pump-muted transition hover:bg-pump-border/10 hover:text-pump-text"
-                aria-label="Close"
-              >
-                ×
-              </button>
-            </div>
 
-            {view === "choice" ? (
-              <div className="mt-4 divide-y divide-pump-border/10">
-                <button
-                  type="button"
-                  onClick={() => onViewChange("deposit")}
-                  className="wallet-fund-option"
-                >
-                  <span className="wallet-fund-option-icon">
-                    <PumpIcon icon={faWallet} className="h-5 w-5" />
-                  </span>
-                  <span className="min-w-0">
-                    <span className="block text-body-sm font-semibold text-pump-text">
-                      Deposit on-chain
+                  <button type="button" onClick={() => onViewChange("withdraw")} className="wallet-funding-choice__item panel-surface">
+                    <span className="wallet-funding-choice__icon">
+                      <PumpIcon icon={faArrowUpRight} className="h-5 w-5" />
                     </span>
-                    <span className="mt-0.5 block text-caption leading-snug text-pump-muted">
-                      Receive {pumpChain.nativeCurrency.symbol} to your smart wallet address.
+                    <span className="min-w-0">
+                      <span className="block text-body-sm font-semibold text-pump-text">Withdraw</span>
+                      <span className="mt-0.5 block text-caption leading-snug text-pump-muted">
+                        Send {pumpChain.nativeCurrency.symbol} to an external address.
+                      </span>
                     </span>
-                  </span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => onViewChange("withdraw")}
-                  className="wallet-fund-option"
-                >
-                  <span className="wallet-fund-option-icon">
-                    <PumpIcon icon={faArrowUpRight} className="h-5 w-5" />
-                  </span>
-                  <span className="min-w-0">
-                    <span className="block text-body-sm font-semibold text-pump-text">Withdraw</span>
-                    <span className="mt-0.5 block text-caption leading-snug text-pump-muted">
-                      Send {pumpChain.nativeCurrency.symbol} from your smart wallet to an external
-                      address.
-                    </span>
-                  </span>
-                </button>
-              </div>
-            ) : view === "deposit" ? (
-              authenticated && scwAddress ? (
-                <DepositView address={scwAddress} onClose={onClose} />
+                  </button>
+                </div>
+              ) : view === "deposit" ? (
+                authenticated && scwAddress ? (
+                  <DepositView address={scwAddress} onClose={onClose} />
+                ) : (
+                  <p className="notice-warning">Sign in to view your deposit address.</p>
+                )
+              ) : authenticated ? (
+                <WithdrawForm onClose={onClose} />
               ) : (
-                <p className="notice-warning mt-4">Sign in to view your deposit address.</p>
-              )
-            ) : authenticated ? (
-              <WithdrawForm onClose={onClose} />
-            ) : (
-              <p className="notice-warning mt-4">Sign in to withdraw.</p>
-            )}
+                <p className="notice-warning">Sign in to withdraw.</p>
+              )}
+            </FundingSheetFrame>
           </div>
         </div>
       </>

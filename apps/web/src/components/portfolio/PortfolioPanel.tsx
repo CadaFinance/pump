@@ -1236,8 +1236,6 @@ export function PortfolioPanel({
       <div className="portfolio-hub space-y-3 md:space-y-4">
         <PortfolioHero
           walletAddress={walletAddress}
-          avatarId={avatarId}
-          onEditAvatar={() => setAvatarPickerOpen(true)}
           onOpenFollowing={() => {
             setFollowModalTab("following");
             setFollowModalOpen(true);

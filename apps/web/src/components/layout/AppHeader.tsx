@@ -53,9 +53,10 @@ export function AppHeaderView({ pathname }: { pathname: string }) {
           <Link
             href="/create"
             prefetch={true}
+            aria-label="Create token"
             aria-current={pathname.startsWith("/create") ? "page" : undefined}
-            className={`app-header-create-btn toolbar-btn toolbar-btn-accent ${
-              pathname.startsWith("/create") ? "opacity-95" : ""
+            className={`app-header-create-btn toolbar-btn ${
+              pathname.startsWith("/create") ? "app-header-create-btn--active" : ""
             }`}
           >
             <PumpIcon icon={faPlus} className="h-4 w-4 shrink-0" />

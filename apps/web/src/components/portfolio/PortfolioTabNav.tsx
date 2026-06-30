@@ -18,7 +18,7 @@ export function PortfolioTabNav({
   const tabs: PortfolioTab[] = ["holdings", "launched", "rewards"];
 
   return (
-    <nav className="portfolio-tab-nav" aria-label="Portfolio sections">
+    <nav className="portfolio-tab-nav segment-control w-full" aria-label="Portfolio sections">
       {tabs.map((tab) => {
         const isActive = tab === active;
         const count = counts[tab];
@@ -32,8 +32,8 @@ export function PortfolioTabNav({
             aria-current={isActive ? "page" : undefined}
             className={
               isActive
-                ? "portfolio-tab-nav__item portfolio-tab-nav__item--active"
-                : "portfolio-tab-nav__item"
+                ? "portfolio-tab-nav__item chip-button-active"
+                : "portfolio-tab-nav__item chip-button chip-button-ghost"
             }
           >
             <span className="portfolio-tab-nav__label">{PORTFOLIO_TAB_LABELS[tab]}</span>

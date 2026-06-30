@@ -1,17 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { UserAvatar } from "@/components/user/UserAvatar";
 import { PctChange } from "@/components/ui/PctChange";
 import { useWalletFunding } from "@/components/wallet/WalletFundingProvider";
 import { shortAddress } from "@/config/chain";
 import { formatPortfolioHoldingValueUsd, formatUsdReadable } from "@/lib/format-usd";
-import { PumpIcon, faArrowTrendUp } from "@/lib/icons";
 
 type PortfolioHeroProps = {
   walletAddress: string;
-  avatarId: string | null;
-  onEditAvatar: () => void;
   onOpenFollowing: () => void;
   onOpenFollowers: () => void;
   followingCount: number;
@@ -29,13 +25,11 @@ type PortfolioHeroProps = {
 function pnlTone(value: number): string {
   if (value > 0) return "text-pump-success";
   if (value < 0) return "text-pump-danger";
-  return "text-pump-text";
+  return "text-pump-muted";
 }
 
 export function PortfolioHero({
   walletAddress,
-  avatarId,
-  onEditAvatar,
   onOpenFollowing,
   onOpenFollowers,
   followingCount,
@@ -57,22 +51,38 @@ export function PortfolioHero({
 
   return (
     <section className="portfolio-hub-hero panel-surface">
-      <div className="portfolio-hub-hero__value-block">
-        <p className="portfolio-hub-hero__kicker">Total portfolio value</p>
-        <div className="portfolio-hub-hero__value-row">
-          <p className={`portfolio-hub-hero__value financial-value ${valueFlashClass}`}>
-            {displayValue}
+      <div className="portfolio-hub-hero__head">
+        <div className="portfolio-hub-hero__value-block">
+          <p className="section-label text-pump-muted">Portfolio value</p>
+          <div className="portfolio-hub-hero__value-row">
+            <p className={`portfolio-hub-hero__value financial-value ${valueFlashClass}`}>
+              {displayValue}
+            </p>
+            <PctChange
+              value={portfolioValuePct}
+              className="text-caption font-medium"
+              toneClassName={pnlTone(portfolioValuePct ?? totalNetPnlUsd)}
+            />
+          </div>
+          <p className={`portfolio-hub-hero__pnl financial-value ${pnlTone(totalNetPnlUsd)} ${pnlFlashClass}`}>
+            {formatUsdReadable(totalNetPnlUsd, { compact: true, signed: true, fallback: "$0.00" })}{" "}
+            <span className="text-pump-muted font-normal">PnL</span>
           </p>
-          <PctChange
-            value={portfolioValuePct}
-            className="text-body-sm font-semibold"
-            toneClassName={pnlTone(portfolioValuePct ?? totalNetPnlUsd)}
-          />
         </div>
-        <p className={`portfolio-hub-hero__pnl financial-value ${pnlTone(totalNetPnlUsd)} ${pnlFlashClass}`}>
-          {formatUsdReadable(totalNetPnlUsd, { compact: true, signed: true, fallback: "$0.00" })}{" "}
-          all-time PnL
-        </p>
+        <div className="portfolio-hub-hero__meta">
+          <p className="financial-value text-caption text-pump-muted">{shortAddress(walletAddress)}</p>
+          <div className="portfolio-hub-hero__social">
+            <button type="button" onClick={onOpenFollowing} className="portfolio-hub-hero__social-link">
+              {followingCount} following
+            </button>
+            <span className="text-pump-muted" aria-hidden>
+              ·
+            </span>
+            <button type="button" onClick={onOpenFollowers} className="portfolio-hub-hero__social-link">
+              {followerCount} followers
+            </button>
+          </div>
+        </div>
       </div>
 
       <div className="portfolio-hub-hero__stats">
@@ -111,41 +121,9 @@ export function PortfolioHero({
         <button type="button" onClick={openWithdraw} className="secondary-button portfolio-hub-hero__action-btn">
           Withdraw
         </button>
-        <Link href="/trade" className="secondary-button portfolio-hub-hero__action-btn portfolio-hub-hero__action-link">
-          <PumpIcon icon={faArrowTrendUp} className="h-4 w-4 shrink-0 opacity-80" />
+        <Link href="/trade" className="secondary-button portfolio-hub-hero__action-btn">
           Trade
         </Link>
-      </div>
-
-      <div className="portfolio-hub-hero__profile">
-        <button
-          type="button"
-          onClick={onEditAvatar}
-          className="portfolio-hub-hero__avatar-btn"
-          aria-label="Change avatar"
-        >
-          {avatarId ? (
-            <UserAvatar address={walletAddress} avatarId={avatarId} size={36} />
-          ) : (
-            <span className="portfolio-hub-hero__avatar-fallback" aria-hidden>
-              {walletAddress.slice(2, 4).toUpperCase()}
-            </span>
-          )}
-        </button>
-        <div className="portfolio-hub-hero__profile-meta">
-          <p className="portfolio-hub-hero__address financial-value">{shortAddress(walletAddress)}</p>
-          <div className="portfolio-hub-hero__social">
-            <button type="button" onClick={onOpenFollowing} className="portfolio-hub-hero__social-link">
-              {followingCount} following
-            </button>
-            <span className="text-pump-muted" aria-hidden>
-              ·
-            </span>
-            <button type="button" onClick={onOpenFollowers} className="portfolio-hub-hero__social-link">
-              {followerCount} followers
-            </button>
-          </div>
-        </div>
       </div>
     </section>
   );

@@ -3,12 +3,9 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { APP_BOTTOM_TAB_ITEMS, isBottomNavActive } from "@/lib/nav-config";
-import { isTokenRoute } from "@/components/layout/layout-shell";
 import { PumpIcon } from "@/lib/icons";
 
 export function AppNavView({ pathname }: { pathname: string }) {
-  if (isTokenRoute(pathname)) return null;
-
   return (
     <div className="bottom-nav-host md:hidden">
       <nav className="bottom-nav" aria-label="Primary">

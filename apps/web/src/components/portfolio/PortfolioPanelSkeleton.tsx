@@ -2,44 +2,39 @@ import { Skeleton } from "@/components/ui/Skeleton";
 
 export function PortfolioPanelSkeleton() {
   return (
-    <div className="portfolio-hub space-y-3 md:space-y-4" aria-busy="true" aria-label="Loading portfolio">
+    <div className="portfolio-hub" aria-busy="true" aria-label="Loading portfolio">
       <section className="portfolio-hub-hero panel-surface">
-        <div className="portfolio-hub-hero__profile">
-          <Skeleton variant="circle" className="h-10 w-10 shrink-0" />
-          <div className="min-w-0 flex-1 space-y-2">
-            <Skeleton className="h-4 w-28" />
-            <div className="flex gap-3">
-              <Skeleton variant="line" className="h-3 w-20" />
-              <Skeleton variant="line" className="h-3 w-20" />
-            </div>
+        <div className="portfolio-hub-hero__head">
+          <div className="portfolio-hub-hero__value-block space-y-2">
+            <Skeleton variant="line" className="h-3 w-24" />
+            <Skeleton className="h-7 w-32" />
+            <Skeleton variant="line" className="h-3 w-20" />
           </div>
-        </div>
-
-        <div className="portfolio-hub-hero__value-block space-y-2">
-          <Skeleton variant="line" className="h-3 w-24" />
-          <Skeleton className="h-8 w-40" />
-          <Skeleton variant="line" className="h-4 w-28" />
+          <div className="space-y-1">
+            <Skeleton variant="line" className="ml-auto h-3 w-20" />
+            <Skeleton variant="line" className="ml-auto h-3 w-28" />
+          </div>
         </div>
 
         <div className="portfolio-hub-hero__stats">
           {Array.from({ length: 3 }).map((_, index) => (
-            <div key={index} className="space-y-1">
+            <div key={index} className="space-y-1 px-2 py-2">
               <Skeleton variant="line" className="h-3 w-14" />
-              <Skeleton className="h-4 w-16" />
+              <Skeleton className="h-4 w-12" />
             </div>
           ))}
         </div>
 
         <div className="portfolio-hub-hero__actions">
           {Array.from({ length: 3 }).map((_, index) => (
-            <Skeleton key={index} className="h-10 w-full rounded-md" />
+            <Skeleton key={index} className="h-9 w-full rounded-md" />
           ))}
         </div>
       </section>
 
-      <div className="portfolio-tab-nav">
+      <div className="portfolio-tab-nav segment-control">
         {Array.from({ length: 3 }).map((_, index) => (
-          <Skeleton key={index} className="h-9 flex-1 rounded-md" />
+          <Skeleton key={index} className="h-8 flex-1 rounded-none" />
         ))}
       </div>
 
