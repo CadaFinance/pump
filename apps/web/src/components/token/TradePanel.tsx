@@ -7,6 +7,7 @@ import type { Address, TransactionReceipt } from "viem";
 import { useOpenConnectModal } from "@/hooks/useOpenConnectModal";
 import type { SessionBuyParams, SessionSellParams } from "@/hooks/useSessionTrade";
 import { useWalletFunding } from "@/components/wallet/WalletFundingProvider";
+import { PumpAmountNumpad } from "@/components/token/PumpAmountNumpad";
 import { TradeConfirmModal } from "@/components/token/TradeConfirmModal";
 import { assertScwReadyForUserOp } from "@/lib/aa/scw-preflight";
 import { estimateKernelUserOpPrefundWei } from "@/lib/aa/estimate-kernel-user-op-prefund";
@@ -2241,11 +2242,13 @@ export function TradePanel({
     applySliderPercent(clamped);
   }
 
+  const useCustomAmountNumpad = Boolean(embedded && compact);
+
   return (
     <section
       className={
         embedded
-          ? `trade-panel-embedded overflow-hidden p-0${compact ? " trade-panel--compact" : ""}`
+          ? `trade-panel-embedded overflow-hidden p-0${compact ? " trade-panel--compact" : ""}${useCustomAmountNumpad ? " trade-panel--mobile-numpad" : ""}`
           : `panel-surface overflow-hidden p-0${compact ? " trade-panel--compact" : ""}`
       }
     >
@@ -2330,6 +2333,7 @@ export function TradePanel({
           <p className="notice-warning mx-4 mt-2 text-caption">Trading is paused on this curve.</p>
         ) : null}
 
+        <div className={useCustomAmountNumpad ? "trade-panel-mobile-numpad-scroll" : undefined}>
         <div className="trade-panel-input-zone">
           <div className="trade-field">
             <div className="trade-field-header">
@@ -2346,12 +2350,20 @@ export function TradePanel({
                 id="trade-amount"
                 name="trade-amount"
                 type="text"
-                inputMode="decimal"
+                inputMode={useCustomAmountNumpad ? "none" : "decimal"}
+                readOnly={useCustomAmountNumpad}
                 autoComplete="off"
                 autoCorrect="off"
                 spellCheck={false}
                 value={displayInputValue}
                 onChange={(e) => onDisplayInputChange(e.target.value)}
+                onFocus={
+                  useCustomAmountNumpad
+                    ? (e) => {
+                        e.currentTarget.blur();
+                      }
+                    : undefined
+                }
                 placeholder="0.0"
                 className="trade-amount-box__input financial-value"
                 aria-label={
@@ -2413,6 +2425,7 @@ export function TradePanel({
               </p>
             ) : null}
 
+            {!useCustomAmountNumpad ? (
             <div
               className={`trade-teeth-slider trade-teeth-slider--${side}${
                 teethDragging ? " trade-teeth-slider--dragging" : ""
@@ -2488,6 +2501,7 @@ export function TradePanel({
                 </span>
               ) : null}
             </div>
+            ) : null}
           </div>
         </div>
 
@@ -2526,7 +2540,31 @@ export function TradePanel({
             {error}
           </div>
         ) : null}
+        </div>
 
+        {useCustomAmountNumpad ? (
+          <div className="trade-panel-mobile-numpad-foot">
+            <PumpAmountNumpad
+              value={displayInputValue}
+              onValueChange={onDisplayInputChange}
+              onPresetPercent={applySliderPercent}
+              onMax={() => applySliderPercent(100)}
+              presetsDisabled={!canUseSlider}
+              maxDisabled={side === "buy" ? !canUseMaxBuy : !canUseMaxSell}
+              disabled={paused}
+              side={side}
+            />
+            <div className="trade-action-zone">
+              <button
+                type="submit"
+                disabled={submitDisabled}
+                className={`trade-submit-button ${submitButtonClass}`}
+              >
+                {submitActionLabel}
+              </button>
+            </div>
+          </div>
+        ) : (
         <div className="trade-action-zone">
           <button
             type="submit"
@@ -2536,6 +2574,7 @@ export function TradePanel({
             {submitActionLabel}
           </button>
         </div>
+        )}
           </>
         ) : (
           <div className="trade-limit-placeholder">

@@ -108,7 +108,7 @@ export function TradeSheet({
               <div className="mx-auto h-1 w-9 bg-pump-border/45" />
             </div>
           )}
-          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-[max(1rem,env(safe-area-inset-bottom))]">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
             <TradePanel
               key={`${tokenAddress}-${tradeSide}`}
               embedded
