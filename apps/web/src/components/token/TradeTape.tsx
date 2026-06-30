@@ -277,6 +277,7 @@ export function TradeTape({
   onActiveTabChange,
   hideTabBar = false,
   mobileStickyHead = false,
+  flowLayout = false,
 }: {
   tokenAddress: string;
   creatorAddress: string;
@@ -295,6 +296,8 @@ export function TradeTape({
   hideTabBar?: boolean;
   /** Mobile main tabs — sticky thead, body scrolls in flex slot. */
   mobileStickyHead?: boolean;
+  /** Mobile stacked feed — expand with content; parent scrolls. */
+  flowLayout?: boolean;
 }) {
   const creatorKey = creatorAddress.toLowerCase();
   const [internalTab, setInternalTab] = useState<ActivityTab>("trades");
@@ -448,7 +451,11 @@ export function TradeTape({
   }, [fetchHoldersPage, holdersRefreshKey]);
 
   return (
-    <section className="panel-surface token-trade-tape token-trade-tape--sticky-head overflow-hidden">
+    <section
+      className={`panel-surface token-trade-tape token-trade-tape--sticky-head overflow-hidden${
+        flowLayout ? " token-trade-tape--flow" : ""
+      }`}
+    >
       {hideTabBar ? null : (
         <div className="trade-panel-mode-tabs shrink-0" role="tablist" aria-label="Trades and holders">
           <button

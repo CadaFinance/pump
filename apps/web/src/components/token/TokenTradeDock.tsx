@@ -6,6 +6,8 @@ type TokenTradeDockProps = {
   sellInsufficient?: boolean;
   onBuy: () => void;
   onSell: () => void;
+  /** Below chart on mobile — scrolls with page, sticks under chart while scrolling activity. */
+  placement?: "fixed" | "inline";
 };
 
 /** Mobile trade dock — Binance-style solid Buy / Sell bar; opens TradeSheet. */
@@ -15,9 +17,16 @@ export function TokenTradeDock({
   sellInsufficient = false,
   onBuy,
   onSell,
+  placement = "fixed",
 }: TokenTradeDockProps) {
   return (
-    <div className="token-trade-dock lg:hidden" role="region" aria-label="Trade actions">
+    <div
+      className={`token-trade-dock lg:hidden${
+        placement === "inline" ? " token-trade-dock--inline" : ""
+      }`}
+      role="region"
+      aria-label="Trade actions"
+    >
       <div className="token-trade-dock-inner">
         <div className="token-trade-dock-actions">
           <button

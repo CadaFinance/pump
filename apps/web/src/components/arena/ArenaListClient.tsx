@@ -1,49 +1,24 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
-import Link from "next/link";
-import { useRouter, usePathname } from "next/navigation";
-import { PumpIcon, type PumpIconDefinition, faChevronRight, faLayoutGrid, faTable2 } from "@/lib/icons";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAccount } from "wagmi";
-import { useOpenConnectModal } from "@/hooks/useOpenConnectModal";
 import type { ArenaFilterCounts, KothSummary, TokenListItem } from "@/lib/db/launchpad";
 import { ArenaMcapTicker } from "@/components/arena/ArenaMcapTicker";
 import { ArenaShortcutsModal } from "@/components/arena/ArenaShortcutsModal";
 import { ArenaTokenCard } from "@/components/arena/ArenaTokenCard";
 import { ArenaWatchlistSheet } from "@/components/arena/ArenaWatchlistSheet";
 import { FieldSearchInput } from "@/components/ui/FieldSearchInput";
-import { IconLabel, SectionHeadingIcon, TableHeaderLabel } from "@/components/ui/IconLabel";
+import { SectionHeadingIcon } from "@/components/ui/IconLabel";
 import { MetricIcons } from "@/lib/metric-icons";
 import { useFavorites } from "@/components/favorites/FavoritesProvider";
-import { TokenAvatar } from "@/components/token/TokenAvatar";
-import { tokenDetailPath } from "@/lib/token-routes";
-import { TradeSheet } from "@/components/token/TradeSheet";
-import { ArenaBoardRowQuickActions } from "@/components/arena/ArenaBoardRowQuickActions";
-import { ArenaExploreCoinRow } from "@/components/arena/ArenaExploreCoinRow";
-import { ArenaSymbolWithAirdropGift } from "@/components/arena/ArenaSymbolWithAirdropGift";
-import { AirdropPromoIcon } from "@/components/ui/AirdropGiftIcon";
 import { ArenaSwipeTradeBar } from "@/components/arena/ArenaSwipeTradeBar";
-import { HoldingSwipeRow } from "@/components/portfolio/HoldingSwipeRow";
-import { buildArenaQuickTradePrefill } from "@/lib/arena-quick-trade";
-import type { TradePrefillConfig } from "@/lib/token-trade-prefill";
 import { useBnbUsdPrice } from "@/hooks/useBnbUsdPrice";
-import { bnbToUsd, formatUsdReadable } from "@/lib/format-usd";
-import { PctChange } from "@/components/ui/PctChange";
+import { bnbToUsd } from "@/lib/format-usd";
 import {
-  formatAge,
-  formatCapForBoard,
   listTokenPriceUsd,
 } from "@/lib/arena-board-format";
-import { ScrollStripTrack } from "@/components/ui/ScrollStripTrack";
 import { useLiveChannel, resolveLivePollDelay } from "@/hooks/useLiveChannel";
 import { useRafMessageQueue } from "@/hooks/useRafMessageQueue";
-import { useLiveBoardAnimations } from "@/hooks/useLiveBoardAnimations";
-import { RECENT_STRIP_DESKTOP, RECENT_STRIP_MOBILE } from "@/lib/recent-strip-limits";
-import {
-  readArenaViewMode,
-  writeArenaViewMode,
-  type ArenaViewMode,
-} from "@/lib/arena-view";
 import {
   ARENA_CARDS_SORT_LABELS,
   readArenaCardsDensity,
@@ -212,95 +187,6 @@ type FlashTone = "up" | "down";
 type SortKey = "mcap" | "ath" | "age" | "txns" | "vol24h" | "traders" | "h1" | "h6" | "h24";
 type SortDir = "asc" | "desc";
 
-function HighlightStatCard({
-  href,
-  label,
-  token,
-  icon,
-}: {
-  href: string;
-  label: string;
-  token: TokenListItem;
-  icon: PumpIconDefinition;
-}) {
-  return (
-    <Link
-      href={href}
-      className="panel-interactive flex min-w-0 flex-row flex-nowrap items-center justify-between gap-3 p-2.5 md:px-3 md:py-3"
-    >
-      <IconLabel
-        icon={icon}
-        className="section-label min-w-0 shrink text-caption md:text-[inherit]"
-        iconClassName="h-3 w-3 shrink-0 opacity-75 md:h-3.5 md:w-3.5"
-      >
-        {label}
-      </IconLabel>
-      <div className="flex shrink-0 items-center gap-1.5">
-        <TokenAvatar
-          address={token.address}
-          symbol={token.symbol}
-          logoUrl={token.logoUrl}
-          size={22}
-          className="md:hidden"
-        />
-        <TokenAvatar
-          address={token.address}
-          symbol={token.symbol}
-          logoUrl={token.logoUrl}
-          size={18}
-          className="hidden md:block"
-        />
-        <p className="truncate text-caption font-medium text-pump-text">{token.symbol}</p>
-        <PctChange
-          value={token.change24hPct ?? null}
-          className="shrink-0 text-caption font-semibold leading-none"
-        />
-      </div>
-    </Link>
-  );
-}
-
-function HighlightStatPlaceholder({ label, icon }: { label: string; icon: PumpIconDefinition }) {
-  return (
-    <div className="panel-surface flex min-w-0 flex-row flex-nowrap items-center justify-between gap-3 p-2.5 md:px-3 md:py-3">
-      <IconLabel
-        icon={icon}
-        className="section-label min-w-0 shrink text-caption md:text-[inherit]"
-        iconClassName="h-3 w-3 shrink-0 opacity-75 md:h-3.5 md:w-3.5"
-      >
-        {label}
-      </IconLabel>
-      <p className="shrink-0 text-body-sm text-pump-muted">—</p>
-    </div>
-  );
-}
-
-function flashText(toneValue: FlashTone | undefined): string {
-  if (toneValue === "up") return "live-metric-flash-up";
-  if (toneValue === "down") return "live-metric-flash-down";
-  return "";
-}
-
-function formatKothDurationShort(iso: string | null): string | null {
-  if (!iso) return null;
-  const elapsed = Date.now() - new Date(iso).getTime();
-  if (!Number.isFinite(elapsed) || elapsed < 0) return null;
-  const min = Math.floor(elapsed / 60_000);
-  if (min < 60) return `${min}m`;
-  const h = Math.floor(min / 60);
-  if (h < 24) return `${h}h`;
-  const d = Math.floor(h / 24);
-  return `${d}d`;
-}
-
-function formatCount(value: number | null | undefined): string {
-  const n = value ?? 0;
-  if (!Number.isFinite(n)) return "0";
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(2)}K`;
-  return String(n);
-}
-
 const KOTH_CONTENDER_RANK = 5;
 const ARENA_PAGE_INITIAL = 50;
 const ARENA_PAGE_INCREMENT = 25;
@@ -350,13 +236,6 @@ function matchesBoardFilter(
   return true;
 }
 
-type ArenaQuickTradeTarget = {
-  tokenAddress: `0x${string}`;
-  symbol: string;
-  status: string;
-  prefill: TradePrefillConfig;
-};
-
 export function ArenaListClient({
   initialPayload = null,
 }: {
@@ -388,18 +267,11 @@ export function ArenaListClient({
   const [activeFilter, setActiveFilter] = useState<BoardFilter>("new");
   const [sortKey, setSortKey] = useState<SortKey>("age");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
-  const [viewMode, setViewMode] = useState<ArenaViewMode>("board");
   const [cardsSort, setCardsSort] = useState<ArenaCardsSortKey>("mcap");
   const [cardsDensity, setCardsDensity] = useState<ArenaCardsDensity>("comfortable");
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
-  const [quickTradeTarget, setQuickTradeTarget] = useState<ArenaQuickTradeTarget | null>(null);
   const [favoriteListTokens, setFavoriteListTokens] = useState<TokenListItem[]>([]);
   const { address, isConnected } = useAccount();
-  const router = useRouter();
-  const pathname = usePathname();
-  const [navigatingTo, setNavigatingTo] = useState<string | null>(null);
-  const [, startTokenNavigation] = useTransition();
-  const { openConnectModal } = useOpenConnectModal();
   const { favorites, isFavorite, toggleFavorite } = useFavorites();
   const { bnbUsd: hookBnbUsd } = useBnbUsdPrice();
   const effectiveBnbUsd = resolveDisplayNativeUsd(hookBnbUsd, apiBnbUsd);
@@ -414,14 +286,14 @@ export function ArenaListClient({
   const loadMoreRef = useRef<HTMLDivElement>(null);
   const listLimitRef = useRef(ARENA_PAGE_INITIAL);
   const apiSortKey: SortKey =
-    activeFilter === "movers" ? "h24" : viewMode === "cards" ? cardsSort : sortKey;
-  const apiSortDir: SortDir =
     activeFilter === "movers"
-      ? sortDir
-      : viewMode === "cards"
-        ? "desc"
-        : sortDir;
-  const headerSortKey: SortKey = activeFilter === "movers" ? "h24" : sortKey;
+      ? "h24"
+      : cardsSort === "vol24h"
+        ? "vol24h"
+        : cardsSort === "h24"
+          ? "h24"
+          : sortKey;
+  const apiSortDir: SortDir = activeFilter === "movers" ? sortDir : "desc";
   const useServerBoardOrder = activeFilter !== "favorites";
   const favoriteAddressKey = useMemo(() => [...favorites].sort().join("|"), [favorites]);
 
@@ -453,50 +325,6 @@ export function ArenaListClient({
     void loadFavoriteTokens();
   }, [loadFavoriteTokens]);
 
-  const openQuickTrade = useCallback(
-    (tokenAddress: string, symbol: string, status: string, side: "buy" | "sell") => {
-      if (!isConnected) {
-        openConnectModal?.();
-        return;
-      }
-      setQuickTradeTarget({
-        tokenAddress: tokenAddress.toLowerCase() as `0x${string}`,
-        symbol,
-        status,
-        prefill: buildArenaQuickTradePrefill(side),
-      });
-    },
-    [isConnected, openConnectModal]
-  );
-
-  const prefetchTokenDetail = useCallback(
-    (tokenAddress: string) => {
-      router.prefetch(tokenDetailPath(tokenAddress));
-    },
-    [router]
-  );
-
-  const openTokenDetail = useCallback(
-    (tokenAddress: string) => {
-      const key = tokenAddress.toLowerCase();
-      setNavigatingTo(key);
-      startTokenNavigation(() => {
-        router.push(tokenDetailPath(tokenAddress));
-      });
-    },
-    [router]
-  );
-
-  useEffect(() => {
-    setNavigatingTo(null);
-  }, [pathname]);
-
-  useEffect(() => {
-    if (!navigatingTo) return;
-    const id = window.setTimeout(() => setNavigatingTo(null), 2500);
-    return () => window.clearTimeout(id);
-  }, [navigatingTo]);
-
   useEffect(() => {
     void (async () => {
       try {
@@ -512,22 +340,8 @@ export function ArenaListClient({
     })();
   }, []);
 
-  const setArenaView = useCallback((mode: ArenaViewMode) => {
-    setViewMode(mode);
-    writeArenaViewMode(mode);
-  }, []);
-
-  const handleViewToggleClick = useCallback(
-    (mode: ArenaViewMode) => {
-      setArenaView(mode);
-      searchInputRef.current?.blur();
-    },
-    [setArenaView]
-  );
-
   useEffect(() => {
     const filter = readArenaFilter();
-    setViewMode(readArenaViewMode());
     setCardsDensity(readArenaCardsDensity());
     setActiveFilter(filter);
     const defaults = applyBoardFilterDefaults(filter);
@@ -555,6 +369,9 @@ export function ArenaListClient({
   const setCardsSortPreference = useCallback((sort: ArenaCardsSortKey) => {
     setCardsSort(sort);
     writeArenaCardsSort(sort);
+    if (sort === "mcap") setSortKey("mcap");
+    if (sort === "vol24h") setSortKey("vol24h");
+    if (sort === "h24") setSortKey("h24");
   }, []);
 
   const setCardsDensityPreference = useCallback((density: ArenaCardsDensity) => {
@@ -913,8 +730,8 @@ export function ArenaListClient({
     const ssrDefaultsMatch =
       initialPayloadRef.current != null &&
       activeFilter === "new" &&
-      apiSortKey === "age" &&
-      apiSortDir === "desc";
+      sortKey === "age" &&
+      sortDir === "desc";
 
     if (cached) {
       setTokens(cached.tokens);
@@ -939,7 +756,7 @@ export function ArenaListClient({
     setBoardRefreshing(true);
     initialPayloadRef.current = null;
     void loadRef.current(ARENA_PAGE_INITIAL, { silent: true, boardKey: key });
-  }, [apiSortKey, apiSortDir, activeFilter, airdropFilterKey, viewMode, currentBoardKey]);
+  }, [apiSortKey, apiSortDir, activeFilter, airdropFilterKey, currentBoardKey]);
 
   useEffect(() => {
     if (activeFilter === "favorites" || !hasMore || loadingMore) return;
@@ -958,7 +775,7 @@ export function ArenaListClient({
 
     observer.observe(sentinel);
     return () => observer.disconnect();
-  }, [activeFilter, hasMore, loadingMore, tokens?.length, viewMode]);
+  }, [activeFilter, hasMore, loadingMore, tokens?.length]);
 
   useEffect(() => {
     if (tokens === null) return;
@@ -1047,16 +864,6 @@ export function ArenaListClient({
           ),
     [topByMcap, resolvedTokens]
   );
-  const kothToken = useMemo(() => {
-    const active = kothSummary?.activeTokenAddress?.toLowerCase();
-    if (active) {
-      const fromList =
-        topByMcap.find((token) => token.address.toLowerCase() === active) ??
-        resolvedTokens.find((token) => token.address.toLowerCase() === active);
-      if (fromList) return fromList;
-    }
-    return mcapRankedTokens[0] ?? null;
-  }, [kothSummary?.activeTokenAddress, mcapRankedTokens, resolvedTokens, topByMcap]);
   const kothContenderAddresses = useMemo(
     () =>
       new Set(
@@ -1065,53 +872,6 @@ export function ArenaListClient({
           .map((token) => token.address.toLowerCase())
       ),
     [mcapRankedTokens]
-  );
-  const kothCrownedAt = useMemo(() => {
-    if (!kothToken) return null;
-    const addr = kothToken.address.toLowerCase();
-    const active = kothSummary?.activeTokenAddress?.toLowerCase();
-    if (active === addr && kothSummary?.crownedAt) {
-      return kothSummary.crownedAt;
-    }
-    const openReign = kothSummary?.recent?.find(
-      (item) => item.tokenAddress.toLowerCase() === addr && !item.dethronedAt
-    );
-    return openReign?.crownedAt ?? null;
-  }, [kothSummary, kothToken]);
-  const kothReignDuration = useMemo(
-    () => formatKothDurationShort(kothCrownedAt),
-    [kothCrownedAt]
-  );
-
-  const highlightPool = useMemo(() => {
-    const byAddress = new Map<string, TokenListItem>();
-    for (const token of topByMcap) {
-      byAddress.set(token.address.toLowerCase(), token);
-    }
-    for (const token of resolvedTokens) {
-      byAddress.set(token.address.toLowerCase(), token);
-    }
-    return [...byAddress.values()];
-  }, [topByMcap, resolvedTokens]);
-
-  const topGainer24h = useMemo(
-    () =>
-      [...highlightPool]
-        .filter((t) => t.change24hPct != null)
-        .sort((a, b) => (b.change24hPct ?? -Infinity) - (a.change24hPct ?? -Infinity))[0] ?? null,
-    [highlightPool]
-  );
-  const topVolume24h = useMemo(
-    () =>
-      [...highlightPool].sort(
-        (a, b) => Number(b.volume24hBnb ?? 0) - Number(a.volume24hBnb ?? 0)
-      )[0] ?? null,
-    [highlightPool]
-  );
-  const mostTrades = useMemo(
-    () =>
-      [...highlightPool].sort((a, b) => (b.tradeCount ?? 0) - (a.tradeCount ?? 0))[0] ?? null,
-    [highlightPool]
   );
 
   const marketTokens = useMemo(() => {
@@ -1202,16 +962,6 @@ export function ArenaListClient({
     return exploreBoardTokens;
   }, [exploreBoardTokens, cardsSort, activeFilter]);
 
-  const boardKeys = useMemo(
-    () => exploreBoardTokens.map((token) => token.address.toLowerCase()),
-    [exploreBoardTokens]
-  );
-  const boardResetKey = `${activeFilter}|${sortKey}|${sortDir}|${search.trim().toLowerCase()}`;
-  const { rowClass: boardRowClass, rankClass: boardRankClass } = useLiveBoardAnimations(
-    boardKeys,
-    { resetKey: boardResetKey }
-  );
-
   const filterCounts = useMemo(() => {
     const server = serverFilterCounts ?? {
       all: resolvedTokens.length,
@@ -1227,22 +977,6 @@ export function ArenaListClient({
       favorites: favorites.size,
     };
   }, [serverFilterCounts, favorites.size, resolvedTokens.length, airdropTokenAddresses]);
-
-  function onSort(nextKey: SortKey) {
-    if (sortKey === nextKey) {
-      setSortDir((prev) => (prev === "asc" ? "desc" : "asc"));
-      return;
-    }
-    setSortKey(nextKey);
-    setSortDir("desc");
-  }
-
-  const sortLabel = (key: SortKey) =>
-    headerSortKey === key ? `${sortDir === "asc" ? "↑" : "↓"}` : "";
-  const sortHeadClass = (key: SortKey) =>
-    `inline-flex items-center gap-1 rounded-sm px-1 py-0.5 transition ${
-      headerSortKey === key ? "text-pump-accent" : "text-pump-muted hover:text-pump-text"
-    }`;
 
   if (error && tokens === null) {
     return (
@@ -1273,204 +1007,10 @@ export function ArenaListClient({
 
       <ArenaShortcutsModal open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
 
-      {quickTradeTarget ? (
-        <TradeSheet
-          key={`${quickTradeTarget.tokenAddress}-${quickTradeTarget.prefill.side}`}
-          open
-          presentation="modal"
-          onClose={() => setQuickTradeTarget(null)}
-          tokenAddress={quickTradeTarget.tokenAddress}
-          symbol={quickTradeTarget.symbol}
-          status={quickTradeTarget.status}
-          prefill={quickTradeTarget.prefill}
-          onTradeConfirmed={() => {
-            setQuickTradeTarget(null);
-            window.dispatchEvent(new Event("pump:activity"));
-          }}
-        />
-      ) : null}
-
-      {kothToken ? (
-        <section className="koth-section space-y-2 md:space-y-3">
-          <SectionHeadingIcon icon={MetricIcons.kingOfHill}>King of the Hill</SectionHeadingIcon>
-
-          <Link
-            href={`/token/${kothToken.address}`}
-            className="koth-banner panel-surface block"
-          >
-            <div className="koth-banner__inner">
-              <TokenAvatar
-                address={kothToken.address}
-                symbol={kothToken.symbol}
-                logoUrl={kothToken.logoUrl}
-                size={48}
-                className="koth-banner__logo shrink-0 md:hidden"
-              />
-              <TokenAvatar
-                address={kothToken.address}
-                symbol={kothToken.symbol}
-                logoUrl={kothToken.logoUrl}
-                size={60}
-                className="koth-banner__logo hidden shrink-0 md:block"
-              />
-
-              <div className="koth-banner__content min-w-0 flex-1">
-                <p className="koth-banner__headline">
-                  <span className="financial-value koth-banner__headline-symbol">
-                    {kothToken.symbol}
-                  </span>
-                  {airdropTokenAddresses.has(kothToken.address.toLowerCase()) ? (
-                    <AirdropPromoIcon size={14} className="ml-1" />
-                  ) : null}
-                </p>
-                <div className="koth-banner__hero" aria-label="Market cap">
-                  <span className="koth-banner__tag">MC</span>
-                  <span className="financial-value koth-banner__hero-value text-pump-text">
-                    {formatCapForBoard(bnbToUsd(Number(kothToken.marketCapBnb), effectiveBnbUsd))}
-                  </span>
-                  <PctChange
-                    value={kothToken.change24hPct ?? null}
-                    className="koth-banner__delta"
-                  />
-                </div>
-
-                {kothReignDuration ? (
-                  <p className="koth-banner__meta koth-banner__meta--lead">
-                    <span className="koth-banner__meta-item">
-                      <span className="koth-banner__tag koth-banner__tag--soft">King for</span>
-                      <span className="financial-value koth-banner__meta-value">
-                        {kothReignDuration}
-                      </span>
-                    </span>
-                  </p>
-                ) : null}
-                <p className="koth-banner__meta koth-banner__meta--stats">
-                  <span className="koth-banner__meta-item">
-                    <span className="koth-banner__tag">Vol</span>
-                    <span className="financial-value koth-banner__meta-value">
-                      {formatUsdReadable(
-                        bnbToUsd(Number(kothToken.volume24hBnb ?? 0), effectiveBnbUsd),
-                        { compact: true }
-                      )}
-                    </span>
-                  </span>
-                  <span className="koth-banner__meta-sep" aria-hidden>
-                    ·
-                  </span>
-                  <span className="koth-banner__meta-item max-md:hidden">
-                    <span className="koth-banner__tag">Txns</span>
-                    <span className="financial-value koth-banner__meta-value">
-                      {formatCount(kothToken.tradeCount)}
-                    </span>
-                  </span>
-                  <span className="koth-banner__meta-sep max-md:hidden" aria-hidden>
-                    ·
-                  </span>
-                  <span className="koth-banner__meta-item max-md:hidden">
-                    <span className="koth-banner__tag">Holders</span>
-                    <span className="financial-value koth-banner__meta-value">
-                      {formatCount(kothToken.holderCount)}
-                    </span>
-                  </span>
-                  <span className="koth-banner__meta-sep max-md:hidden" aria-hidden>
-                    ·
-                  </span>
-                  <span className="koth-banner__meta-item">
-                    <span className="koth-banner__tag">ATH</span>
-                    <span className="financial-value koth-banner__meta-value">
-                      {formatCapForBoard(
-                        bnbToUsd(
-                          Number(kothToken.athMarketCapBnb ?? kothToken.marketCapBnb),
-                          effectiveBnbUsd
-                        )
-                      )}
-                    </span>
-                  </span>
-                </p>
-              </div>
-
-              <PumpIcon icon={faChevronRight} className="koth-banner__chevron hidden shrink-0 md:block" />
-            </div>
-          </Link>
-
-          {kothSummary?.recent?.length ? (
-            <div className="scroll-strip-row">
-              <IconLabel
-                icon={MetricIcons.recent}
-                hideIconMobile
-                className="section-label shrink-0 text-caption md:text-[inherit]"
-              >
-                Recent
-              </IconLabel>
-              <ScrollStripTrack aria-label="Recent kings">
-                {kothSummary.recent.slice(0, RECENT_STRIP_DESKTOP).map((item, index) => (
-                  <Link
-                    key={`${item.tokenAddress}:${item.crownedAt}`}
-                    href={`/token/${item.tokenAddress}`}
-                    className={`contender-chip${index >= RECENT_STRIP_MOBILE ? " hidden md:inline-flex" : ""}`}
-                  >
-                    <TokenAvatar
-                      address={item.tokenAddress}
-                      symbol={item.symbol}
-                      logoUrl={item.logoUrl}
-                      size={16}
-                      className="md:hidden"
-                    />
-                    <TokenAvatar
-                      address={item.tokenAddress}
-                      symbol={item.symbol}
-                      logoUrl={item.logoUrl}
-                      size={18}
-                      className="hidden md:block"
-                    />
-                    <span className="text-caption text-pump-text">{item.symbol}</span>
-                  </Link>
-                ))}
-              </ScrollStripTrack>
-            </div>
-          ) : null}
-        </section>
-      ) : null}
-
-      <section className="grid grid-cols-1 gap-2 sm:grid-cols-3 md:gap-3">
-        {topGainer24h ? (
-          <HighlightStatCard
-            href={`/token/${topGainer24h.address}`}
-            label="Top gainer"
-            token={topGainer24h}
-            icon={MetricIcons.topGainer}
-          />
-        ) : (
-          <HighlightStatPlaceholder label="Top gainer" icon={MetricIcons.topGainer} />
-        )}
-
-        {topVolume24h ? (
-          <HighlightStatCard
-            href={`/token/${topVolume24h.address}`}
-            label="Top volume"
-            token={topVolume24h}
-            icon={MetricIcons.topVolume}
-          />
-        ) : (
-          <HighlightStatPlaceholder label="Top volume" icon={MetricIcons.topVolume} />
-        )}
-
-        {mostTrades ? (
-          <HighlightStatCard
-            href={`/token/${mostTrades.address}`}
-            label="Most trades"
-            token={mostTrades}
-            icon={MetricIcons.mostTrades}
-          />
-        ) : (
-          <HighlightStatPlaceholder label="Most trades" icon={MetricIcons.mostTrades} />
-        )}
-      </section>
-
       <div className="space-y-2 md:space-y-3">
         <div className="flex items-center justify-between gap-2">
           <SectionHeadingIcon icon={MetricIcons.exploreCoins}>Explore coins</SectionHeadingIcon>
-          {viewMode === "board" || viewMode === "cards" ? <ArenaSwipeTradeBar /> : null}
+          <ArenaSwipeTradeBar />
         </div>
 
         <div className="arena-toolbar">
@@ -1484,40 +1024,6 @@ export function ArenaListClient({
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search coins"
               />
-            </div>
-            <div className="arena-search-end">
-              <div
-                className="arena-view-toggle arena-view-toggle--attached"
-                role="group"
-                aria-label="Arena view"
-              >
-                <button
-                  type="button"
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => handleViewToggleClick("board")}
-                  className={`inline-flex items-center justify-center gap-1 px-2 py-1.5 text-caption sm:px-2.5 ${
-                    viewMode === "board" ? "chip-button-active" : "chip-button"
-                  }`}
-                  aria-pressed={viewMode === "board"}
-                  aria-label="Board view"
-                >
-                  <PumpIcon icon={faTable2} className="h-3.5 w-3.5 shrink-0" />
-                  <span className="hidden sm:inline">Board</span>
-                </button>
-                <button
-                  type="button"
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => handleViewToggleClick("cards")}
-                  className={`inline-flex items-center justify-center gap-1 px-2 py-1.5 text-caption sm:px-2.5 ${
-                    viewMode === "cards" ? "chip-button-active" : "chip-button"
-                  }`}
-                  aria-pressed={viewMode === "cards"}
-                  aria-label="Cards view"
-                >
-                  <PumpIcon icon={faLayoutGrid} className="h-3.5 w-3.5 shrink-0" />
-                  <span className="hidden sm:inline">Cards</span>
-                </button>
-              </div>
             </div>
           </div>
           <div className="arena-toolbar-watchlist shrink-0 md:hidden">
@@ -1549,49 +1055,47 @@ export function ArenaListClient({
           </div>
         </div>
 
-        {viewMode === "cards" ? (
-          <div className="flex flex-wrap items-center gap-2">
-            <label className="flex items-center gap-2 text-caption text-pump-muted">
-              <span className="hidden sm:inline">Sort</span>
-              <select
-                value={cardsSort}
-                onChange={(event) =>
-                  setCardsSortPreference(event.target.value as ArenaCardsSortKey)
-                }
-                className="field-input h-8 min-w-[9rem] bg-pump-surface/75 py-1 text-caption"
-                aria-label="Sort cards by"
-              >
-                {(Object.keys(ARENA_CARDS_SORT_LABELS) as ArenaCardsSortKey[]).map((key) => (
-                  <option key={key} value={key}>
-                    {ARENA_CARDS_SORT_LABELS[key]}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <div className="arena-view-toggle" role="group" aria-label="Card density">
-              <button
-                type="button"
-                onClick={() => setCardsDensityPreference("comfortable")}
-                className={`px-3 py-1.5 text-caption ${
-                  cardsDensity === "comfortable" ? "chip-button-active" : "chip-button"
-                }`}
-                aria-pressed={cardsDensity === "comfortable"}
-              >
-                Comfortable
-              </button>
-              <button
-                type="button"
-                onClick={() => setCardsDensityPreference("compact")}
-                className={`px-3 py-1.5 text-caption ${
-                  cardsDensity === "compact" ? "chip-button-active" : "chip-button"
-                }`}
-                aria-pressed={cardsDensity === "compact"}
-              >
-                Compact
-              </button>
-            </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="flex items-center gap-2 text-caption text-pump-muted">
+            <span className="hidden sm:inline">Sort</span>
+            <select
+              value={cardsSort}
+              onChange={(event) =>
+                setCardsSortPreference(event.target.value as ArenaCardsSortKey)
+              }
+              className="field-input h-8 min-w-[9rem] bg-pump-surface/75 py-1 text-caption"
+              aria-label="Sort cards by"
+            >
+              {(Object.keys(ARENA_CARDS_SORT_LABELS) as ArenaCardsSortKey[]).map((key) => (
+                <option key={key} value={key}>
+                  {ARENA_CARDS_SORT_LABELS[key]}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="arena-view-toggle" role="group" aria-label="Card density">
+            <button
+              type="button"
+              onClick={() => setCardsDensityPreference("comfortable")}
+              className={`px-3 py-1.5 text-caption ${
+                cardsDensity === "comfortable" ? "chip-button-active" : "chip-button"
+              }`}
+              aria-pressed={cardsDensity === "comfortable"}
+            >
+              Comfortable
+            </button>
+            <button
+              type="button"
+              onClick={() => setCardsDensityPreference("compact")}
+              className={`px-3 py-1.5 text-caption ${
+                cardsDensity === "compact" ? "chip-button-active" : "chip-button"
+              }`}
+              aria-pressed={cardsDensity === "compact"}
+            >
+              Compact
+            </button>
           </div>
-        ) : null}
+        </div>
 
         {exploreBoardTokens.length === 0 ? (
           <div className="panel-surface empty-state py-8">
@@ -1604,10 +1108,10 @@ export function ArenaListClient({
               })}
             </p>
           </div>
-        ) : viewMode === "cards" ? (
+        ) : (
           <div
-            className={`grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 ${
-              cardsDensity === "compact" ? "md:gap-2 lg:gap-2" : ""
+            className={`arena-explore-grid${
+              cardsDensity === "compact" ? " arena-explore-grid--compact" : ""
             }`}
           >
             {cardsTokens.map((token) => {
@@ -1615,223 +1119,20 @@ export function ArenaListClient({
               const mcapUsd =
                 animatedCaps[`${addressKey}:cap:mcap`] ??
                 bnbToUsd(Number(token.marketCapBnb), effectiveBnbUsd);
-              const isKoth = kothToken?.address.toLowerCase() === addressKey;
 
               return (
                 <ArenaTokenCard
                   key={token.address}
                   token={token}
                   mcapUsd={mcapUsd}
-                  isKoth={isKoth}
-                  isKothContender={kothContenderAddresses.has(addressKey)}
                   mcapFlash={flashes[`${addressKey}:mcap`]}
                   isFavorite={isFavorite(token.address)}
                   onToggleFavorite={toggleFavorite}
                   compact={cardsDensity === "compact"}
-                  onBuy={() =>
-                    openQuickTrade(token.address, token.symbol, token.status, "buy")
-                  }
-                  onSell={() =>
-                    openQuickTrade(token.address, token.symbol, token.status, "sell")
-                  }
                 />
               );
             })}
           </div>
-        ) : (
-        <section className="arena-explore-board overflow-hidden">
-        <div className="arena-explore-list lg:hidden">
-          {exploreBoardTokens.map((token, index) => {
-            const addressKey = token.address.toLowerCase();
-            const mcapUsd =
-              animatedCaps[`${addressKey}:cap:mcap`] ??
-              bnbToUsd(Number(token.marketCapBnb), effectiveBnbUsd);
-            const priceUsd =
-              animatedCaps[`${addressKey}:cap:price`] ??
-              listTokenPriceUsd(token.marketCapBnb, effectiveBnbUsd);
-            return (
-              <HoldingSwipeRow
-                key={token.address}
-                dataBoardKey={addressKey}
-                rowClassName={boardRowClass(addressKey)}
-                contentClassName="bg-pump-card"
-                peekOnMount={index === 0}
-                buyLabel="Buy"
-                sellLabel="Sell"
-                onBuyMax={() =>
-                  openQuickTrade(token.address, token.symbol, token.status, "buy")
-                }
-                onSellMax={() =>
-                  openQuickTrade(token.address, token.symbol, token.status, "sell")
-                }
-              >
-                <ArenaExploreCoinRow
-                  token={token}
-                  mcapUsd={mcapUsd}
-                  priceUsd={priceUsd}
-                  bnbUsd={effectiveBnbUsd}
-                  mcapFlash={flashes[`${addressKey}:mcap`]}
-                  priceFlash={flashes[`${addressKey}:mcap`]}
-                  change24hPct={token.change24hPct ?? null}
-                  openAirdropTokens={airdropTokenAddresses}
-                />
-              </HoldingSwipeRow>
-            );
-          })}
-        </div>
-
-        <div className="hidden lg:block overflow-x-auto">
-          <table className="sheet-grid min-w-[1280px]">
-          <thead>
-            <tr>
-              <th />
-              <th>Coin</th>
-              <th className="arena-board-quick-cell">Quick trade</th>
-              <th><button type="button" onClick={() => onSort("mcap")} className={sortHeadClass("mcap")}><TableHeaderLabel icon={MetricIcons.mcap}>MCAP</TableHeaderLabel> {sortLabel("mcap")}</button></th>
-              <th><button type="button" onClick={() => onSort("ath")} className={sortHeadClass("ath")}><TableHeaderLabel icon={MetricIcons.ath}>ATH</TableHeaderLabel> {sortLabel("ath")}</button></th>
-              <th><button type="button" onClick={() => onSort("age")} className={sortHeadClass("age")}><TableHeaderLabel icon={MetricIcons.age}>Age</TableHeaderLabel> {sortLabel("age")}</button></th>
-              <th><button type="button" onClick={() => onSort("txns")} className={sortHeadClass("txns")}><TableHeaderLabel icon={MetricIcons.txns}>TXNS</TableHeaderLabel> {sortLabel("txns")}</button></th>
-              <th><button type="button" onClick={() => onSort("vol24h")} className={sortHeadClass("vol24h")}><TableHeaderLabel icon={MetricIcons.vol24h}>24H VOL</TableHeaderLabel> {sortLabel("vol24h")}</button></th>
-              <th><button type="button" onClick={() => onSort("traders")} className={sortHeadClass("traders")}><TableHeaderLabel icon={MetricIcons.traders}>TRADERS</TableHeaderLabel> {sortLabel("traders")}</button></th>
-              <th><button type="button" onClick={() => onSort("h1")} className={sortHeadClass("h1")}><TableHeaderLabel icon={MetricIcons.change1h}>1H</TableHeaderLabel> {sortLabel("h1")}</button></th>
-              <th><button type="button" onClick={() => onSort("h6")} className={sortHeadClass("h6")}><TableHeaderLabel icon={MetricIcons.change6h}>6H</TableHeaderLabel> {sortLabel("h6")}</button></th>
-              <th><button type="button" onClick={() => onSort("h24")} className={sortHeadClass("h24")}><TableHeaderLabel icon={MetricIcons.change24h}>24H</TableHeaderLabel> {sortLabel("h24")}</button></th>
-            </tr>
-          </thead>
-          <tbody>
-            {exploreBoardTokens.map((token, index) => {
-              const addressKey = token.address.toLowerCase();
-              const mcapUsd =
-                animatedCaps[`${addressKey}:cap:mcap`] ??
-                bnbToUsd(Number(token.marketCapBnb), effectiveBnbUsd);
-              const athMcapUsd =
-                animatedCaps[`${addressKey}:cap:ath`] ??
-                bnbToUsd(Number(token.athMarketCapBnb ?? token.marketCapBnb), effectiveBnbUsd);
-              const vol24hUsd =
-                animatedCaps[`${addressKey}:cap:vol24h`] ??
-                bnbToUsd(Number(token.volume24hBnb ?? 0), effectiveBnbUsd);
-              return (
-                <tr
-                  key={token.address}
-                  data-board-key={addressKey}
-                  className={`${boardRowClass(addressKey)} arena-board-row--clickable ${
-                    navigatingTo === addressKey ? "arena-board-row--navigating" : ""
-                  }`}
-                  onClick={() => openTokenDetail(token.address)}
-                  onMouseEnter={() => prefetchTokenDetail(token.address)}
-                  onFocus={() => prefetchTokenDetail(token.address)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" || event.key === " ") {
-                      event.preventDefault();
-                      openTokenDetail(token.address);
-                    }
-                  }}
-                  tabIndex={0}
-                  role="link"
-                  aria-label={`View ${token.symbol}`}
-                >
-                  <td onClick={(event) => event.stopPropagation()}>
-                    <button
-                      type="button"
-                      onClick={() => toggleFavorite(token.address)}
-                      className={`text-xl leading-none transition ${
-                        isFavorite(token.address)
-                          ? "text-pump-accent"
-                          : "text-pump-muted hover:text-pump-text"
-                      }`}
-                      aria-label="Toggle favorite"
-                    >
-                      {isFavorite(token.address) ? "★" : "☆"}
-                    </button>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex min-w-0 items-center gap-3">
-                      <span
-                        className={`financial-value w-4 text-caption text-pump-muted ${boardRankClass(addressKey)}`}
-                      >
-                        {index + 1}
-                      </span>
-                      <TokenAvatar
-                        address={token.address}
-                        symbol={token.symbol}
-                        logoUrl={token.logoUrl}
-                        size={30}
-                      />
-                      <div className="flex min-w-0 items-baseline gap-2">
-                        <p className="truncate text-body-sm font-medium text-pump-text">{token.name}</p>
-                        <ArenaSymbolWithAirdropGift
-                          symbol={token.symbol}
-                          tokenAddress={token.address}
-                          openAirdropTokens={airdropTokenAddresses}
-                          symbolClassName="text-caption text-pump-muted"
-                        />
-                      </div>
-                    </div>
-                  </td>
-                  <td className="arena-board-quick-cell" onClick={(event) => event.stopPropagation()}>
-                    <ArenaBoardRowQuickActions
-                      onBuy={() =>
-                        openQuickTrade(token.address, token.symbol, token.status, "buy")
-                      }
-                      onSell={() =>
-                        openQuickTrade(token.address, token.symbol, token.status, "sell")
-                      }
-                    />
-                  </td>
-                  <td
-                    className={`px-4 py-3 financial-value font-semibold ${flashText(
-                      flashes[`${token.address.toLowerCase()}:mcap`]
-                    )}`}
-                  >
-                    {formatCapForBoard(mcapUsd)}
-                  </td>
-                  <td
-                    className={`px-4 py-3 ${flashText(
-                      flashes[`${token.address.toLowerCase()}:ath`]
-                    )}`}
-                  >
-                    <p className="financial-value">
-                      {formatCapForBoard(athMcapUsd)}
-                    </p>
-                  </td>
-                  <td className="px-4 py-3 text-pump-text">{formatAge(token.createdAt)}</td>
-                  <td
-                    className={`px-4 py-3 financial-value ${flashText(
-                      flashes[`${token.address.toLowerCase()}:txns`]
-                    )}`}
-                  >
-                    {token.tradeCount ?? 0}
-                  </td>
-                  <td
-                    className={`px-4 py-3 financial-value ${flashText(
-                      flashes[`${token.address.toLowerCase()}:vol24h`]
-                    )}`}
-                  >
-                    {formatUsdReadable(vol24hUsd, { compact: true })}
-                  </td>
-                  <td
-                    className={`px-4 py-3 financial-value ${flashText(
-                      flashes[`${token.address.toLowerCase()}:traders`]
-                    )}`}
-                  >
-                    {token.traders24h ?? 0}
-                  </td>
-                  <td className="px-4 py-3">
-                    <PctChange value={token.change1hPct ?? null} />
-                  </td>
-                  <td className="px-4 py-3">
-                    <PctChange value={token.change6hPct ?? null} />
-                  </td>
-                  <td className="px-4 py-3">
-                    <PctChange value={token.change24hPct ?? null} />
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-        </div>
-        </section>
         )}
 
         {showLoadMore ? (

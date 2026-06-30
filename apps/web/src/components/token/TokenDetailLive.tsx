@@ -52,7 +52,6 @@ import { TradeSheet } from "@/components/token/TradeSheet";
 import { TokenMobileHero } from "@/components/token/TokenMobileHero";
 import { TokenTradeDock } from "@/components/token/TokenTradeDock";
 import { TokenMobileMarketSheet } from "@/components/token/TokenMobileMarketSheet";
-import { TokenMobileMainTabs, type TokenMobileMainTab } from "@/components/token/TokenMobileMainTabs";
 import {
   parseTradePrefillFromSearchParams,
   type TradePrefillConfig,
@@ -260,10 +259,9 @@ export function TokenDetailLive({
   const [copiedAddress, setCopiedAddress] = useState(false);
   const [profileAddress, setProfileAddress] = useState<string | null>(null);
   const [tradePrefill, setTradePrefill] = useState<TradePrefillConfig | null>(null);
-  const [mobileMainTab, setMobileMainTab] = useState<TokenMobileMainTab>("chart");
   const [shareOpen, setShareOpen] = useState(false);
   const [mobileMarketOpen, setMobileMarketOpen] = useState(false);
-  const [mobileHeroDetailsOpen, setMobileHeroDetailsOpen] = useState(false);
+  const [mobileHeroDetailsOpen, setMobileHeroDetailsOpen] = useState(true);
   const [tradeSheetOpen, setTradeSheetOpen] = useState(false);
   const [, setAgeTick] = useState(0);
   const tradePrefillCapturedRef = useRef(false);
@@ -293,7 +291,6 @@ export function TokenDetailLive({
 
     tradePrefillCapturedRef.current = true;
     setTradePrefill(parsed);
-    setMobileMainTab("chart");
     if (typeof window !== "undefined" && window.matchMedia("(max-width: 1023px)").matches) {
       setTradeSheetOpen(true);
     }
@@ -739,6 +736,19 @@ export function TokenDetailLive({
 
   const favorited = isFavorite(streamAddress);
 
+  const tradeTapeProps = {
+    tokenAddress: streamAddress,
+    creatorAddress: liveToken.creatorAddress,
+    symbol: liveToken.symbol,
+    headTrades: trades,
+    wsConnected,
+    holdersRefreshKey,
+    initialHolders,
+    currentPriceBnb: displayPrice,
+    bnbUsd,
+    onAddressClick: setProfileAddress,
+  };
+
   useEffect(() => {
     const timer = setInterval(() => setAgeTick((tick) => tick + 1), 60_000);
     return () => clearInterval(timer);
@@ -747,7 +757,6 @@ export function TokenDetailLive({
   useEffect(() => {
     setMobileMarketOpen(false);
     setMobileHeroDetailsOpen(false);
-    setMobileMainTab("chart");
     setTradeSheetOpen(false);
     setTradePrefill(null);
   }, [tokenAddress]);
@@ -956,32 +965,23 @@ export function TokenDetailLive({
               changePct={changeTone}
               volume24hLabel={formatToolbarUsdAmount(volume24hUsd)}
               fdvLabel={formatToolbarUsdAmount(fdvUsd)}
-              ageLabel={formatToolbarAge(liveToken.createdAt)}
               showSocialLinks={showSocialLinks}
               favorited={favorited}
               tradeLocked={tradeLocked}
+              copiedAddress={copiedAddress}
               detailsOpen={mobileHeroDetailsOpen}
               onToggleDetails={toggleMobileHeroDetails}
               onOpenMarket={openMobileMarket}
               onToggleFavorite={() => toggleFavorite(streamAddress)}
               onShare={() => setShareOpen(true)}
+              onCopyAddress={() => void onCopyAddress()}
               onOpenCreator={setProfileAddress}
               isRefreshing={isRefreshing}
             />
           </div>
 
-          <TokenMobileMainTabs active={mobileMainTab} onChange={setMobileMainTab} />
-
           <div className="token-page-content-slot">
-            <div
-              id="token-mobile-panel-chart"
-              role="tabpanel"
-              aria-labelledby="token-mobile-tab-chart"
-              hidden={mobileMainTab !== "chart"}
-              className={`token-page-chart-slot ${
-                mobileMainTab !== "chart" ? "max-lg:hidden" : ""
-              }`}
-            >
+            <div className="token-page-chart-slot">
               <PriceChart
                 fillContainer
                 tokenAddress={streamAddress}
@@ -998,48 +998,19 @@ export function TokenDetailLive({
               />
             </div>
 
-            {mobileMainTab !== "chart" ? (
-              <div
-                id={
-                  mobileMainTab === "holders"
-                    ? "token-mobile-panel-holders"
-                    : "token-mobile-panel-trades"
-                }
-                role="tabpanel"
-                aria-labelledby={`token-mobile-tab-${mobileMainTab === "holders" ? "holders" : "trades"}`}
-                className="token-page-tape-slot token-page-tape-slot--mobile lg:hidden"
-              >
-                <TradeTape
-                  tokenAddress={streamAddress}
-                  creatorAddress={liveToken.creatorAddress}
-                  symbol={liveToken.symbol}
-                  headTrades={trades}
-                  wsConnected={wsConnected}
-                  holdersRefreshKey={holdersRefreshKey}
-                  initialHolders={initialHolders}
-                  currentPriceBnb={displayPrice}
-                  bnbUsd={bnbUsd}
-                  onAddressClick={setProfileAddress}
-                  hideTabBar
-                  activeTab={mobileMainTab === "holders" ? "holders" : "trades"}
-                  mobileStickyHead
-                />
-              </div>
-            ) : null}
+            <TokenTradeDock
+              placement="inline"
+              disabled={tradeLocked}
+              onBuy={() => openMobileTrade("buy")}
+              onSell={() => openMobileTrade("sell")}
+            />
+
+            <div className="token-page-mobile-activity lg:hidden">
+              <TradeTape {...tradeTapeProps} mobileStickyHead />
+            </div>
 
             <div className="token-page-tape-slot hidden lg:flex">
-              <TradeTape
-                tokenAddress={streamAddress}
-                creatorAddress={liveToken.creatorAddress}
-                symbol={liveToken.symbol}
-                headTrades={trades}
-                wsConnected={wsConnected}
-                holdersRefreshKey={holdersRefreshKey}
-                initialHolders={initialHolders}
-                currentPriceBnb={displayPrice}
-                bnbUsd={bnbUsd}
-                onAddressClick={setProfileAddress}
-              />
+              <TradeTape {...tradeTapeProps} />
             </div>
           </div>
         </div>
@@ -1116,11 +1087,6 @@ export function TokenDetailLive({
         chainCurveSnapshot={tradeCurveSnapshot}
       />
 
-      <TokenTradeDock
-        disabled={tradeLocked}
-        onBuy={() => openMobileTrade("buy")}
-        onSell={() => openMobileTrade("sell")}
-      />
     </div>
   );
 }

@@ -1,11 +1,13 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import type { TokenListItem } from "@/lib/db/launchpad";
-import { ArenaBoardRowQuickActions } from "@/components/arena/ArenaBoardRowQuickActions";
 import { TokenAvatar } from "@/components/token/TokenAvatar";
 import { TokenDetailLink } from "@/components/token/TokenDetailLink";
-import { PctChange } from "@/components/ui/PctChange";
-import { formatCapForBoard } from "@/lib/arena-board-format";
+import { shortAddress } from "@/config/chain";
+import { resolveLaunchpadLogoUri } from "@/lib/assets";
+import { formatAge, formatCapForBoard } from "@/lib/arena-board-format";
+import { PumpIcon, faBolt } from "@/lib/icons";
 
 type FlashTone = "up" | "down";
 
@@ -18,28 +20,30 @@ function flashText(toneValue: FlashTone | undefined): string {
 function TrendSparkline({
   points,
   positive,
+  className = "",
 }: {
   points: number[];
   positive: boolean;
+  className?: string;
 }) {
   const min = Math.min(...points);
   const max = Math.max(...points);
   const range = Math.max(max - min, 1e-9);
   const poly = points
     .map((p, i) => {
-      const x = (i / Math.max(points.length - 1, 1)) * 56;
-      const y = 18 - ((p - min) / range) * 16;
+      const x = (i / Math.max(points.length - 1, 1)) * 72;
+      const y = 22 - ((p - min) / range) * 18;
       return `${x.toFixed(2)},${y.toFixed(2)}`;
     })
     .join(" ");
 
   return (
-    <svg viewBox="0 0 56 20" aria-hidden className="h-5 w-14 shrink-0 opacity-90">
+    <svg viewBox="0 0 72 24" aria-hidden className={className}>
       <polyline
         points={poly}
         fill="none"
         stroke={positive ? "rgb(var(--pump-success))" : "rgb(var(--pump-danger))"}
-        strokeWidth="1.8"
+        strokeWidth="2"
         strokeLinejoin="round"
         strokeLinecap="round"
       />
@@ -50,28 +54,29 @@ function TrendSparkline({
 type ArenaTokenCardProps = {
   token: TokenListItem;
   mcapUsd: number | null;
-  isKoth: boolean;
-  isKothContender: boolean;
   mcapFlash?: FlashTone;
   isFavorite: boolean;
   onToggleFavorite: (address: string) => void;
-  onBuy: () => void;
-  onSell: () => void;
   compact?: boolean;
 };
 
 export function ArenaTokenCard({
   token,
   mcapUsd,
-  isKoth,
-  isKothContender,
   mcapFlash,
   isFavorite,
   onToggleFavorite,
-  onBuy,
-  onSell,
   compact = false,
 }: ArenaTokenCardProps) {
+  const [imgError, setImgError] = useState(false);
+  const logoSrc = token.logoUrl?.trim()
+    ? resolveLaunchpadLogoUri(token.logoUrl, token.address)
+    : resolveLaunchpadLogoUri(null, token.address);
+
+  useEffect(() => {
+    setImgError(false);
+  }, [logoSrc]);
+
   const trendPoints = [
     token.change24hPct ?? 0,
     token.change6hPct ?? 0,
@@ -79,76 +84,73 @@ export function ArenaTokenCard({
     0,
   ];
   const trendPositive = (token.change24hPct ?? 0) >= 0;
-  const avatarSize = compact ? 32 : 40;
+  const mcapLabel = formatCapForBoard(mcapUsd);
+  const creatorLabel = shortAddress(token.creatorAddress, true);
 
   return (
     <TokenDetailLink
       address={token.address}
-      className={`arena-token-card panel-interactive relative flex h-full cursor-pointer flex-col gap-3 p-3 no-underline md:gap-4 md:p-4 ${
+      className={`arena-token-card group block cursor-pointer no-underline ${
         compact ? "arena-token-card--compact" : ""
       }`}
       aria-label={`View ${token.symbol}`}
     >
-      <button
-        type="button"
-        onClick={(event) => {
-          event.stopPropagation();
-          onToggleFavorite(token.address);
-        }}
-        className={`arena-token-card__favorite absolute z-[2] text-lg leading-none transition ${
-          compact ? "right-2.5 top-2.5" : "right-3 top-3 md:right-4 md:top-4"
-        } ${isFavorite ? "text-pump-accent" : "text-pump-muted hover:text-pump-text"}`}
-        aria-label={isFavorite ? "Remove from favorites" : "Add to favorites"}
-      >
-        {isFavorite ? "★" : "☆"}
-      </button>
-
-      <div
-        className={`flex items-start justify-between gap-2 ${
-          compact ? "pr-6" : "pr-7 md:pr-8"
-        }`}
-      >
-        <div className="flex min-w-0 items-center gap-3">
-          <TokenAvatar
-            address={token.address}
-            symbol={token.symbol}
-            logoUrl={token.logoUrl}
-            size={avatarSize}
+      <div className="arena-token-card__media">
+        {logoSrc && !imgError ? (
+          <img
+            src={logoSrc}
+            alt=""
+            className="arena-token-card__image"
+            referrerPolicy="no-referrer"
+            onError={() => setImgError(true)}
           />
-          <div className="min-w-0">
-            <p className="truncate text-body-sm font-semibold text-pump-text">{token.name}</p>
-            <p className="text-caption text-pump-muted">${token.symbol}</p>
+        ) : (
+          <div className="arena-token-card__image arena-token-card__image--fallback">
+            <span className="text-h2 font-semibold text-pump-muted">
+              {token.symbol.charAt(0).toUpperCase() || "?"}
+            </span>
           </div>
+        )}
+        <div className="arena-token-card__sparkline" aria-hidden>
+          <TrendSparkline
+            points={trendPoints}
+            positive={trendPositive}
+            className="h-6 w-[4.5rem]"
+          />
         </div>
-        {isKoth ? (
-          <span className="status-badge shrink-0 border-pump-accent/40 bg-pump-accent/12 text-[10px] text-pump-accent">
-            KOTH
+        <button
+          type="button"
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            onToggleFavorite(token.address);
+          }}
+          className={`arena-token-card__favorite ${isFavorite ? "arena-token-card__favorite--active" : ""}`}
+          aria-label={isFavorite ? "Remove from favorites" : "Add to favorites"}
+        >
+          {isFavorite ? "★" : "☆"}
+        </button>
+      </div>
+
+      <div className="arena-token-card__body">
+        <p className="arena-token-card__name truncate">{token.name}</p>
+        <p className="arena-token-card__symbol truncate">${token.symbol}</p>
+        <p className={`arena-token-card__mcap financial-value ${flashText(mcapFlash)}`}>
+          {mcapLabel === "—" ? "—" : `${mcapLabel} MC`}
+        </p>
+        <div className="arena-token-card__meta">
+          <TokenAvatar
+            address={token.creatorAddress}
+            symbol={creatorLabel}
+            size={18}
+            className="!ring-0"
+          />
+          <span className="arena-token-card__creator truncate">{creatorLabel}</span>
+          <PumpIcon icon={faBolt} className="arena-token-card__age-icon shrink-0" aria-hidden />
+          <span className="arena-token-card__age financial-value shrink-0">
+            {formatAge(token.createdAt)}
           </span>
-        ) : isKothContender ? (
-          <span className="status-badge shrink-0 text-[10px] text-pump-muted">Contender</span>
-        ) : null}
-      </div>
-
-      <div className="grid grid-cols-[1fr_auto] items-end gap-3">
-        <div className="min-w-0 space-y-1">
-          <p className="section-label">Market cap</p>
-          <p
-            className={`financial-value text-h3 font-semibold leading-none text-pump-text ${flashText(mcapFlash)}`}
-          >
-            {formatCapForBoard(mcapUsd)}
-          </p>
-          <PctChange value={token.change24hPct ?? null} className="text-caption font-medium" />{" "}
-          <span className="text-caption text-pump-muted">24h</span>
         </div>
-        <TrendSparkline points={trendPoints} positive={trendPositive} />
-      </div>
-
-      <div
-        className="arena-card-quick-actions"
-        onClick={(event) => event.stopPropagation()}
-        onKeyDown={(event) => event.stopPropagation()}
-      >
-        <ArenaBoardRowQuickActions onBuy={onBuy} onSell={onSell} />
       </div>
     </TokenDetailLink>
   );
