@@ -8,6 +8,7 @@ import { useOpenConnectModal } from "@/hooks/useOpenConnectModal";
 import type { SessionBuyParams, SessionSellParams } from "@/hooks/useSessionTrade";
 import { useWalletFunding } from "@/components/wallet/WalletFundingProvider";
 import { PumpAmountNumpad } from "@/components/token/PumpAmountNumpad";
+import { PumpAmountPresets } from "@/components/token/PumpAmountPresets";
 import { TradeConfirmModal } from "@/components/token/TradeConfirmModal";
 import { assertScwReadyForUserOp } from "@/lib/aa/scw-preflight";
 import { estimateKernelUserOpPrefundWei } from "@/lib/aa/estimate-kernel-user-op-prefund";
@@ -2470,6 +2471,18 @@ export function TradePanel({
               </p>
             ) : null}
 
+            {useCustomAmountNumpad ? (
+              <PumpAmountPresets
+                onPresetPercent={applyNumpadPreset}
+                onMax={() => applyNumpadPreset(100)}
+                activePreset={resolvedNumpadPreset}
+                presetsDisabled={!canUseSlider}
+                maxDisabled={side === "buy" ? !canUseMaxBuy : !canUseMaxSell}
+                disabled={paused}
+                side={side}
+              />
+            ) : null}
+
             {!useCustomAmountNumpad ? (
             <div
               className={`trade-teeth-slider trade-teeth-slider--${side}${
@@ -2585,6 +2598,18 @@ export function TradePanel({
             {error}
           </div>
         ) : null}
+
+        {useCustomAmountNumpad ? (
+          <div className="trade-action-zone trade-action-zone--numpad-inline">
+            <button
+              type="submit"
+              disabled={submitDisabled}
+              className={`trade-submit-button ${submitButtonClass}`}
+            >
+              {submitActionLabel}
+            </button>
+          </div>
+        ) : null}
         </div>
 
         {useCustomAmountNumpad ? (
@@ -2592,23 +2617,8 @@ export function TradePanel({
             <PumpAmountNumpad
               value={displayInputValue}
               onValueChange={onDisplayInputChange}
-              onPresetPercent={applyNumpadPreset}
-              onMax={() => applyNumpadPreset(100)}
-              activePreset={resolvedNumpadPreset}
-              presetsDisabled={!canUseSlider}
-              maxDisabled={side === "buy" ? !canUseMaxBuy : !canUseMaxSell}
               disabled={paused}
-              side={side}
             />
-            <div className="trade-action-zone">
-              <button
-                type="submit"
-                disabled={submitDisabled}
-                className={`trade-submit-button ${submitButtonClass}`}
-              >
-                {submitActionLabel}
-              </button>
-            </div>
           </div>
         ) : (
         <div className="trade-action-zone">

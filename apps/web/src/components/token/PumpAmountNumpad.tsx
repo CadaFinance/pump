@@ -1,5 +1,6 @@
 "use client";
 
+import { useCallback, useEffect, useRef } from "react";
 import {
   applyPumpNumpadKey,
   numpadKeyLabel,
@@ -7,19 +8,15 @@ import {
   type PumpNumpadKey,
 } from "@/lib/trade-numpad";
 
-const PRESET_PERCENTS = [25, 50, 75] as const;
-
 type PumpAmountNumpadProps = {
   value: string;
   onValueChange: (next: string) => void;
-  onPresetPercent?: (pct: number) => void;
-  onMax?: () => void;
-  activePreset?: number | "max" | null;
-  maxDisabled?: boolean;
-  presetsDisabled?: boolean;
   disabled?: boolean;
-  side?: "buy" | "sell";
 };
+
+const BACKSPACE_HOLD_DELAY_MS = 350;
+const BACKSPACE_REPEAT_START_MS = 90;
+const BACKSPACE_REPEAT_MIN_MS = 45;
 
 function hapticTap() {
   if (typeof navigator !== "undefined" && "vibrate" in navigator) {
@@ -30,70 +27,83 @@ function hapticTap() {
 export function PumpAmountNumpad({
   value,
   onValueChange,
-  onPresetPercent,
-  onMax,
-  activePreset = null,
-  maxDisabled = false,
-  presetsDisabled = false,
   disabled = false,
-  side = "buy",
 }: PumpAmountNumpadProps) {
+  const valueRef = useRef(value);
+  valueRef.current = value;
+
+  const repeatTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const holdingBackspaceRef = useRef(false);
+
+  const clearBackspaceRepeat = useCallback(() => {
+    holdingBackspaceRef.current = false;
+    if (repeatTimeoutRef.current !== null) {
+      clearTimeout(repeatTimeoutRef.current);
+      repeatTimeoutRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => clearBackspaceRepeat, [clearBackspaceRepeat]);
+
+  const deleteOnce = useCallback(() => {
+    const current = valueRef.current;
+    if (!current) return false;
+    const next = applyPumpNumpadKey(current, "backspace");
+    valueRef.current = next;
+    onValueChange(next);
+    return true;
+  }, [onValueChange]);
+
+  const scheduleBackspaceRepeat = useCallback(
+    (delayMs: number) => {
+      repeatTimeoutRef.current = window.setTimeout(() => {
+        if (!holdingBackspaceRef.current || disabled) {
+          clearBackspaceRepeat();
+          return;
+        }
+
+        const deleted = deleteOnce();
+        if (!deleted) {
+          clearBackspaceRepeat();
+          return;
+        }
+
+        const nextDelay =
+          delayMs > BACKSPACE_REPEAT_MIN_MS
+            ? Math.max(BACKSPACE_REPEAT_MIN_MS, delayMs - 12)
+            : BACKSPACE_REPEAT_MIN_MS;
+        scheduleBackspaceRepeat(nextDelay);
+      }, delayMs);
+    },
+    [clearBackspaceRepeat, deleteOnce, disabled]
+  );
+
+  const beginBackspaceHold = useCallback(() => {
+    if (disabled) return;
+
+    clearBackspaceRepeat();
+    holdingBackspaceRef.current = true;
+
+    if (deleteOnce()) {
+      hapticTap();
+    }
+
+    repeatTimeoutRef.current = window.setTimeout(() => {
+      if (!holdingBackspaceRef.current) return;
+      scheduleBackspaceRepeat(BACKSPACE_REPEAT_START_MS);
+    }, BACKSPACE_HOLD_DELAY_MS);
+  }, [clearBackspaceRepeat, deleteOnce, disabled, scheduleBackspaceRepeat]);
+
   const pressKey = (key: PumpNumpadKey) => {
     if (disabled) return;
     hapticTap();
-    onValueChange(applyPumpNumpadKey(value, key));
-  };
-
-  const pressPreset = (pct: number) => {
-    if (disabled || presetsDisabled) return;
-    hapticTap();
-    onPresetPercent?.(pct);
-  };
-
-  const pressMax = () => {
-    if (disabled || maxDisabled) return;
-    hapticTap();
-    onMax?.();
+    const next = applyPumpNumpadKey(valueRef.current, key);
+    valueRef.current = next;
+    onValueChange(next);
   };
 
   return (
-    <div
-      className={`pump-amount-numpad pump-amount-numpad--${side}`}
-      role="group"
-      aria-label="Amount keypad"
-    >
-      <div className="pump-amount-numpad__presets" role="group" aria-label="Quick amount">
-        {PRESET_PERCENTS.map((pct) => (
-          <button
-            key={pct}
-            type="button"
-            className={
-              activePreset === pct
-                ? "pump-amount-numpad__preset pump-amount-numpad__preset--active"
-                : "pump-amount-numpad__preset"
-            }
-            disabled={disabled || presetsDisabled}
-            aria-pressed={activePreset === pct}
-            onClick={() => pressPreset(pct)}
-          >
-            {pct}%
-          </button>
-        ))}
-        <button
-          type="button"
-          className={
-            activePreset === "max"
-              ? "pump-amount-numpad__preset pump-amount-numpad__preset--active"
-              : "pump-amount-numpad__preset"
-          }
-          disabled={disabled || maxDisabled}
-          aria-pressed={activePreset === "max"}
-          onClick={pressMax}
-        >
-          Max
-        </button>
-      </div>
-
+    <div className="pump-amount-numpad" role="group" aria-label="Amount keypad">
       <div className="pump-amount-numpad__grid">
         {PUMP_NUMPAD_ROWS.map((row, rowIndex) => (
           <div key={`row-${rowIndex}`} className="pump-amount-numpad__row">
@@ -111,7 +121,18 @@ export function PumpAmountNumpad({
                   }
                   disabled={disabled}
                   aria-label={numpadKeyLabel(key)}
-                  onClick={() => pressKey(key)}
+                  onClick={isBackspace ? undefined : () => pressKey(key)}
+                  onPointerDown={
+                    isBackspace
+                      ? (event) => {
+                          event.preventDefault();
+                          beginBackspaceHold();
+                        }
+                      : undefined
+                  }
+                  onPointerUp={isBackspace ? clearBackspaceRepeat : undefined}
+                  onPointerLeave={isBackspace ? clearBackspaceRepeat : undefined}
+                  onPointerCancel={isBackspace ? clearBackspaceRepeat : undefined}
                 >
                   {isBackspace ? (
                     <span className="pump-amount-numpad__backspace" aria-hidden>
