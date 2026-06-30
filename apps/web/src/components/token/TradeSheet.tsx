@@ -25,6 +25,8 @@ type TradeSheetProps = {
   onTradeSubmitted?: (payload: TradeSubmittedPayload) => void;
   onTradeConfirmed?: (payload: TradeConfirmedPayload) => void;
   chainCurveSnapshot?: BondingCurveSnapshot;
+  /** 24h price change for mobile Quick Order header. */
+  changePct?: number | null;
   /** Bottom sheet on mobile token page; centered modal for portfolio quick actions. */
   presentation?: "sheet" | "modal";
 };
@@ -43,6 +45,7 @@ export function TradeSheet({
   onTradeSubmitted,
   onTradeConfirmed,
   chainCurveSnapshot,
+  changePct = null,
   presentation = "sheet",
 }: TradeSheetProps) {
   const [mounted, setMounted] = useState(false);
@@ -110,11 +113,7 @@ export function TradeSheet({
                 </button>
               </div>
             </div>
-          ) : (
-            <div className="shrink-0 pt-2" aria-hidden>
-              <div className="mx-auto h-1 w-9 bg-pump-border/45" />
-            </div>
-          )}
+          ) : null}
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
             <TradePanel
               key={`${tokenAddress}-${tradeSide}`}
@@ -131,6 +130,8 @@ export function TradeSheet({
               onTradeSubmitted={onTradeSubmitted}
               onTradeConfirmed={onTradeConfirmed}
               chainCurveSnapshot={chainCurveSnapshot}
+              changePct={changePct}
+              sheetOnClose={isModal ? undefined : handleClose}
             />
           </div>
         </div>

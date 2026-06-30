@@ -1085,6 +1085,7 @@ export function TokenDetailLive({
         onTradeSubmitted={handleTradeSubmitted}
         onTradeConfirmed={handleMobileTradeConfirmed}
         chainCurveSnapshot={tradeCurveSnapshot}
+        changePct={changeTone}
       />
 
     </div>

@@ -9,6 +9,7 @@ import type { SessionBuyParams, SessionSellParams } from "@/hooks/useSessionTrad
 import { useWalletFunding } from "@/components/wallet/WalletFundingProvider";
 import { PumpAmountNumpad } from "@/components/token/PumpAmountNumpad";
 import { PumpAmountPresets } from "@/components/token/PumpAmountPresets";
+import { TradeQuickOrderHeader } from "@/components/token/TradeQuickOrderHeader";
 import { TradeConfirmModal } from "@/components/token/TradeConfirmModal";
 import { assertScwReadyForUserOp } from "@/lib/aa/scw-preflight";
 import { estimateKernelUserOpPrefundWei } from "@/lib/aa/estimate-kernel-user-op-prefund";
@@ -164,6 +165,10 @@ type TradePanelProps = {
   onTradeConfirmed?: (payload: TradeConfirmedPayload) => void;
   /** Live curve snapshot from token page — keeps quotes in sync with chart polling. */
   chainCurveSnapshot?: BondingCurveSnapshot;
+  /** Mobile trade sheet — 24h price change for Quick Order header. */
+  changePct?: number | null;
+  /** Mobile trade sheet — close handler for Quick Order header. */
+  sheetOnClose?: () => void;
 };
 
 function parseBnbAmount(value: string): bigint {
@@ -314,6 +319,8 @@ export function TradePanel({
   onTradeSubmitted,
   onTradeConfirmed,
   chainCurveSnapshot,
+  changePct = null,
+  sheetOnClose,
 }: TradePanelProps) {
   const { address, isConnected, chain } = useAccount();
   const { data: gasPrice } = useGasPrice({ chainId: pumpChain.id });
@@ -2259,6 +2266,19 @@ export function TradePanel({
   }
 
   const useCustomAmountNumpad = Boolean(embedded && compact);
+  const useQuickOrderHeader = Boolean(embedded && compact && sheetOnClose);
+
+  function switchTradeSide(next: Side) {
+    if (next === side) return;
+    setSide(next);
+    setAmount("");
+    setLinkedBuySpendWei(null);
+    setLinkedSellTokenWei(null);
+    setError(null);
+    setAmountInputHint(null);
+    setNumpadPreset(null);
+    setAssetMenuOpen(false);
+  }
 
   function applyNumpadPreset(pct: number) {
     setNumpadPreset(pct >= 100 ? "max" : pct);
@@ -2318,37 +2338,29 @@ export function TradePanel({
           </div>
         ) : null}
 
-        {tradeMode === "market" ? (
+        {tradeMode === "market" && useQuickOrderHeader ? (
+          <TradeQuickOrderHeader
+            symbol={symbol}
+            changePct={changePct}
+            side={side}
+            onSideChange={switchTradeSide}
+            onClose={sheetOnClose!}
+          />
+        ) : null}
+
+        {tradeMode === "market" && !useQuickOrderHeader ? (
           <div className="trade-panel-tabs">
             <div className="trade-side-group">
               <button
                 type="button"
-                onClick={() => {
-                  setSide("buy");
-                  setAmount("");
-                  setLinkedBuySpendWei(null);
-                  setLinkedSellTokenWei(null);
-                  setError(null);
-                  setAmountInputHint(null);
-                  setNumpadPreset(null);
-                  setAssetMenuOpen(false);
-                }}
+                onClick={() => switchTradeSide("buy")}
                 className={side === "buy" ? "trade-side-button-active-buy" : "trade-side-button"}
               >
                 Buy
               </button>
               <button
                 type="button"
-                onClick={() => {
-                  setSide("sell");
-                  setAmount("");
-                  setLinkedBuySpendWei(null);
-                  setLinkedSellTokenWei(null);
-                  setError(null);
-                  setAmountInputHint(null);
-                  setNumpadPreset(null);
-                  setAssetMenuOpen(false);
-                }}
+                onClick={() => switchTradeSide("sell")}
                 className={side === "sell" ? "trade-side-button-active-sell" : "trade-side-button"}
               >
                 Sell
