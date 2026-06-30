@@ -182,6 +182,12 @@ code,
   }
 
   @media (max-width: 1023px) {
+    .modal-backdrop {
+      background: rgb(var(--pump-bg));
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
+    }
+
     .modal-backdrop--visual-viewport,
     .modal-sheet-host--visual-viewport {
       inset: auto;
