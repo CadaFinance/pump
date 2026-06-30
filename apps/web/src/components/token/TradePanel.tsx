@@ -905,12 +905,18 @@ export function TradePanel({
   const insufficientTokenOnly =
     side === "sell" && insufficientSellTokenBalance && !insufficientSellGas;
 
+  const sellHasNoTokenBalance =
+    side === "sell" &&
+    isConnected &&
+    !wrongChain &&
+    tokenBalance !== undefined &&
+    maxSellTokenWei === 0n;
+
   const showInsufficientTokenBalance =
     side === "sell" &&
     isConnected &&
     !wrongChain &&
-    sellTokenWei > 0n &&
-    insufficientSellTokenBalance;
+    (sellHasNoTokenBalance || (sellTokenWei > 0n && insufficientSellTokenBalance));
 
   const balancePending =
     side === "buy"
@@ -1381,9 +1387,6 @@ export function TradePanel({
       return;
     }
     if (wrongChain || paused || maxSellTokenWei === 0n) {
-      if (isConnected && maxSellTokenWei === 0n) {
-        setError("No token balance to sell.");
-      }
       return;
     }
 
@@ -2084,14 +2087,6 @@ export function TradePanel({
     applyBuySliderPercent(100);
   }, [side, maxBuySpendWei, bondingCurve, protocolFeeBps]);
 
-  useEffect(() => {
-    if (side !== "sell" || tokenBalance === undefined || sellTokenWei <= 0n) return;
-    if (sellTokenWei <= tokenBalance) return;
-    if (pendingAction !== null) return;
-    applySellTokenWei(tokenBalance);
-    toast.info("Amount adjusted", "Set to your current token balance.");
-  }, [side, tokenBalance, sellTokenWei, pendingAction]);
-
   async function confirmPendingTrade(rememberAutoConfirm: boolean) {
     if (!pendingTrade) return;
     setTradeConfirmError(null);
@@ -2168,12 +2163,12 @@ export function TradePanel({
     !isTransientInstantGateReason(instantTradeGate.reason);
 
   const submitActionLabel = (() => {
-    if (!isConnected) return "Sign in to trade";
+    if (!isConnected) return "Sign in";
     if (wrongChain) return "Switch to Base Sepolia";
     if (paused) return "Trading paused";
+    if (showInsufficientTokenBalance) return "Insufficient balance";
     if (!hasSubmitAmount) return "Enter amount";
     if (tradeSubmitPending) return side === "buy" ? `Buy ${symbol}` : `Sell ${symbol}`;
-    if (showInsufficientTokenBalance) return "Insufficient balance";
     if (showDepositCta) return `Deposit ${NATIVE_SYMBOL}`;
     if (buyGateBlocked) return `Not enough ${NATIVE_SYMBOL}`;
     return side === "buy" ? `Buy ${symbol}` : `Sell ${symbol}`;
@@ -2182,14 +2177,16 @@ export function TradePanel({
   const submitButtonClass =
     showDepositCta || side === "buy"
       ? "trade-submit-button--buy"
-      : "trade-submit-button--sell";
+      : showInsufficientTokenBalance
+        ? "trade-submit-button--sell trade-submit-button--insufficient"
+        : "trade-submit-button--sell";
 
   const submitDisabled = (() => {
     if (!isConnected) return false;
     if (wrongChain || paused) return true;
+    if (showInsufficientTokenBalance) return true;
     if (!hasSubmitAmount) return true;
     if (tradeSubmitPending) return true;
-    if (showInsufficientTokenBalance) return true;
     if (showDepositCta) return false;
     if (buyGateBlocked) return true;
     return false;

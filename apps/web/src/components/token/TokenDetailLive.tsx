@@ -11,7 +11,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createPublicClient, http } from "viem";
-import { useReadContract } from "wagmi";
+import { useAccount, useReadContract } from "wagmi";
 import type { TokenHolderSnapshot, TokenDetail, TradeItem } from "@/lib/db/launchpad";
 import {
   bondingCurveManagerAbi,
@@ -46,6 +46,7 @@ import {
   removeOptimisticActivities,
 } from "@/lib/optimistic-activity";
 import { contracts, explorerAddressUrl, pumpChain, shortAddress } from "@/config/chain";
+import { erc20Abi } from "@/lib/abis/erc20";
 import { copyToClipboard } from "@/lib/copy-to-clipboard";
 import { TradePanel, type TradeConfirmedPayload, type TradeOptimisticPayload, type TradeSubmittedPayload } from "@/components/token/TradePanel";
 import { TradeSheet } from "@/components/token/TradeSheet";
@@ -279,6 +280,19 @@ export function TokenDetailLive({
     `${sidebarWidth}:${expanded ? 1 : 0}`
   );
   const { isFavorite, toggleFavorite } = useFavorites();
+  const { address, isConnected } = useAccount();
+  const { data: mobileSellTokenBalance } = useReadContract({
+    address: streamAddress as `0x${string}`,
+    abi: erc20Abi,
+    functionName: "balanceOf",
+    args: address ? [address] : undefined,
+    chainId: pumpChain.id,
+    query: { enabled: Boolean(address) },
+  });
+  const mobileSellInsufficient =
+    isConnected &&
+    mobileSellTokenBalance !== undefined &&
+    mobileSellTokenBalance === 0n;
   const burstUntilRef = useRef(0);
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const optimisticRef = useRef<TradeItem[]>([]);
@@ -1003,16 +1017,6 @@ export function TokenDetailLive({
               />
             </div>
 
-            {indexerSyncing ? (
-              <p
-                className={`panel-surface shrink-0 px-3 py-1.5 text-caption text-pump-muted ${
-                  mobileMainTab !== "chart" ? "max-lg:hidden" : ""
-                }`}
-              >
-                Indexer syncing…
-              </p>
-            ) : null}
-
             {mobileMainTab !== "chart" ? (
               <div
                 id={
@@ -1133,6 +1137,8 @@ export function TokenDetailLive({
 
       <TokenTradeDock
         disabled={tradeLocked}
+        sellLabel={mobileSellInsufficient ? "Insufficient balance" : "Sell"}
+        sellInsufficient={mobileSellInsufficient}
         onBuy={() => openMobileTrade("buy")}
         onSell={() => openMobileTrade("sell")}
       />
