@@ -1,6 +1,6 @@
 "use client";
 
-import { PumpIcon, faCheck, faChevronDown } from "@/lib/icons";
+import { PumpIcon, faCheck, faChevronDown, faRightLeft } from "@/lib/icons";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { encodeFunctionData, formatEther, formatUnits, parseEther, parseSignature, parseUnits } from "viem";
 import type { Address, TransactionReceipt } from "viem";
@@ -336,6 +336,7 @@ export function TradePanel({
   const [error, setError] = useState<string | null>(null);
   const [amountInputHint, setAmountInputHint] = useState<string | null>(null);
   const [assetMenuOpen, setAssetMenuOpen] = useState(false);
+  const [numpadPreset, setNumpadPreset] = useState<number | "max" | null>(null);
   const assetMenuRef = useRef<HTMLDivElement>(null);
   const [pendingReservationTick, setPendingReservationTick] = useState(0);
   const pendingLedgerRef = useRef(createTradePendingLedger());
@@ -1282,6 +1283,7 @@ export function TradePanel({
     setAmountInputHint(null);
     setLinkedBuySpendWei(null);
     setLinkedSellTokenWei(null);
+    setNumpadPreset(null);
     const cleaned = raw.replace(/,/g, ".").replace(/[^\d.]/g, "");
     if (activeInputMode === "usd" && bnbUsd != null && bnbUsd > 0) {
       if (!cleaned) {
@@ -1410,12 +1412,17 @@ export function TradePanel({
     setLinkedBuySpendWei(null);
     setLinkedSellTokenWei(null);
     setError(null);
+    setNumpadPreset(null);
     if (side === "buy") {
       setBuyInputMode(mode);
     } else {
       setSellInputMode(mode);
     }
     setAssetMenuOpen(false);
+  }
+
+  function toggleInputMode() {
+    selectInputMode(activeInputMode === "usd" ? "token" : "usd");
   }
 
   useEffect(() => {
@@ -1474,6 +1481,7 @@ export function TradePanel({
     setLinkedBuySpendWei(null);
     setLinkedSellTokenWei(null);
     setError(null);
+    setNumpadPreset(null);
     pendingTradeSideRef.current = null;
     setPendingAction(null);
     tradeTraceStep("ux.on_trade_submitted", { userOpHash: submittedUserOpHash, side });
@@ -2244,6 +2252,18 @@ export function TradePanel({
 
   const useCustomAmountNumpad = Boolean(embedded && compact);
 
+  function applyNumpadPreset(pct: number) {
+    setNumpadPreset(pct >= 100 ? "max" : pct);
+    applySliderPercent(pct);
+  }
+
+  const resolvedNumpadPreset = (() => {
+    if (numpadPreset != null) return numpadPreset;
+    if (sliderPct >= 100 && hasTradeAmount) return "max" as const;
+    if (sliderPct === 25 || sliderPct === 50 || sliderPct === 75) return sliderPct;
+    return null;
+  })();
+
   return (
     <section
       className={
@@ -2302,6 +2322,7 @@ export function TradePanel({
                   setLinkedSellTokenWei(null);
                   setError(null);
                   setAmountInputHint(null);
+                  setNumpadPreset(null);
                   setAssetMenuOpen(false);
                 }}
                 className={side === "buy" ? "trade-side-button-active-buy" : "trade-side-button"}
@@ -2317,6 +2338,7 @@ export function TradePanel({
                   setLinkedSellTokenWei(null);
                   setError(null);
                   setAmountInputHint(null);
+                  setNumpadPreset(null);
                   setAssetMenuOpen(false);
                 }}
                 className={side === "sell" ? "trade-side-button-active-sell" : "trade-side-button"}
@@ -2377,45 +2399,61 @@ export function TradePanel({
                 }
               />
               <div className="trade-amount-box__asset" ref={assetMenuRef}>
-                <button
-                  type="button"
-                  onClick={() => setAssetMenuOpen((open) => !open)}
-                  className="trade-asset-select"
-                  aria-haspopup="listbox"
-                  aria-expanded={assetMenuOpen}
-                  aria-label="Select input currency"
-                >
-                  <span className="text-body-sm font-medium text-pump-text">{currencyLabel}</span>
-                  <PumpIcon icon={faChevronDown} className="h-3.5 w-3.5 opacity-70" />
-                </button>
-                {assetMenuOpen ? (
-                  <div className="trade-asset-menu" role="listbox" aria-label="Input currency">
+                {useCustomAmountNumpad ? (
+                  <button
+                    type="button"
+                    onClick={toggleInputMode}
+                    className="trade-asset-select trade-asset-select--swap"
+                    aria-label={
+                      activeInputMode === "usd" ? `Switch to ${symbol}` : "Switch to USD"
+                    }
+                  >
+                    <span className="text-body-sm font-medium text-pump-text">{currencyLabel}</span>
+                    <PumpIcon icon={faRightLeft} className="h-3.5 w-3.5 opacity-70" />
+                  </button>
+                ) : (
+                  <>
                     <button
                       type="button"
-                      role="option"
-                      aria-selected={activeInputMode === "usd"}
-                      className="trade-asset-menu__option"
-                      onClick={() => selectInputMode("usd")}
+                      onClick={() => setAssetMenuOpen((open) => !open)}
+                      className="trade-asset-select"
+                      aria-haspopup="listbox"
+                      aria-expanded={assetMenuOpen}
+                      aria-label="Select input currency"
                     >
-                      <span>USD</span>
-                      {activeInputMode === "usd" ? (
-                        <PumpIcon icon={faCheck} className="h-4 w-4 shrink-0" />
-                      ) : null}
+                      <span className="text-body-sm font-medium text-pump-text">{currencyLabel}</span>
+                      <PumpIcon icon={faChevronDown} className="h-3.5 w-3.5 opacity-70" />
                     </button>
-                    <button
-                      type="button"
-                      role="option"
-                      aria-selected={activeInputMode === "token"}
-                      className="trade-asset-menu__option"
-                      onClick={() => selectInputMode("token")}
-                    >
-                      <span>{symbol}</span>
-                      {activeInputMode === "token" ? (
-                        <PumpIcon icon={faCheck} className="h-4 w-4 shrink-0" />
-                      ) : null}
-                    </button>
-                  </div>
-                ) : null}
+                    {assetMenuOpen ? (
+                      <div className="trade-asset-menu" role="listbox" aria-label="Input currency">
+                        <button
+                          type="button"
+                          role="option"
+                          aria-selected={activeInputMode === "usd"}
+                          className="trade-asset-menu__option"
+                          onClick={() => selectInputMode("usd")}
+                        >
+                          <span>USD</span>
+                          {activeInputMode === "usd" ? (
+                            <PumpIcon icon={faCheck} className="h-4 w-4 shrink-0" />
+                          ) : null}
+                        </button>
+                        <button
+                          type="button"
+                          role="option"
+                          aria-selected={activeInputMode === "token"}
+                          className="trade-asset-menu__option"
+                          onClick={() => selectInputMode("token")}
+                        >
+                          <span>{symbol}</span>
+                          {activeInputMode === "token" ? (
+                            <PumpIcon icon={faCheck} className="h-4 w-4 shrink-0" />
+                          ) : null}
+                        </button>
+                      </div>
+                    ) : null}
+                  </>
+                )}
               </div>
             </div>
 
@@ -2547,8 +2585,9 @@ export function TradePanel({
             <PumpAmountNumpad
               value={displayInputValue}
               onValueChange={onDisplayInputChange}
-              onPresetPercent={applySliderPercent}
-              onMax={() => applySliderPercent(100)}
+              onPresetPercent={applyNumpadPreset}
+              onMax={() => applyNumpadPreset(100)}
+              activePreset={resolvedNumpadPreset}
               presetsDisabled={!canUseSlider}
               maxDisabled={side === "buy" ? !canUseMaxBuy : !canUseMaxSell}
               disabled={paused}

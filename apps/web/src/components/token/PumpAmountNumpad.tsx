@@ -14,6 +14,7 @@ type PumpAmountNumpadProps = {
   onValueChange: (next: string) => void;
   onPresetPercent?: (pct: number) => void;
   onMax?: () => void;
+  activePreset?: number | "max" | null;
   maxDisabled?: boolean;
   presetsDisabled?: boolean;
   disabled?: boolean;
@@ -31,6 +32,7 @@ export function PumpAmountNumpad({
   onValueChange,
   onPresetPercent,
   onMax,
+  activePreset = null,
   maxDisabled = false,
   presetsDisabled = false,
   disabled = false,
@@ -65,8 +67,13 @@ export function PumpAmountNumpad({
           <button
             key={pct}
             type="button"
-            className="pump-amount-numpad__preset"
+            className={
+              activePreset === pct
+                ? "pump-amount-numpad__preset pump-amount-numpad__preset--active"
+                : "pump-amount-numpad__preset"
+            }
             disabled={disabled || presetsDisabled}
+            aria-pressed={activePreset === pct}
             onClick={() => pressPreset(pct)}
           >
             {pct}%
@@ -74,8 +81,13 @@ export function PumpAmountNumpad({
         ))}
         <button
           type="button"
-          className="pump-amount-numpad__preset pump-amount-numpad__preset--max"
+          className={
+            activePreset === "max"
+              ? "pump-amount-numpad__preset pump-amount-numpad__preset--active"
+              : "pump-amount-numpad__preset"
+          }
           disabled={disabled || maxDisabled}
+          aria-pressed={activePreset === "max"}
           onClick={pressMax}
         >
           Max
