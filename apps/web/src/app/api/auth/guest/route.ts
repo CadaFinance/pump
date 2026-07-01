@@ -4,9 +4,11 @@ import { createSessionTokenForSubject } from "@/lib/auth/wallet-session";
 import { AUTH_COOKIE_NAME, authCookieOptions } from "@/lib/auth/session-cookie";
 import { resolvePublicAppOrigin } from "@/lib/telegram/public-app-origin";
 
+import { isGuestAuthEnabled } from "@/lib/auth/guest-auth";
+
 export async function GET(request: NextRequest) {
-  if (process.env.NODE_ENV !== "development") {
-    return NextResponse.json({ error: "Only available in development" }, { status: 403 });
+  if (!isGuestAuthEnabled()) {
+    return NextResponse.json({ error: "Guest auth is not enabled" }, { status: 403 });
   }
 
   try {

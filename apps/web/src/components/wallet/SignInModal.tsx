@@ -33,6 +33,7 @@ export function SignInModal({ open, onClose, onSuccess }: SignInModalProps) {
   const [telegramReady, setTelegramReady] = useState(false);
   const [googleReady, setGoogleReady] = useState(false);
   const [appleReady, setAppleReady] = useState(false);
+  const [guestAuthEnabled, setGuestAuthEnabled] = useState(false);
   const [pending, setPending] = useState<"telegram" | "google" | "apple" | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -93,6 +94,13 @@ export function SignInModal({ open, onClose, onSuccess }: SignInModalProps) {
         setAppleVisible(isAppleAuthConfigured());
         setAppleReady(false);
       });
+
+    void fetch("/api/auth/guest/config", { cache: "no-store" })
+      .then(async (response) => {
+        const body = (await response.json()) as { data?: { enabled?: boolean } };
+        setGuestAuthEnabled(Boolean(response.ok && body.data?.enabled));
+      })
+      .catch(() => setGuestAuthEnabled(false));
   }, [open, showTelegram]);
 
   const startProvider = useCallback(async (provider: "telegram" | "google" | "apple") => {
@@ -200,20 +208,20 @@ export function SignInModal({ open, onClose, onSuccess }: SignInModalProps) {
                 </button>
               ) : null}
 
-              {process.env.NODE_ENV === "development" ? (
+              {guestAuthEnabled ? (
                 <button
                   type="button"
                   className={providerButtonClass}
                   disabled={Boolean(pending)}
                   onClick={() => {
-                    setPending("telegram"); // just to show loading state
+                    setPending("telegram");
                     window.location.assign("/api/auth/guest");
                   }}
                 >
                   <div className="flex h-5 w-5 items-center justify-center rounded-full bg-pump-border/20 text-pump-text">
                     <PumpIcon icon={faShieldCheck} className="h-3 w-3" />
                   </div>
-                  Continue as Guest (Local)
+                  Continue as Guest
                 </button>
               ) : null}
 
