@@ -6,6 +6,7 @@ export type UserBootstrapData = {
   airdropSaves: string[];
   creatorFollows: string[];
   avatarId: UserAvatarId | null;
+  username: string | null;
 };
 
 export const USER_BOOTSTRAP_EVENT = "pump:user-bootstrap";

@@ -34,6 +34,7 @@ export function UserBootstrapProvider({ children }: { children: React.ReactNode 
             airdropSaves?: string[];
             creatorFollows?: string[];
             avatarId?: UserAvatarId | null;
+            username?: string | null;
           };
         };
         if (cancelled || !response.ok || !body.data) return;
@@ -44,6 +45,7 @@ export function UserBootstrapProvider({ children }: { children: React.ReactNode 
           airdropSaves: body.data.airdropSaves ?? [],
           creatorFollows: (body.data.creatorFollows ?? []).map((item) => item.toLowerCase()),
           avatarId: body.data.avatarId ?? null,
+          username: body.data.username ?? null,
         };
         setUserBootstrap(payload);
       } catch {

@@ -1554,6 +1554,7 @@ export type PortfolioPosition = {
 
 export type PortfolioSnapshot = {
   address: string;
+  username: string | null;
   totalVolumeBnb: number;
   buyVolumeBnb: number;
   sellVolumeBnb: number;
@@ -1859,7 +1860,7 @@ export async function getPortfolioForAddress(
   const normalized = address.toLowerCase();
   const createdLimit = options?.createdLimit;
 
-  const [volumeResult, positionsResult, createdTokens, createdTokensTotal, creatorFeesClaimedBnb, followCountsResult] =
+  const [volumeResult, positionsResult, createdTokens, createdTokensTotal, creatorFeesClaimedBnb, followCountsResult, userResult] =
     await Promise.all([
     db.query<{
       total_volume_zug: string | null;
@@ -1943,6 +1944,10 @@ export async function getPortfolioForAddress(
       `,
       [normalized]
     ),
+    db.query<{ username: string | null }>(
+      `SELECT username FROM users WHERE address = $1`,
+      [normalized]
+    ),
   ]);
 
   const volume = volumeResult.rows[0];
@@ -1978,6 +1983,7 @@ export async function getPortfolioForAddress(
 
   return {
     address: normalized,
+    username: userResult.rows[0]?.username ?? null,
     totalVolumeBnb: Number(volume?.total_volume_zug ?? 0),
     buyVolumeBnb: Number(volume?.buy_volume_zug ?? 0),
     sellVolumeBnb: Number(volume?.sell_volume_zug ?? 0),

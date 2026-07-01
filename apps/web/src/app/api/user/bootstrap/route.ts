@@ -6,7 +6,8 @@ import {
   listFavoriteTokenAddresses,
   listFollowedCreatorAddresses,
 } from "@/lib/db/launchpad";
-import { getOrAssignUserAvatar } from "@/lib/db/users";
+import { getUserProfile } from "@/lib/db/users";
+import { resolveDisplayUsername } from "@/lib/username";
 
 export async function GET(request: NextRequest) {
   const address = normalizeAddressParam(request.nextUrl.searchParams.get("address"));
@@ -15,11 +16,11 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const [favorites, airdropSaves, creatorFollows, avatarId] = await Promise.all([
+    const [favorites, airdropSaves, creatorFollows, profile] = await Promise.all([
       listFavoriteTokenAddresses(address),
       listSavedAirdropIds(address),
       listFollowedCreatorAddresses(address),
-      getOrAssignUserAvatar(address),
+      getUserProfile(address),
     ]);
 
     return NextResponse.json(
@@ -29,7 +30,9 @@ export async function GET(request: NextRequest) {
           favorites,
           airdropSaves,
           creatorFollows,
-          avatarId,
+          avatarId: profile.avatarId,
+          username: profile.username,
+          displayUsername: resolveDisplayUsername(address, profile.username),
         },
       },
       { headers: { "Cache-Control": "private, max-age=5" } }

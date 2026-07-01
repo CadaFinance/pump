@@ -11,12 +11,19 @@ import {
 import { useAccount } from "wagmi";
 import { subscribeUserBootstrap } from "@/lib/user-bootstrap";
 import type { UserAvatarId } from "@/lib/user-avatars";
+import { resolveDisplayUsername } from "@/lib/username";
 
 type UserAvatarContextValue = {
   avatarId: UserAvatarId | null;
+  username: string | null;
+  displayUsername: string | null;
   loading: boolean;
   refresh: () => Promise<void>;
   updateAvatar: (avatarId: UserAvatarId) => Promise<void>;
+  updateProfile: (input: {
+    avatarId?: UserAvatarId;
+    username?: string | null;
+  }) => Promise<void>;
 };
 
 const UserAvatarContext = createContext<UserAvatarContextValue | null>(null);
@@ -24,23 +31,41 @@ const UserAvatarContext = createContext<UserAvatarContextValue | null>(null);
 export function UserAvatarProvider({ children }: { children: React.ReactNode }) {
   const { address } = useAccount();
   const [avatarId, setAvatarId] = useState<UserAvatarId | null>(null);
+  const [username, setUsername] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  const displayUsername = useMemo(() => {
+    if (!address) return null;
+    return resolveDisplayUsername(address, username);
+  }, [address, username]);
+
+  const applyProfile = useCallback(
+    (next: { avatarId?: UserAvatarId | null; username?: string | null }) => {
+      if (next.avatarId) setAvatarId(next.avatarId);
+      if (next.username !== undefined) setUsername(next.username);
+    },
+    []
+  );
 
   const refresh = useCallback(async () => {
     if (!address) {
       setAvatarId(null);
+      setUsername(null);
       return;
     }
 
     setLoading(true);
     try {
       const response = await fetch(
-        `/api/user/avatar?address=${encodeURIComponent(address)}`,
+        `/api/user/profile?address=${encodeURIComponent(address)}`,
         { cache: "no-store" }
       );
-      const body = (await response.json()) as { data?: { avatarId?: UserAvatarId } };
-      if (response.ok && body.data?.avatarId) {
-        setAvatarId(body.data.avatarId);
+      const body = (await response.json()) as {
+        data?: { avatarId?: UserAvatarId; username?: string | null };
+      };
+      if (response.ok && body.data) {
+        if (body.data.avatarId) setAvatarId(body.data.avatarId);
+        setUsername(body.data.username ?? null);
       }
     } catch {
       // ignore
@@ -52,6 +77,7 @@ export function UserAvatarProvider({ children }: { children: React.ReactNode }) 
   useEffect(() => {
     if (!address) {
       setAvatarId(null);
+      setUsername(null);
       return;
     }
 
@@ -61,7 +87,10 @@ export function UserAvatarProvider({ children }: { children: React.ReactNode }) 
     const unsub = subscribeUserBootstrap(address, (data) => {
       if (cancelled) return;
       bootstrapped = true;
-      if (data.avatarId) setAvatarId(data.avatarId);
+      applyProfile({
+        avatarId: data.avatarId,
+        username: data.username,
+      });
       setLoading(false);
     });
 
@@ -75,37 +104,64 @@ export function UserAvatarProvider({ children }: { children: React.ReactNode }) 
       unsub();
       window.clearTimeout(fallback);
     };
-  }, [address, refresh]);
+  }, [address, applyProfile, refresh]);
+
+  const updateProfile = useCallback(
+    async (input: { avatarId?: UserAvatarId; username?: string | null }) => {
+      if (!address) return;
+
+      const previous = { avatarId, username };
+      applyProfile({
+        avatarId: input.avatarId ?? avatarId,
+        username: input.username !== undefined ? input.username : username,
+      });
+
+      try {
+        const response = await fetch("/api/user/profile", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ address, ...input }),
+        });
+        const body = (await response.json()) as {
+          data?: { avatarId?: UserAvatarId; username?: string | null };
+          error?: string;
+        };
+        if (!response.ok) {
+          throw new Error(body.error ?? "Failed to update profile");
+        }
+        if (body.data) {
+          applyProfile({
+            avatarId: body.data.avatarId,
+            username: body.data.username ?? null,
+          });
+        }
+      } catch (error) {
+        setAvatarId(previous.avatarId);
+        setUsername(previous.username);
+        throw error;
+      }
+    },
+    [address, applyProfile, avatarId, username]
+  );
 
   const updateAvatar = useCallback(
     async (nextId: UserAvatarId) => {
-      if (!address) return;
-
-      const previous = avatarId;
-      setAvatarId(nextId);
-
-      try {
-        const response = await fetch("/api/user/avatar", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ address, avatarId: nextId }),
-        });
-        const body = (await response.json()) as { data?: { avatarId?: UserAvatarId }; error?: string };
-        if (!response.ok) {
-          throw new Error(body.error ?? "Failed to update avatar");
-        }
-        if (body.data?.avatarId) setAvatarId(body.data.avatarId);
-      } catch {
-        setAvatarId(previous);
-        throw new Error("Failed to update avatar");
-      }
+      await updateProfile({ avatarId: nextId });
     },
-    [address, avatarId]
+    [updateProfile]
   );
 
   const value = useMemo(
-    () => ({ avatarId, loading, refresh, updateAvatar }),
-    [avatarId, loading, refresh, updateAvatar]
+    () => ({
+      avatarId,
+      username,
+      displayUsername,
+      loading,
+      refresh,
+      updateAvatar,
+      updateProfile,
+    }),
+    [avatarId, username, displayUsername, loading, refresh, updateAvatar, updateProfile]
   );
 
   return <UserAvatarContext.Provider value={value}>{children}</UserAvatarContext.Provider>;

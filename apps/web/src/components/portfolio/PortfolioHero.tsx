@@ -1,26 +1,26 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
 import { PctChange } from "@/components/ui/PctChange";
 import { useWalletFunding } from "@/components/wallet/WalletFundingProvider";
-import { explorerAddressUrl, shortAddress } from "@/config/chain";
-import { copyToClipboard } from "@/lib/copy-to-clipboard";
+import { NATIVE_SYMBOL } from "@/config/chain";
 import { formatPortfolioHoldingValueUsd, formatUsdReadable } from "@/lib/format-usd";
-import { PumpIcon, faCheck, faCopy, faExternalLink } from "@/lib/icons";
+import { PumpIcon, faPen } from "@/lib/icons";
 import { UserAvatarForAddress } from "@/components/user/UserAvatarForAddress";
 
 type PortfolioHeroProps = {
   walletAddress: string;
-  onOpenAvatarPicker: () => void;
+  displayUsername: string;
+  canEditProfile: boolean;
+  onOpenProfileEditor: () => void;
   onOpenFollowing: () => void;
   onOpenFollowers: () => void;
   followingCount: number;
   followerCount: number;
   totalValueUsd: number | null;
+  totalValueNative: number;
   totalNetPnlUsd: number;
   portfolioValuePct: number | null;
-  holdingsCount: number;
   totalUnrealizedPnlUsd: number;
   totalRealizedPnlUsd: number;
   valueFlashClass?: string;
@@ -33,17 +33,24 @@ function pnlTone(value: number): string {
   return "";
 }
 
-function Stat({
+function formatTotalNative(native: number): string {
+  if (!Number.isFinite(native) || native <= 0) return `0 ${NATIVE_SYMBOL}`;
+  if (native >= 1) {
+    return `${native.toLocaleString(undefined, { maximumFractionDigits: 4 })} ${NATIVE_SYMBOL}`;
+  }
+  if (native >= 0.0001) return `${native.toFixed(4)} ${NATIVE_SYMBOL}`;
+  return `${native.toFixed(6)} ${NATIVE_SYMBOL}`;
+}
+
+function ToolbarStat({
   label,
   children,
-  className = "",
 }: {
   label: string;
   children: React.ReactNode;
-  className?: string;
 }) {
   return (
-    <div className={`token-detail-toolbar__stat ${className}`}>
+    <div className="token-detail-toolbar__stat">
       <span className="token-detail-toolbar__stat-label">{label}</span>
       <div className="token-detail-toolbar__stat-value financial-value">{children}</div>
     </div>
@@ -52,150 +59,136 @@ function Stat({
 
 export function PortfolioHero({
   walletAddress,
-  onOpenAvatarPicker,
+  displayUsername,
+  canEditProfile,
+  onOpenProfileEditor,
   onOpenFollowing,
   onOpenFollowers,
   followingCount,
   followerCount,
   totalValueUsd,
+  totalValueNative,
   totalNetPnlUsd,
   portfolioValuePct,
-  holdingsCount,
   totalUnrealizedPnlUsd,
   totalRealizedPnlUsd,
   valueFlashClass = "",
   pnlFlashClass = "",
 }: PortfolioHeroProps) {
   const { openDeposit, openWithdraw } = useWalletFunding();
-  const [copiedAddress, setCopiedAddress] = useState(false);
   const displayValue =
     totalValueUsd != null && Number.isFinite(totalValueUsd)
       ? formatPortfolioHoldingValueUsd(totalValueUsd)
       : "$0.00";
 
-  async function onCopyAddress() {
-    const ok = await copyToClipboard(walletAddress);
-    if (!ok) return;
-    setCopiedAddress(true);
-    setTimeout(() => setCopiedAddress(false), 2000);
-  }
+  const pnlPctTone =
+    portfolioValuePct != null && portfolioValuePct > 0
+      ? "text-pump-success"
+      : portfolioValuePct != null && portfolioValuePct < 0
+        ? "text-pump-danger"
+        : "text-pump-muted";
 
   return (
-    <header className="portfolio-hub-hero">
-      <div className="token-detail-toolbar">
-        <div className="token-detail-toolbar__row">
-          <div className="token-detail-toolbar__identity">
-            <button
-              type="button"
-              className="portfolio-hub-hero__avatar-btn"
-              onClick={onOpenAvatarPicker}
-              aria-label="Change avatar"
-            >
+    <header className="portfolio-header">
+      <div className="portfolio-page-head">
+        <h1 className="page-title portfolio-page-head__title">Portfolio</h1>
+        <div className="portfolio-toolbar__actions">
+          <button
+            type="button"
+            onClick={openDeposit}
+            className="token-toolbar-btn portfolio-toolbar__btn--primary"
+          >
+            Deposit
+          </button>
+          <button type="button" onClick={openWithdraw} className="token-toolbar-btn">
+            Withdraw
+          </button>
+          <Link href="/" className="token-toolbar-btn">
+            Trade
+          </Link>
+        </div>
+      </div>
+
+      <div className="portfolio-toolbar">
+        <div className="token-detail-toolbar">
+          <div className="token-detail-toolbar__row portfolio-toolbar__stats-row">
+            <div className="token-detail-toolbar__identity">
               <UserAvatarForAddress
                 address={walletAddress}
                 size={28}
                 className="token-detail-toolbar__logo shrink-0 !ring-0"
               />
-            </button>
-            <div className="token-detail-toolbar__pair-meta">
-              <span className="token-detail-toolbar__stat-label">Portfolio</span>
-              <span className={`token-detail-toolbar__symbol financial-value ${valueFlashClass}`}>
-                {displayValue}
-              </span>
-              <div className="token-detail-toolbar__contract portfolio-hub-hero__wallet">
-                <span className="token-detail-toolbar__age financial-value">
-                  {shortAddress(walletAddress, true)}
+              <div className="token-detail-toolbar__pair-meta">
+                <div className="portfolio-toolbar__name-line">
+                  <span className="token-detail-toolbar__symbol financial-value">{displayUsername}</span>
+                  {canEditProfile ? (
+                    <button
+                      type="button"
+                      onClick={onOpenProfileEditor}
+                      className="portfolio-toolbar__edit-profile"
+                      aria-label="Edit profile"
+                    >
+                      <PumpIcon icon={faPen} className="h-3 w-3" />
+                      <span>Edit</span>
+                    </button>
+                  ) : null}
+                </div>
+                <span className="token-detail-toolbar__age portfolio-toolbar__social">
+                  <button type="button" onClick={onOpenFollowing} className="portfolio-toolbar__social-link">
+                    {followingCount} following
+                  </button>
+                  <span aria-hidden>·</span>
+                  <button type="button" onClick={onOpenFollowers} className="portfolio-toolbar__social-link">
+                    {followerCount} followers
+                  </button>
                 </span>
-                <a
-                  href={explorerAddressUrl(walletAddress)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="token-detail-toolbar__contract-btn"
-                  aria-label="View wallet on explorer"
-                >
-                  <PumpIcon icon={faExternalLink} className="h-[14px] w-[14px]" />
-                </a>
-                <button
-                  type="button"
-                  onClick={() => void onCopyAddress()}
-                  className="token-detail-toolbar__contract-btn"
-                  aria-label={copiedAddress ? "Address copied" : "Copy wallet address"}
-                >
-                  {copiedAddress ? (
-                    <PumpIcon icon={faCheck} className="h-[14px] w-[14px]" />
-                  ) : (
-                    <PumpIcon icon={faCopy} className="h-[14px] w-[14px]" />
-                  )}
-                </button>
-              </div>
-              <div className="portfolio-hub-hero__social">
-                <button type="button" onClick={onOpenFollowing} className="portfolio-hub-hero__social-link">
-                  {followingCount} following
-                </button>
-                <span className="text-pump-muted" aria-hidden>
-                  ·
-                </span>
-                <button type="button" onClick={onOpenFollowers} className="portfolio-hub-hero__social-link">
-                  {followerCount} followers
-                </button>
               </div>
             </div>
-          </div>
 
-          <div className="token-detail-toolbar__scroll">
-            <div className="token-detail-toolbar__stats">
-              <Stat label="PnL">
-                <span className={`token-detail-toolbar__price-line ${pnlTone(totalNetPnlUsd)} ${pnlFlashClass}`}>
-                  {formatUsdReadable(totalNetPnlUsd, {
-                    compact: true,
-                    signed: true,
-                    fallback: "$0.00",
-                  })}
-                  <PctChange
-                    value={portfolioValuePct}
-                    toneClassName={
-                      portfolioValuePct != null && portfolioValuePct > 0
-                        ? "text-pump-success"
-                        : portfolioValuePct != null && portfolioValuePct < 0
-                          ? "text-pump-danger"
-                          : "text-pump-muted"
-                    }
-                  />
-                </span>
-              </Stat>
-              <Stat label="Positions">{holdingsCount}</Stat>
-              <Stat label="Unrealized">
-                <span className={pnlTone(totalUnrealizedPnlUsd)}>
-                  {formatUsdReadable(totalUnrealizedPnlUsd, {
-                    compact: true,
-                    signed: true,
-                    fallback: "$0.00",
-                  })}
-                </span>
-              </Stat>
-              <Stat label="Realized">
-                <span className={pnlTone(totalRealizedPnlUsd)}>
-                  {formatUsdReadable(totalRealizedPnlUsd, {
-                    compact: true,
-                    signed: true,
-                    fallback: "$0.00",
-                  })}
-                </span>
-              </Stat>
-            </div>
-          </div>
-
-          <div className="token-detail-toolbar__actions">
-            <div className="portfolio-hub-hero__actions">
-              <button type="button" onClick={openDeposit} className="portfolio-hub-hero__action portfolio-hub-hero__action--primary">
-                Deposit
-              </button>
-              <button type="button" onClick={openWithdraw} className="portfolio-hub-hero__action">
-                Withdraw
-              </button>
-              <Link href="/" className="portfolio-hub-hero__action">
-                Trade
-              </Link>
+            <div className="token-detail-toolbar__scroll portfolio-toolbar__metrics-scroll">
+              <div className="portfolio-toolbar__metrics">
+                <div className="token-detail-toolbar__stats portfolio-toolbar__metrics-values">
+                  <ToolbarStat label="Total Value">
+                    <span className={valueFlashClass}>{displayValue}</span>
+                  </ToolbarStat>
+                  <ToolbarStat label={`${NATIVE_SYMBOL} Value`}>
+                    {formatTotalNative(totalValueNative)}
+                  </ToolbarStat>
+                </div>
+                <div className="token-detail-toolbar__stats portfolio-toolbar__metrics-pnl">
+                  <div className="token-detail-toolbar__stat">
+                    <span className="token-detail-toolbar__stat-label">Est PNL</span>
+                    <span
+                      className={`token-detail-toolbar__stat-value token-detail-toolbar__price-line financial-value ${pnlTone(totalNetPnlUsd)} ${pnlFlashClass}`}
+                    >
+                      {formatUsdReadable(totalNetPnlUsd, {
+                        compact: true,
+                        signed: true,
+                        fallback: "$0.00",
+                      })}
+                      <PctChange value={portfolioValuePct} toneClassName={pnlPctTone} />
+                    </span>
+                  </div>
+                  <ToolbarStat label="Unrealized Pnl">
+                    <span className={pnlTone(totalUnrealizedPnlUsd)}>
+                      {formatUsdReadable(totalUnrealizedPnlUsd, {
+                        compact: true,
+                        signed: true,
+                        fallback: "$0.00",
+                      })}
+                    </span>
+                  </ToolbarStat>
+                  <ToolbarStat label="Realized Pnl">
+                    <span className={pnlTone(totalRealizedPnlUsd)}>
+                      {formatUsdReadable(totalRealizedPnlUsd, {
+                        compact: true,
+                        signed: true,
+                        fallback: "$0.00",
+                      })}
+                    </span>
+                  </ToolbarStat>
+                </div>
+              </div>
             </div>
           </div>
         </div>

@@ -1375,7 +1375,9 @@ CREATE TABLE public.users (
     telegram_id text,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     avatar_id text,
-    CONSTRAINT users_address_check CHECK ((address = lower(address)))
+    username text,
+    CONSTRAINT users_address_check CHECK ((address = lower(address))),
+    CONSTRAINT users_username_check CHECK ((username IS NULL OR username = lower(username)))
 );
 
 
@@ -2284,6 +2286,13 @@ CREATE INDEX idx_user_volumes_total ON public.user_volumes USING btree (total_vo
 --
 
 CREATE INDEX idx_users_avatar_id ON public.users USING btree (avatar_id) WHERE (avatar_id IS NOT NULL);
+
+
+--
+-- Name: idx_users_username_lower; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_users_username_lower ON public.users USING btree (username) WHERE (username IS NOT NULL);
 
 
 --

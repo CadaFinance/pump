@@ -1,13 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { formatEther } from "viem";
 import { useAccount } from "wagmi";
-import { useScwBalance } from "@/hooks/useScwBalance";
+import { useWalletTotalBalance } from "@/hooks/useWalletTotalBalance";
 import { UserAvatar } from "@/components/user/UserAvatar";
 import { useUserAvatar } from "@/components/user/UserAvatarProvider";
-import { useBnbUsdPrice } from "@/hooks/useBnbUsdPrice";
-import { bnbToUsd } from "@/lib/format-usd";
 import { usePumpWallet } from "@/components/wallet/PumpWalletProvider";
 import { isPumpAuthConfigured } from "@/lib/auth-config";
 import { PumpIcon, faChevronDown } from "@/lib/icons";
@@ -43,24 +40,21 @@ function useMobileAccountEntry(): boolean {
 
 function ConnectedWalletButton({ address }: { address: string }) {
   const { avatarId } = useUserAvatar();
-  const { bnbUsd } = useBnbUsdPrice();
   const { logout } = usePumpWallet();
   const isMobileAccountEntry = useMobileAccountEntry();
   const [open, setOpen] = useState(false);
   const [showBnb, setShowBnb] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
-  const { data: balance } = useScwBalance(address as `0x${string}`);
+  const { totalUsd, nativeBnb } = useWalletTotalBalance(address as `0x${string}`);
 
-  const bnbAmount = balance ? Number(formatEther(balance.value)) : 0;
-  const usdAmount = bnbToUsd(bnbAmount, bnbUsd);
   const balanceLabel = showBnb
-    ? formatHeaderBalanceNative(bnbAmount)
-    : formatHeaderBalanceUsd(usdAmount);
+    ? formatHeaderBalanceNative(nativeBnb)
+    : formatHeaderBalanceUsd(totalUsd);
 
   const panelProps = {
     address,
-    bnbAmount,
-    usdAmount,
+    bnbAmount: nativeBnb,
+    usdAmount: totalUsd,
     showBnb,
     onToggleBalanceUnit: () => setShowBnb((value) => !value),
     onClose: () => setOpen(false),

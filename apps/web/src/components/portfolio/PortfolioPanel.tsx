@@ -7,7 +7,7 @@ import { formatEther } from "viem";
 import { useOpenConnectModal } from "@/hooks/useOpenConnectModal";
 import { useAccount } from "wagmi";
 import { useReadContract } from "wagmi";
-import { contracts, pumpChain } from "@/config/chain";
+import { contracts, pumpChain, NATIVE_SYMBOL } from "@/config/chain";
 import { bondingCurveManagerAbi } from "@/lib/bonding-curve";
 import { ClaimCreatorFeesModal } from "@/components/portfolio/ClaimCreatorFeesModal";
 import { PortfolioHero } from "@/components/portfolio/PortfolioHero";
@@ -17,15 +17,19 @@ import { PortfolioTabNav } from "@/components/portfolio/PortfolioTabNav";
 import { ClaimReferrerFeesModal } from "@/components/portfolio/ClaimReferrerFeesModal";
 import { FollowNetworkModal } from "@/components/portfolio/FollowNetworkModal";
 import { AvatarPickerModal } from "@/components/user/AvatarPickerModal";
+import { resolveDisplayUsername } from "@/lib/username";
 import { useUserAvatar } from "@/components/user/UserAvatarProvider";
 import { TokenBoardTable } from "@/components/arena/TokenBoardTable";
 import { PortfolioPanelSkeleton } from "@/components/portfolio/PortfolioPanelSkeleton";
 import { HoldingSwipeRow } from "@/components/portfolio/HoldingSwipeRow";
 import { HoldingsSwipeHint } from "@/components/portfolio/HoldingsSwipeHint";
 import { TokenAvatar } from "@/components/token/TokenAvatar";
+import { NativeLogo } from "@/components/token/NativeLogo";
 import { TradeSheet } from "@/components/token/TradeSheet";
+import { useWalletFunding } from "@/components/wallet/WalletFundingProvider";
 import type { PortfolioSnapshot, TokenListItem } from "@/lib/db/launchpad";
 import { useBnbUsdPrice } from "@/hooks/useBnbUsdPrice";
+import { useScwBalance } from "@/hooks/useScwBalance";
 import { bnbToUsd, formatPortfolioHoldingValueUsd, formatUsdReadable, positionAvgEntryUsd, positionUnrealizedUsd, positionUnrealizedPct, scaleCostBasisUsdForBalance } from "@/lib/format-usd";
 import { PctChange } from "@/components/ui/PctChange";
 import { formatCapForBoard } from "@/lib/arena-board-format";
@@ -62,6 +66,7 @@ import {
 } from "@/lib/portfolio-live-delta";
 import { writePortfolioWalletCookie } from "@/lib/portfolio-wallet-cookie";
 import { parsePortfolioTab, type PortfolioTab } from "@/lib/portfolio-tabs";
+import { publishWalletTotal } from "@/lib/wallet-total-balance";
 
 type PortfolioPosition = {
   tokenAddress: string;
@@ -81,6 +86,7 @@ type PortfolioPosition = {
 
 type PortfolioData = {
   address: string;
+  username?: string | null;
   totalVolumeBnb: number;
   buyVolumeBnb: number;
   sellVolumeBnb: number;
@@ -245,11 +251,8 @@ function HoldingQuickActions({
   onBuyMax: () => void;
   onSellMax: () => void;
 }) {
-  const baseClass =
-    "shrink-0 rounded px-2 py-0.5 text-caption font-semibold transition-[opacity,background-color,border-color,color] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-pump-success/40";
-
   return (
-    <div className="flex items-center justify-end gap-1.5">
+    <div className="portfolio-holdings-grid__actions">
       <button
         type="button"
         title="Buy max"
@@ -258,7 +261,7 @@ function HoldingQuickActions({
           event.stopPropagation();
           onBuyMax();
         }}
-        className={`${baseClass} border border-pump-success/30 bg-pump-success/8 text-pump-success/85 hover:border-pump-success/50 hover:bg-pump-success/15 hover:text-pump-success group-hover:border-pump-success/45 group-hover:bg-pump-success/12 group-hover:text-pump-success`}
+        className="portfolio-holdings-grid__action portfolio-holdings-grid__action--buy"
       >
         Buy max
       </button>
@@ -270,11 +273,119 @@ function HoldingQuickActions({
           event.stopPropagation();
           onSellMax();
         }}
-        className={`${baseClass} border border-pump-danger/30 bg-pump-danger/8 text-pump-danger/85 hover:border-pump-danger/50 hover:bg-pump-danger/15 hover:text-pump-danger group-hover:border-pump-danger/45 group-hover:bg-pump-danger/12 group-hover:text-pump-danger`}
+        className="portfolio-holdings-grid__action portfolio-holdings-grid__action--sell"
       >
         Sell max
       </button>
     </div>
+  );
+}
+
+function NativeCashFundingActions({
+  onDeposit,
+  onWithdraw,
+}: {
+  onDeposit: () => void;
+  onWithdraw: () => void;
+}) {
+  return (
+    <div className="portfolio-holdings-grid__actions">
+      <button
+        type="button"
+        title="Deposit"
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          onDeposit();
+        }}
+        className="portfolio-holdings-grid__action portfolio-holdings-grid__action--buy"
+      >
+        Deposit
+      </button>
+      <button
+        type="button"
+        title="Withdraw"
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          onWithdraw();
+        }}
+        className="portfolio-holdings-grid__action portfolio-holdings-grid__action--sell"
+      >
+        Withdraw
+      </button>
+    </div>
+  );
+}
+
+function NativeCashMobileRow({
+  nativeBnb,
+  bnbUsd,
+  onDeposit,
+  onWithdraw,
+}: {
+  nativeBnb: number;
+  bnbUsd: number | null;
+  onDeposit: () => void;
+  onWithdraw: () => void;
+}) {
+  const nativeUsd = bnbToUsd(nativeBnb, bnbUsd);
+
+  return (
+    <article className="grid grid-cols-[1.75rem_1fr_auto] gap-x-2 gap-y-2 p-2.5">
+      <NativeLogo size={28} className="row-span-2 self-start" />
+      <div className="min-w-0 self-center">
+        <p className="truncate text-body-sm font-medium text-pump-text">{NATIVE_SYMBOL}</p>
+      </div>
+      <div className="self-center text-caption text-pump-muted">—</div>
+      <div className="col-span-2 col-start-2 flex w-full flex-wrap items-center justify-between gap-x-3 gap-y-1 text-[11px] leading-tight">
+        <span className="financial-value min-w-0 truncate text-pump-text">
+          <span className="text-pump-muted">Amount </span>
+          {formatTokenBalance(nativeBnb)}
+        </span>
+        <span className="financial-value min-w-0 truncate text-pump-text">
+          <span className="text-pump-muted">Value </span>
+          {formatPortfolioHoldingValueUsd(nativeUsd)}
+        </span>
+        <NativeCashFundingActions onDeposit={onDeposit} onWithdraw={onWithdraw} />
+      </div>
+    </article>
+  );
+}
+
+function NativeCashDesktopRow({
+  nativeBnb,
+  bnbUsd,
+  onDeposit,
+  onWithdraw,
+}: {
+  nativeBnb: number;
+  bnbUsd: number | null;
+  onDeposit: () => void;
+  onWithdraw: () => void;
+}) {
+  const nativeUsd = bnbToUsd(nativeBnb, bnbUsd);
+
+  return (
+    <tr className="group border-b border-pump-border/10">
+      <td className="px-4 py-3">
+        <div className="flex min-w-0 items-center gap-3">
+          <NativeLogo size={30} />
+          <p className="truncate text-body-sm font-medium text-pump-text">{NATIVE_SYMBOL}</p>
+        </div>
+      </td>
+      <td className="portfolio-holdings-grid__num px-4 py-3 financial-value text-pump-text">
+        {formatTokenBalance(nativeBnb)}
+      </td>
+      <td className="portfolio-holdings-grid__num px-4 py-3 financial-value font-semibold text-pump-text">
+        {formatPortfolioHoldingValueUsd(nativeUsd)}
+      </td>
+      <td className="portfolio-holdings-grid__num px-4 py-3 financial-value text-pump-muted">—</td>
+      <td className="portfolio-holdings-grid__num px-4 py-3 text-caption text-pump-muted">—</td>
+      <td className="portfolio-holdings-grid__trade w-[1%] whitespace-nowrap px-4 py-3">
+        <NativeCashFundingActions onDeposit={onDeposit} onWithdraw={onWithdraw} />
+      </td>
+    </tr>
   );
 }
 
@@ -309,13 +420,13 @@ function WalletHoldingMobileRow({
           className="min-w-0 self-center"
         >
           <p className="truncate text-body-sm font-medium text-pump-text">${holding.symbol}</p>
-          <p className="truncate text-caption text-pump-muted financial-value">
-            {formatTokenBalance(balance)}
-            <span className="text-pump-muted/80"> · on-chain</span>
-          </p>
         </Link>
         <div className="self-center text-caption text-pump-muted">—</div>
-        <div className="col-span-2 col-start-2 flex w-full items-center justify-between gap-3 text-[11px] leading-tight">
+        <div className="col-span-2 col-start-2 flex w-full flex-wrap items-center justify-between gap-x-3 gap-y-1 text-[11px] leading-tight">
+          <span className="financial-value min-w-0 truncate text-pump-text">
+            <span className="text-pump-muted">Amount </span>
+            {formatTokenBalance(balance)}
+          </span>
           <span className="financial-value min-w-0 truncate text-pump-text">
             <span className="text-pump-muted">Value </span>
             {formatPortfolioHoldingValueUsd(positionValueUsd)}
@@ -354,14 +465,11 @@ function WalletHoldingDesktopRow({
             logoUrl={holding.logoUrl}
             size={30}
           />
-          <div className="min-w-0">
-            <p className="truncate text-body-sm font-medium text-pump-text">{holding.name}</p>
-            <p className="truncate text-caption text-pump-muted financial-value">
-              {formatTokenBalance(balance)}
-              <span className="text-pump-muted/80"> · ${holding.symbol} · on-chain</span>
-            </p>
-          </div>
+          <p className="truncate text-body-sm font-medium text-pump-text">${holding.symbol}</p>
         </Link>
+      </td>
+      <td className="portfolio-holdings-grid__num px-4 py-3 financial-value text-pump-text">
+        {formatTokenBalance(balance)}
       </td>
       <td className="portfolio-holdings-grid__num px-4 py-3 financial-value font-semibold text-pump-text">
         {formatPortfolioHoldingValueUsd(positionValueUsd)}
@@ -564,6 +672,9 @@ export function PortfolioPanel({
   const { address, isConnected, isConnecting, isReconnecting } = useAccount();
   const { openConnectModal } = useOpenConnectModal();
   const { bnbUsd } = useBnbUsdPrice();
+  const scwAddress = (address ?? ssrWalletAddress) as `0x${string}` | undefined;
+  const { data: scwBalance } = useScwBalance(scwAddress);
+  const { openDeposit, openWithdraw } = useWalletFunding();
   const [data, setData] = useState<PortfolioData | null>(
     hasSsrPortfolio ? initialPortfolio : null
   );
@@ -575,7 +686,7 @@ export function PortfolioPanel({
   const [followModalOpen, setFollowModalOpen] = useState(false);
   const [followModalTab, setFollowModalTab] = useState<"following" | "followers">("following");
   const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
-  const { avatarId } = useUserAvatar();
+  const { avatarId, username: ownUsername, displayUsername: ownDisplayUsername } = useUserAvatar();
   const [walletHoldings, setWalletHoldings] = useState<WalletLaunchpadHolding[]>([]);
   const [onChainBalances, setOnChainBalances] = useState<Record<string, string>>({});
   const [holdingsReady, setHoldingsReady] = useState(hasSsrPortfolio);
@@ -988,6 +1099,10 @@ export function PortfolioPanel({
       totalValue += val;
     }
 
+    const nativeBnbVal = scwBalance ? Number(formatEther(scwBalance.value)) : 0;
+    values.__native__ = nativeBnbVal;
+    totalValue += nativeBnbVal;
+
     const prev = metricsPrevRef.current;
     if (prev) {
       const nextFlashes: Record<string, FlashTone> = {};
@@ -1024,7 +1139,45 @@ export function PortfolioPanel({
     }
 
     metricsPrevRef.current = { values, total: totalValue, pnl: totalPnl };
-  }, [data, onChainBalances, walletHoldings]);
+  }, [data, onChainBalances, walletHoldings, scwBalance]);
+
+  useEffect(() => {
+    if (!data) return;
+    const publishAddress = address ?? ssrWalletAddress ?? data.address;
+    if (!publishAddress) return;
+
+    const views = data.positions
+      .map((position) => buildVerifiedPositionView(position, onChainBalances))
+      .filter((view): view is VerifiedPositionView => view != null);
+    const allRows = buildPortfolioHoldingRows(views, walletHoldings);
+    const bnbUsdForDust = bnbUsd ?? bnbUsdForDustRef.current;
+    const displayRows = showDustHoldings
+      ? allRows
+      : allRows.filter(
+          (row) => !isPortfolioDustHolding(row.estimatedValueBnb, bnbUsdForDust)
+        );
+    const holdingsBnb = displayRows.reduce((sum, row) => sum + row.estimatedValueBnb, 0);
+    const holdingsOnlyUsd = bnbToUsd(holdingsBnb, bnbUsd) ?? 0;
+    const nativeBnbVal = scwBalance ? Number(formatEther(scwBalance.value)) : 0;
+    const nativeUsdVal = bnbToUsd(nativeBnbVal, bnbUsd) ?? 0;
+
+    publishWalletTotal({
+      address: publishAddress,
+      holdingsUsd: holdingsOnlyUsd,
+      nativeBnb: nativeBnbVal,
+      nativeUsd: nativeUsdVal,
+      totalUsd: holdingsOnlyUsd + nativeUsdVal,
+    });
+  }, [
+    address,
+    ssrWalletAddress,
+    data,
+    scwBalance,
+    bnbUsd,
+    onChainBalances,
+    walletHoldings,
+    showDustHoldings,
+  ]);
 
   const walletReconnecting = isConnecting || isReconnecting;
   const ssrPreview =
@@ -1105,8 +1258,8 @@ export function PortfolioPanel({
           )
       );
 
-  const totalEstimated = metricViews.reduce(
-    (sum, view) => sum + view.balance * Number(view.position.lastPriceBnb),
+  const holdingsBnbTotal = displayHoldingsRows.reduce(
+    (sum, row) => sum + row.estimatedValueBnb,
     0
   );
   const totalUnrealizedPnlUsd = metricViews.reduce(
@@ -1118,7 +1271,10 @@ export function PortfolioPanel({
     0
   );
   const totalNetPnlUsd = totalUnrealizedPnlUsd + totalRealizedPnlUsd;
-  const totalEstimatedUsd = bnbToUsd(totalEstimated, bnbUsd);
+  const nativeBnb = scwBalance ? Number(formatEther(scwBalance.value)) : 0;
+  const nativeUsd = bnbToUsd(nativeBnb, bnbUsd) ?? 0;
+  const holdingsOnlyUsd = bnbToUsd(holdingsBnbTotal, bnbUsd) ?? 0;
+  const totalEstimatedUsd = holdingsOnlyUsd + nativeUsd;
   const totalCostBasisUsd = metricViews.reduce(
     (sum, view) => sum + view.remainingCostBasisUsd,
     0
@@ -1138,10 +1294,21 @@ export function PortfolioPanel({
   const claimedBnb = data.creatorFeesClaimedBnb ?? 0;
   const pendingBnb = pendingWei != null ? Number(formatEther(pendingWei)) : 0;
   const creatorFeesTotalBnb = claimedBnb + pendingBnb;
-  const holdingsCount = displayHoldingsRows.length;
+  const tokenHoldingsCount = displayHoldingsRows.length;
+  const holdingsCount = tokenHoldingsCount + 1;
   const totalHoldingsCount = allHoldingsRows.length;
   const visibleHoldingsRows = displayHoldingsRows.slice(0, holdingsVisibleLimit);
   const hasMoreHoldings = visibleHoldingsRows.length < displayHoldingsRows.length;
+  const showDustOnlyNotice =
+    tokenHoldingsCount === 0 && totalHoldingsCount > 0 && !awaitingDustFilter;
+  const showEmptyHoldings =
+    tokenHoldingsCount === 0 && totalHoldingsCount === 0 && nativeBnb <= 0;
+
+  const isOwnPortfolio =
+    Boolean(address) && address!.toLowerCase() === walletAddress.toLowerCase();
+  const displayUsername = isOwnPortfolio
+    ? (ownDisplayUsername ?? resolveDisplayUsername(walletAddress, ownUsername))
+    : resolveDisplayUsername(walletAddress, data.username);
 
   const feesPending =
     pendingBnb > 0 || (pendingReferrerWei != null && pendingReferrerWei > 0n);
@@ -1208,7 +1375,9 @@ export function PortfolioPanel({
         <div className="portfolio-hub">
         <PortfolioHero
           walletAddress={walletAddress}
-          onOpenAvatarPicker={() => setAvatarPickerOpen(true)}
+          displayUsername={displayUsername}
+          canEditProfile={isOwnPortfolio && isConnected}
+          onOpenProfileEditor={() => setAvatarPickerOpen(true)}
           onOpenFollowing={() => {
             setFollowModalTab("following");
             setFollowModalOpen(true);
@@ -1220,9 +1389,9 @@ export function PortfolioPanel({
           followingCount={data.followingCount ?? 0}
           followerCount={data.followerCount ?? 0}
           totalValueUsd={totalEstimatedUsd}
+          totalValueNative={holdingsBnbTotal + nativeBnb}
           totalNetPnlUsd={totalNetPnlUsd}
           portfolioValuePct={portfolioValuePct}
-          holdingsCount={holdingsCount}
           totalUnrealizedPnlUsd={totalUnrealizedPnlUsd}
           totalRealizedPnlUsd={totalRealizedPnlUsd}
           valueFlashClass={flashText(totalValueFlash)}
@@ -1242,9 +1411,9 @@ export function PortfolioPanel({
 
         <div className="portfolio-hub__body">
         {activeTab === "holdings" ? (
-          <div className="space-y-2 md:space-y-3">
-            <div className="portfolio-tab-toolbar flex flex-wrap items-center justify-end gap-2">
-              {dustHoldingsCount > 0 ? (
+          <div className="portfolio-holdings-panel">
+            {dustHoldingsCount > 0 && !awaitingDustFilter ? (
+              <div className="portfolio-tab-toolbar flex flex-wrap items-center justify-end gap-2">
                 <button
                   type="button"
                   onClick={toggleShowDustHoldings}
@@ -1255,29 +1424,14 @@ export function PortfolioPanel({
                     ? `Hide dust (<$${PORTFOLIO_DUST_MIN_VALUE_USD})`
                     : portfolioDustLabel(dustHoldingsCount)}
                 </button>
-              ) : null}
-            </div>
-              {holdingsCount > 0 ? <HoldingsSwipeHint /> : null}
+              </div>
+            ) : null}
+              {tokenHoldingsCount > 0 ? <HoldingsSwipeHint /> : null}
               {awaitingDustFilter ? (
                 <section className="panel-surface portfolio-section-surface p-4" aria-busy="true">
                   <p className="text-body-sm text-pump-muted">Applying dust filter…</p>
                 </section>
-              ) : holdingsCount === 0 && totalHoldingsCount > 0 ? (
-                <div className="panel-surface empty-state">
-                  <p className="empty-state-copy">
-                    No positions above ${PORTFOLIO_DUST_MIN_VALUE_USD}.{" "}
-                    {dustHoldingsCount > 0 ? (
-                      <button
-                        type="button"
-                        onClick={toggleShowDustHoldings}
-                        className="font-medium text-pump-accent underline-offset-2 hover:underline"
-                      >
-                        {portfolioDustLabel(dustHoldingsCount)}
-                      </button>
-                    ) : null}
-                  </p>
-                </div>
-              ) : holdingsCount === 0 ? (
+              ) : showEmptyHoldings ? (
                 <div className="panel-surface empty-state flex flex-col items-center justify-center py-10">
                   <p className="empty-state-copy">No open positions yet.</p>
                   <Link href="/arena" className="chip-button chip-button-active mt-4 px-4 py-1.5 text-caption">
@@ -1286,7 +1440,29 @@ export function PortfolioPanel({
                 </div>
               ) : (
                 <section className="panel-surface portfolio-section-surface">
+                  {showDustOnlyNotice ? (
+                    <div className="border-b border-pump-border/10 px-4 py-3">
+                      <p className="text-body-sm text-pump-muted">
+                        No positions above ${PORTFOLIO_DUST_MIN_VALUE_USD}.{" "}
+                        {dustHoldingsCount > 0 ? (
+                          <button
+                            type="button"
+                            onClick={toggleShowDustHoldings}
+                            className="font-medium text-pump-accent underline-offset-2 hover:underline"
+                          >
+                            {portfolioDustLabel(dustHoldingsCount)}
+                          </button>
+                        ) : null}
+                      </p>
+                    </div>
+                  ) : null}
                   <div className="lg:hidden divide-y divide-pump-border/10">
+                    <NativeCashMobileRow
+                      nativeBnb={nativeBnb}
+                      bnbUsd={bnbUsd}
+                      onDeposit={openDeposit}
+                      onWithdraw={openWithdraw}
+                    />
                     {visibleHoldingsRows.map((row, index) => {
                       if (row.kind === "wallet") {
                         return (
@@ -1348,14 +1524,15 @@ export function PortfolioPanel({
                               <p className="truncate text-body-sm font-medium text-pump-text">
                                 ${position.symbol}
                               </p>
-                              <p className="truncate text-caption text-pump-muted financial-value">
-                                {formatTokenBalance(balance)}
-                              </p>
                             </Link>
                             <div className="self-center">
                               <PnlCell usd={openPnlUsd} pct={openPnlPct} />
                             </div>
-                            <div className="col-span-2 col-start-2 flex w-full items-center justify-between gap-3 text-[11px] leading-tight">
+                            <div className="col-span-2 col-start-2 flex w-full flex-wrap items-center justify-between gap-x-3 gap-y-1 text-[11px] leading-tight">
+                              <span className="financial-value min-w-0 truncate text-pump-text">
+                                <span className="text-pump-muted">Amount </span>
+                                {formatTokenBalance(balance)}
+                              </span>
                               <span className="financial-value min-w-0 truncate text-pump-text">
                                 <span className="text-pump-muted">Value </span>
                                 <span
@@ -1381,6 +1558,7 @@ export function PortfolioPanel({
                     <table className="sheet-grid portfolio-holdings-grid">
                       <colgroup>
                         <col className="portfolio-holdings-grid__col-coin" />
+                        <col className="portfolio-holdings-grid__col-amount" />
                         <col className="portfolio-holdings-grid__col-value" />
                         <col className="portfolio-holdings-grid__col-entry" />
                         <col className="portfolio-holdings-grid__col-pnl" />
@@ -1389,6 +1567,7 @@ export function PortfolioPanel({
                       <thead>
                         <tr>
                           <th>Coin</th>
+                          <th className="portfolio-holdings-grid__num">Amount</th>
                           <th className="portfolio-holdings-grid__num">Value</th>
                           <th className="portfolio-holdings-grid__num">Entry</th>
                           <th className="portfolio-holdings-grid__num">P/L</th>
@@ -1396,6 +1575,12 @@ export function PortfolioPanel({
                         </tr>
                       </thead>
                       <tbody>
+                        <NativeCashDesktopRow
+                          nativeBnb={nativeBnb}
+                          bnbUsd={bnbUsd}
+                          onDeposit={openDeposit}
+                          onWithdraw={openWithdraw}
+                        />
                         {visibleHoldingsRows.map((row) => {
                           if (row.kind === "wallet") {
                             return (
@@ -1445,16 +1630,13 @@ export function PortfolioPanel({
                                     logoUrl={position.logoUrl}
                                     size={30}
                                   />
-                                  <div className="min-w-0">
-                                    <p className="truncate text-body-sm font-medium text-pump-text">
-                                      {position.name}
-                                    </p>
-                                    <p className="truncate text-caption text-pump-muted financial-value">
-                                      {formatTokenBalance(balance)}
-                                      <span className="text-pump-muted/80"> · ${position.symbol}</span>
-                                    </p>
-                                  </div>
+                                  <p className="truncate text-body-sm font-medium text-pump-text">
+                                    ${position.symbol}
+                                  </p>
                                 </Link>
+                              </td>
+                              <td className="portfolio-holdings-grid__num px-4 py-3 financial-value text-pump-text">
+                                {formatTokenBalance(balance)}
                               </td>
                               <td className={`portfolio-holdings-grid__num px-4 py-3 financial-value font-semibold text-pump-text ${flashText(holdingFlashes[position.tokenAddress.toLowerCase()])}`}>
                                 {formatPortfolioHoldingValueUsd(positionValueUsd)}
@@ -1488,11 +1670,11 @@ export function PortfolioPanel({
                         className="text-body-sm font-medium text-pump-accent hover:underline"
                         onClick={() =>
                           setHoldingsVisibleLimit((prev) =>
-                            Math.min(prev + PORTFOLIO_HOLDINGS_INCREMENT, holdingsCount)
+                            Math.min(prev + PORTFOLIO_HOLDINGS_INCREMENT, tokenHoldingsCount)
                           )
                         }
                       >
-                        {`Load more (${visibleHoldingsRows.length} of ${holdingsCount})`}
+                        {`Load more (${visibleHoldingsRows.length} of ${tokenHoldingsCount})`}
                       </button>
                     </div>
                   ) : null}

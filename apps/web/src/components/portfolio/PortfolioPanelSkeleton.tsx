@@ -4,26 +4,44 @@ export function PortfolioPanelSkeleton() {
   return (
     <div className="portfolio-page" aria-busy="true" aria-label="Loading portfolio">
       <div className="portfolio-hub">
-        <header className="portfolio-hub-hero">
-          <div className="token-detail-toolbar">
-            <div className="token-detail-toolbar__row">
-              <div className="token-detail-toolbar__identity">
-                <Skeleton variant="circle" className="token-detail-toolbar__logo h-7 w-7" />
-                <div className="space-y-1">
-                  <Skeleton variant="line" className="h-3 w-14" />
-                  <Skeleton variant="line" className="h-5 w-20" />
-                  <Skeleton variant="line" className="h-3 w-24" />
-                  <Skeleton variant="line" className="h-3 w-32" />
+        <header className="portfolio-header">
+          <div className="portfolio-page-head">
+            <Skeleton variant="line" className="h-7 w-24" />
+            <div className="flex gap-2">
+              <Skeleton variant="line" className="h-8 w-16" />
+              <Skeleton variant="line" className="h-8 w-16" />
+              <Skeleton variant="line" className="h-8 w-14" />
+            </div>
+          </div>
+          <div className="portfolio-toolbar">
+            <div className="token-detail-toolbar">
+              <div className="token-detail-toolbar__row portfolio-toolbar__stats-row">
+                <div className="token-detail-toolbar__identity">
+                  <Skeleton variant="circle" className="token-detail-toolbar__logo h-7 w-7" />
+                  <div className="space-y-1">
+                    <Skeleton variant="line" className="h-4 w-20" />
+                    <Skeleton variant="line" className="h-3 w-32" />
+                  </div>
                 </div>
-              </div>
-              <div className="token-detail-toolbar__scroll">
-                <div className="token-detail-toolbar__stats">
-                  {Array.from({ length: 4 }).map((_, index) => (
-                    <div key={index} className="space-y-1">
-                      <Skeleton variant="line" className="h-3 w-14" />
-                      <Skeleton className="h-4 w-16" />
+                <div className="token-detail-toolbar__scroll portfolio-toolbar__metrics-scroll">
+                  <div className="portfolio-toolbar__metrics">
+                    <div className="token-detail-toolbar__stats portfolio-toolbar__metrics-values">
+                      {Array.from({ length: 2 }).map((_, index) => (
+                        <div key={index} className="space-y-1">
+                          <Skeleton variant="line" className="h-3 w-14" />
+                          <Skeleton className="h-4 w-16" />
+                        </div>
+                      ))}
                     </div>
-                  ))}
+                    <div className="token-detail-toolbar__stats portfolio-toolbar__metrics-pnl">
+                      {Array.from({ length: 3 }).map((_, index) => (
+                        <div key={index} className="space-y-1">
+                          <Skeleton variant="line" className="h-3 w-14" />
+                          <Skeleton className="h-4 w-16" />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -33,7 +51,7 @@ export function PortfolioPanelSkeleton() {
         <nav className="portfolio-tab-nav" aria-hidden>
           <div className="portfolio-tab-nav__track">
             {Array.from({ length: 4 }).map((_, index) => (
-              <Skeleton key={index} variant="line" className="mx-2 h-10 w-16 shrink-0" />
+              <Skeleton key={index} variant="line" className="mx-1.5 h-9 w-14 shrink-0" />
             ))}
           </div>
         </nav>
@@ -52,7 +70,6 @@ export function PortfolioPanelSkeleton() {
                   <div className="col-span-2 col-start-2 flex justify-between gap-2">
                     <Skeleton variant="line" className="h-3 w-16" />
                     <Skeleton variant="line" className="h-3 w-14" />
-                    <Skeleton variant="line" className="h-3 w-16" />
                   </div>
                 </div>
               ))}
