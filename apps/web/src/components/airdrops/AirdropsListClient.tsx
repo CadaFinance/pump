@@ -3,12 +3,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AirdropListItem } from "@/lib/db/airdrops";
 import type { AirdropsHomePayload } from "@/lib/airdrops-server";
-import { airdropRewardUsd } from "@/lib/airdrop-board-format";
 import { useOpenConnectModal } from "@/hooks/useOpenConnectModal";
 import { useAccount } from "wagmi";
 import { AirdropsSkeleton } from "@/components/airdrops/AirdropsSkeleton";
 import { useBnbUsdPrice } from "@/hooks/useBnbUsdPrice";
-import { AirdropsHero } from "@/components/airdrops/AirdropsHero";
 import { AirdropsFilterNav } from "@/components/airdrops/AirdropsFilterNav";
 import { AirdropCampaignList } from "@/components/airdrops/AirdropCampaignList";
 import {
@@ -114,36 +112,6 @@ export function AirdropsListClient({
     [items, bnbUsd]
   );
 
-  const stats = useMemo(() => {
-    let totalUsd = 0;
-    let pricedCount = 0;
-    for (const item of resolvedItems) {
-      const usd = airdropRewardUsd(item, bnbUsd);
-      if (usd != null) {
-        totalUsd += usd;
-        pricedCount += 1;
-      }
-    }
-    return {
-      totalUsd: pricedCount > 0 ? totalUsd : null,
-    };
-  }, [resolvedItems, bnbUsd]);
-
-  const qualifyingCount = useMemo(
-    () => resolvedItems.filter((item) => item.displayStatus === "QUALIFYING").length,
-    [resolvedItems]
-  );
-
-  const claimableCount = useMemo(
-    () => resolvedItems.filter((item) => item.displayStatus === "CLAIMABLE").length,
-    [resolvedItems]
-  );
-
-  const upcomingCount = useMemo(
-    () => resolvedItems.filter((item) => item.displayStatus === "UPCOMING").length,
-    [resolvedItems]
-  );
-
   const filterCounts = useMemo(
     (): Record<AirdropFilter, number> => ({
       all: resolvedItems.length,
@@ -227,15 +195,19 @@ export function AirdropsListClient({
     return (
       <div className="airdrops-page">
         <div className="airdrops-hub">
-          <AirdropsHero
-            totalUsd={null}
-            campaignCount={0}
-            qualifyingCount={0}
-            claimableCount={0}
-            upcomingCount={0}
+          <AirdropsFilterNav
+            activeFilter={activeFilter}
+            filterCounts={filterCounts}
+            loading={refreshing}
+            search={search}
+            onSearchChange={setSearch}
+            onSelect={setActiveFilter}
+            onRefresh={() => void handleRefresh()}
           />
-          <div className="empty-state airdrops-empty-state">
-            <p className="empty-state-copy">No active airdrop campaigns yet.</p>
+          <div className="airdrops-body">
+            <div className="empty-state airdrops-empty-state">
+              <p className="empty-state-copy">No active airdrop campaigns yet.</p>
+            </div>
           </div>
         </div>
       </div>
@@ -245,14 +217,6 @@ export function AirdropsListClient({
   return (
     <div className="airdrops-page">
       <div className="airdrops-hub">
-        <AirdropsHero
-          totalUsd={stats.totalUsd}
-          campaignCount={resolvedItems.length}
-          qualifyingCount={qualifyingCount}
-          claimableCount={claimableCount}
-          upcomingCount={upcomingCount}
-        />
-
         <AirdropsFilterNav
           activeFilter={activeFilter}
           filterCounts={filterCounts}

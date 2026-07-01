@@ -87,8 +87,9 @@ export function TokenMarketSidebarRow({
           address={token.address}
           symbol={token.symbol}
           logoUrl={token.logoUrl}
-          size={20}
-          className="token-market-sidebar__avatar shrink-0 ring-1 ring-pump-border/20"
+          shape="rounded"
+          size={40}
+          className="token-market-sidebar__avatar shrink-0"
         />
         <div className="token-market-sidebar__name-copy min-w-0">
           <p className="token-market-sidebar__pair-line">{token.symbol}/USD</p>

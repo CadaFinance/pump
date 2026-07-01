@@ -4,35 +4,10 @@ export function AirdropsSkeleton() {
   return (
     <div className="airdrops-page" aria-busy="true" aria-label="Loading airdrops">
       <div className="airdrops-hub">
-        <header className="airdrops-header">
-          <div className="airdrops-page-head">
-            <Skeleton variant="line" className="h-7 w-28" />
-          </div>
-          <div className="airdrops-toolbar">
-            <div className="airdrops-toolbar__shell">
-              <div className="airdrops-toolbar__hero-row">
-                <div className="space-y-2">
-                  <Skeleton variant="line" className="h-3 w-24" />
-                  <Skeleton className="h-8 w-20" />
-                  <Skeleton variant="line" className="h-3 w-32" />
-                </div>
-                <div className="space-y-2.5">
-                  {Array.from({ length: 3 }).map((_, index) => (
-                    <div key={index} className="flex items-center justify-between gap-4">
-                      <Skeleton variant="line" className="h-3 w-14" />
-                      <Skeleton variant="line" className="h-3 w-6" />
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-        </header>
-
         <div className="airdrops-filter-bar">
           <div className="airdrops-filter-bar__main">
             <div className="airdrops-filter-bar__search">
-              <Skeleton className="h-9 w-full rounded-md md:h-[2.25rem] md:w-36" />
+              <Skeleton className="h-8 w-full rounded-sm md:h-[2.25rem] md:w-36" />
             </div>
             <div className="flex flex-1 gap-2 overflow-hidden px-1 md:px-0">
               {Array.from({ length: 5 }).map((_, index) => (

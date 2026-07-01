@@ -9,7 +9,7 @@ import { ThemePicker } from "@/components/theme/ThemePicker";
 import { usePumpWallet } from "@/components/wallet/PumpWalletProvider";
 import { APP_NAV_ITEMS, isTradeHomeRoute } from "@/lib/nav-config";
 import { PumpIcon, faPlus } from "@/lib/icons";
-import { shellHeaderInnerClass } from "@/components/layout/layout-shell";
+import { shellHeaderInnerClassForPath } from "@/components/layout/layout-shell";
 
 function navLinkClass(active: boolean): string {
   return `header-nav-link ${active ? "header-nav-link-active" : "header-nav-link-idle"}`;
@@ -23,7 +23,7 @@ export function AppHeaderView({ pathname }: { pathname: string }) {
 
   return (
     <header className="app-header">
-      <div className={`app-header-inner ${shellHeaderInnerClass}`}>
+      <div className={`app-header-inner ${shellHeaderInnerClassForPath(pathname)}`}>
         <div className="app-header-start">
           <Link href="/" className="app-header-brand">
             <span className="app-header-brand-mark">
@@ -48,7 +48,6 @@ export function AppHeaderView({ pathname }: { pathname: string }) {
                   aria-current={active ? "page" : undefined}
                   className={navLinkClass(active)}
                 >
-                  <PumpIcon icon={item.icon} className="h-4 w-4 shrink-0 opacity-80" />
                   {item.label}
                 </Link>
               );
@@ -57,13 +56,6 @@ export function AppHeaderView({ pathname }: { pathname: string }) {
         </div>
 
         <div className="app-header-actions">
-          <ThemePicker
-            className={
-              walletReady
-                ? "app-header-icon-btn hidden md:inline-flex"
-                : "app-header-icon-btn"
-            }
-          />
           <Link
             href="/create"
             prefetch={true}
@@ -72,15 +64,13 @@ export function AppHeaderView({ pathname }: { pathname: string }) {
               pathname.startsWith("/create") ? " app-header-create-btn--active" : ""
             }`}
           >
-            <PumpIcon
-              icon={faPlus}
-              className="app-header-create-btn__icon app-header-create-btn__icon--desktop shrink-0"
-            />
-            <span className="app-header-create-btn__label">Create</span>
+            <PumpIcon icon={faPlus} className="app-header-create-btn__icon shrink-0" />
+            Create
           </Link>
           <div className="app-header-actions__account">
             <WalletBar />
           </div>
+          {!walletReady ? <ThemePicker className="app-header-utility-btn" /> : null}
         </div>
       </div>
     </header>

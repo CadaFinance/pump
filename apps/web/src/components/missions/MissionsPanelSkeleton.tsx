@@ -5,9 +5,6 @@ export function MissionsPanelSkeleton() {
     <div className="missions-page" aria-busy="true" aria-label="Loading missions">
       <div className="missions-hub">
         <header className="missions-header">
-          <div className="missions-page-head">
-            <Skeleton variant="line" className="h-7 w-28" />
-          </div>
           <div className="missions-toolbar">
             <div className="missions-toolbar__shell">
               <div className="missions-toolbar__hero-row">

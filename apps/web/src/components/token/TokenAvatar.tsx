@@ -12,6 +12,8 @@ type TokenAvatarProps = {
   /** Local blob/data URL shown before upload completes. */
   previewUrl?: string | null;
   size?: number;
+  /** circle = default avatar; rounded = corporate tile (sidebar, tables). */
+  shape?: "circle" | "rounded";
   className?: string;
 };
 
@@ -21,11 +23,17 @@ export function TokenAvatar({
   logoUrl,
   previewUrl,
   size = 40,
+  shape = "circle",
   className = "",
 }: TokenAvatarProps) {
   const [imgError, setImgError] = useState(false);
   const letter = symbol.charAt(0).toUpperCase() || "?";
   const isPlaceholder = address.toLowerCase() === ZERO_ADDRESS;
+  const radiusClass = shape === "rounded" ? "rounded-[var(--radius-sm)]" : "rounded-full";
+  const ringClass =
+    shape === "rounded"
+      ? "ring-1 ring-pump-border/25"
+      : "ring-2 ring-pump-border/15";
 
   const src =
     previewUrl ??
@@ -39,7 +47,7 @@ export function TokenAvatar({
 
   const fallback = (
     <span
-      className={`flex shrink-0 items-center justify-center overflow-hidden rounded-full border border-pump-border/20 bg-pump-surface/70 text-sm font-semibold text-pump-text ring-2 ring-pump-border/15 ${className}`}
+      className={`flex shrink-0 items-center justify-center overflow-hidden border border-pump-border/20 bg-pump-surface/70 text-sm font-semibold text-pump-text ${radiusClass} ${ringClass} ${className}`}
       style={{ width: size, height: size, minWidth: size, minHeight: size }}
     >
       {letter}
@@ -55,7 +63,7 @@ export function TokenAvatar({
       width={size}
       height={size}
       referrerPolicy="no-referrer"
-      className={`shrink-0 rounded-full object-cover ring-2 ring-pump-border/15 ${className}`}
+      className={`shrink-0 object-cover ${radiusClass} ${ringClass} ${className}`}
       style={{ width: size, height: size }}
       onError={() => setImgError(true)}
     />

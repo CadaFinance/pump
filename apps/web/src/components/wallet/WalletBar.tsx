@@ -103,19 +103,14 @@ function ConnectedWalletButton({ address }: { address: string }) {
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}
-        className="toolbar-btn"
+        className="app-header-balance-btn"
         aria-expanded={open}
         aria-haspopup="menu"
       >
-        {avatarId ? (
-          <UserAvatar address={address} avatarId={avatarId} size={22} />
-        ) : (
-          <span className="h-2 w-2 shrink-0 rounded-full bg-pump-success" aria-hidden />
-        )}
-        <span className="financial-value text-body-sm font-semibold">{balanceLabel}</span>
+        <span className="app-header-balance-btn__value financial-value">{balanceLabel}</span>
         <PumpIcon
           icon={faChevronDown}
-          className={`h-4 w-4 transition ${open ? "rotate-180" : ""}`}
+          className={`app-header-balance-btn__chevron transition ${open ? "rotate-180" : ""}`}
         />
       </button>
       {open ? (

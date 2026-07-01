@@ -5,9 +5,6 @@ export function PortfolioPanelSkeleton() {
     <div className="portfolio-page" aria-busy="true" aria-label="Loading portfolio">
       <div className="portfolio-hub">
         <header className="portfolio-header">
-          <div className="portfolio-page-head">
-            <Skeleton variant="line" className="h-7 w-24" />
-          </div>
           <div className="portfolio-toolbar">
             <div className="portfolio-toolbar__shell">
               <div className="portfolio-toolbar__identity-row">

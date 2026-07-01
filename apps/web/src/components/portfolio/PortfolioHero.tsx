@@ -127,10 +127,6 @@ export function PortfolioHero({
 
   return (
     <header className="portfolio-header">
-      <div className="portfolio-page-head">
-        <h1 className="page-title portfolio-page-head__title">Portfolio</h1>
-      </div>
-
       <div className="portfolio-toolbar">
         <div className="portfolio-toolbar__shell">
           <div className="portfolio-toolbar__identity-row">

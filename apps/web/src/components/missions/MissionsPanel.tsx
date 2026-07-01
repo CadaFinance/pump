@@ -179,13 +179,7 @@ export function MissionsPanel() {
             openCount={openCount}
             tradingVolumeBnb={data.tradingVolumeBnb}
           />
-        ) : (
-          <header className="missions-header">
-            <div className="missions-page-head">
-              <h1 className="page-title missions-page-head__title">Missions</h1>
-            </div>
-          </header>
-        )}
+        ) : null}
 
         {error ? (
           <div className="missions-notice notice-error">

@@ -5,6 +5,7 @@ import { useEffect, useLayoutEffect } from "react";
 import { AppHeaderView } from "@/components/layout/AppHeader";
 import { AppNavView } from "@/components/layout/AppNav";
 import {
+  isHubTerminalRoute,
   isTokenRoute,
   shellMainLayoutClass,
   shellMainPaddingClass,
@@ -25,20 +26,43 @@ type AppShellFrameProps = AppShellProps & {
 /** Prerender-safe shell — use in route `loading.tsx` and Suspense fallbacks. */
 export function AppShellFrame({ children, wide = false, pathname }: AppShellFrameProps) {
   const onTokenPage = isTokenRoute(pathname);
+  const hubTerminal = isHubTerminalRoute(pathname);
   const mobileBottomOffset = onTokenPage
     ? ""
     : "max-md:pb-[var(--mobile-main-bottom-pad)]";
   const mainPadding = shellMainPaddingClass(pathname);
   const mainLayoutClass = shellMainLayoutClass(pathname, wide);
+  const shellClass = onTokenPage
+    ? "app-shell app-shell--token"
+    : hubTerminal
+      ? "app-shell app-shell--hub-terminal flex min-h-screen flex-col"
+      : "flex min-h-screen flex-col";
 
   return (
-    <div className={onTokenPage ? "app-shell app-shell--token" : "flex min-h-screen flex-col"}>
-      <AppHeaderView pathname={pathname} />
-      <main
-        className={`flex min-h-0 flex-col ${mainPadding} ${mobileBottomOffset} ${mainLayoutClass}`}
-      >
-        {children}
-      </main>
+    <div className={shellClass}>
+      {hubTerminal ? (
+        <>
+          <div className="hub-terminal-header-band">
+            <AppHeaderView pathname={pathname} />
+          </div>
+          <div className="hub-terminal-column">
+            <main
+              className={`flex min-h-0 flex-col ${mainPadding} ${mobileBottomOffset} ${mainLayoutClass}`}
+            >
+              {children}
+            </main>
+          </div>
+        </>
+      ) : (
+        <>
+          <AppHeaderView pathname={pathname} />
+          <main
+            className={`flex min-h-0 flex-col ${mainPadding} ${mobileBottomOffset} ${mainLayoutClass}`}
+          >
+            {children}
+          </main>
+        </>
+      )}
       <AppNavView pathname={pathname} />
     </div>
   );

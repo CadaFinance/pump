@@ -41,10 +41,6 @@ export function MissionsHero({
 }: MissionsHeroProps) {
   return (
     <header className="missions-header">
-      <div className="missions-page-head">
-        <h1 className="page-title missions-page-head__title">Missions</h1>
-      </div>
-
       <div className="missions-toolbar">
         <div className="missions-toolbar__shell">
           <div className="missions-toolbar__hero-row">

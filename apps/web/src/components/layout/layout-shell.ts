@@ -37,9 +37,23 @@ export function isAirdropsRoute(pathname: string): boolean {
   return pathname === "/airdrops" || pathname.startsWith("/airdrops/");
 }
 
+/** Portfolio, Arena, Missions, Airdrops — shared 68rem desktop terminal frame. */
+export function isHubTerminalRoute(pathname: string): boolean {
+  return (
+    isPortfolioRoute(pathname) ||
+    isArenaRoute(pathname) ||
+    isMissionsRoute(pathname) ||
+    isAirdropsRoute(pathname)
+  );
+}
+
 /** Main padding: portfolio mobile flush; token fully flush; default inset. */
 export function shellMainPaddingClass(pathname: string): string {
   if (isTokenRoute(pathname)) return shellTokenPagePaddingClass;
+  if (isHubTerminalRoute(pathname)) {
+    const mobilePad = isArenaRoute(pathname) ? "max-md:py-0" : "max-md:p-0";
+    return `${mobilePad} md:pt-0 md:pb-8 md:px-0`;
+  }
   if (isPortfolioRoute(pathname)) {
     return `max-md:p-0 md:py-8 md:pb-8 ${shellPaddingXClass}`;
   }
@@ -61,19 +75,27 @@ export function shellMainLayoutClass(pathname: string, wide: boolean): string {
     return "token-page-main w-full max-w-none flex-1";
   }
   const maxWidth = wide ? shellWideMaxWidthClass : shellMaxWidthClassForPath(pathname);
+  const hubDesktopWidth = isHubTerminalRoute(pathname) ? "md:max-w-none" : maxWidth;
   if (isPortfolioRoute(pathname)) {
-    return `portfolio-page-main mx-auto w-full flex-1 max-md:max-w-none ${maxWidth}`;
+    return `portfolio-page-main mx-auto w-full flex-1 max-md:max-w-none ${hubDesktopWidth}`;
   }
   if (isArenaRoute(pathname)) {
-    return `arena-page-main mx-auto w-full flex-1 max-md:max-w-none ${maxWidth}`;
+    return `arena-page-main mx-auto w-full flex-1 max-md:max-w-none ${hubDesktopWidth}`;
   }
   if (isMissionsRoute(pathname)) {
-    return `missions-page-main mx-auto w-full flex-1 max-md:max-w-none ${maxWidth}`;
+    return `missions-page-main mx-auto w-full flex-1 max-md:max-w-none ${hubDesktopWidth}`;
   }
   if (isAirdropsRoute(pathname)) {
-    return `airdrops-page-main mx-auto w-full flex-1 max-md:max-w-none ${maxWidth}`;
+    return `airdrops-page-main mx-auto w-full flex-1 max-md:max-w-none ${hubDesktopWidth}`;
   }
   return `mx-auto w-full flex-1 ${maxWidth}`;
+}
+
+export function shellHeaderInnerClassForPath(pathname: string): string {
+  if (isHubTerminalRoute(pathname)) {
+    return "w-full max-w-none px-3 sm:px-4 md:px-0";
+  }
+  return shellHeaderInnerClass;
 }
 
 export function shellUsesWideLayout(pathname: string): boolean {

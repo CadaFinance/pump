@@ -21,9 +21,9 @@ export function ThemePicker({ className }: ThemePickerProps) {
       className={resolvedClass}
     >
       {isDark ? (
-        <PumpIcon icon={faSun} className="app-header-icon-btn__glyph" />
+        <PumpIcon icon={faSun} className="app-header-utility-btn__glyph" />
       ) : (
-        <PumpIcon icon={faMoon} className="app-header-icon-btn__glyph" />
+        <PumpIcon icon={faMoon} className="app-header-utility-btn__glyph" />
       )}
     </button>
   );

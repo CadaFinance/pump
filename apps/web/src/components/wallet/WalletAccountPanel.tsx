@@ -155,6 +155,11 @@ export function WalletAccountPanel({
         </button>
       </div>
 
+      <div className="wallet-account-panel__appearance">
+        <span className="wallet-account-panel__appearance-label">Appearance</span>
+        <ThemePicker className="wallet-account-panel__appearance-toggle" />
+      </div>
+
       <button
         type="button"
         onClick={() => {
